@@ -1,0 +1,26 @@
+{
+  "name": "El Águila Cocina · Administración",
+  "short_name": "Águila Admin",
+  "description": "Clientes, entregas, cobros quincenales y mensajería de El Águila Cocina.",
+  "id": "/aguila-admin",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#21262c",
+  "lang": "es",
+  "dir": "ltr",
+  "categories": ["business", "productivity", "food"],
+  "icons": [
+    { "src": "./assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "./assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Ruta de hoy", "url": "./index.html#/route" },
+    { "name": "Cobranza", "url": "./index.html#/billing" },
+    { "name": "Mensajes", "url": "./index.html#/messages" }
+  ]
+}

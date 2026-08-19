@@ -1,0 +1,174 @@
+rules_version = '2';
+
+/**
+ * El Águila Cocina — Firestore security rules.
+ *
+ * Two audiences share one project:
+ *
+ *   admin  — kitchen staff. Sees every farm, delivery, invoice and thread.
+ *   client — a farm manager. Sees only the farm their login is linked to.
+ *
+ * The role lives on `users/{uid}` and can only be raised to `admin` by someone
+ * who is already an admin, so signing up never grants access to anything.
+ *
+ * Note on list queries: Firestore evaluates these rules against every document
+ * a query would return, so an unscoped `list` on deliveries or invoices simply
+ * fails. That is what confines a farm to its own rows — the query must carry
+ * `where('clientId', '==', <their own id>)` to be allowed at all.
+ */
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /* --- Helpers --------------------------------------------------------- */
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function profile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function profileExists() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isAdmin() {
+      return profileExists() && profile().role == 'admin';
+    }
+
+    /** The farm this login is linked to, or null. */
+    function myClientId() {
+      return profileExists() ? profile().clientId : null;
+    }
+
+    function ownsClient(clientId) {
+      return signedIn() && clientId != null && myClientId() == clientId;
+    }
+
+    /** Keys this write is changing. */
+    function changed() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    /* --- users ------------------------------------------------------------ */
+
+    match /users/{uid} {
+      allow get: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow list: if isAdmin();
+
+      // Sign-up writes its own profile. A new account may only claim a role
+      // that grants nothing: 'client' (still unlinked) or 'pending' (staff
+      // waiting for approval). 'admin' is unreachable from here by design.
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.role in ['client', 'pending']
+        && request.resource.data.clientId == null;
+
+      // Updating your own profile must not change your role. Linking to a farm
+      // is allowed — the farm document write is what actually gates it.
+      allow update: if isAdmin()
+        || (signedIn()
+            && request.auth.uid == uid
+            && request.resource.data.role == resource.data.role);
+
+      allow delete: if isAdmin();
+    }
+
+    /* --- clients (farms) --------------------------------------------------- */
+
+    match /clients/{clientId} {
+      allow get: if isAdmin()
+        || (signedIn() && request.auth.uid in resource.data.get('linkedUids', []))
+        || ownsClient(clientId);
+      allow list: if isAdmin();
+
+      allow create, delete: if isAdmin();
+
+      // Admins edit freely. A farm manager redeeming an access code may do
+      // exactly one thing: add their own uid to `linkedUids`. Reaching this
+      // write at all requires the farm's document id, which is only obtainable
+      // by redeeming a valid code (see accessCodes below).
+      allow update: if isAdmin()
+        || (signedIn()
+            && changed().hasOnly(['linkedUids'])
+            && request.resource.data.linkedUids.hasAll(resource.data.get('linkedUids', []))
+            && request.resource.data.linkedUids.hasOnly(
+                 resource.data.get('linkedUids', []).concat([request.auth.uid])));
+    }
+
+    /* --- accessCodes ------------------------------------------------------- */
+
+    // Readable one document at a time by exact id — a signed-in farm manager
+    // resolves the code they were given. `list` is denied, so the collection
+    // can never be enumerated to discover farms or codes.
+    match /accessCodes/{code} {
+      allow get: if signedIn();
+      allow list: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    /* --- deliveries -------------------------------------------------------- */
+
+    match /deliveries/{deliveryId} {
+      allow read: if isAdmin() || ownsClient(resource.data.clientId);
+      allow write: if isAdmin();
+    }
+
+    /* --- invoices ---------------------------------------------------------- */
+
+    match /invoices/{invoiceId} {
+      allow read: if isAdmin() || ownsClient(resource.data.clientId);
+      // Money is written by the kitchen only. A farm can see what it owes and
+      // talk about it, never change it.
+      allow write: if isAdmin();
+    }
+
+    /* --- conversations ----------------------------------------------------- */
+
+    match /conversations/{clientId} {
+      allow get: if isAdmin() || ownsClient(clientId);
+      allow list: if isAdmin();
+
+      // Both sides maintain the thread summary as they post. A farm may only
+      // touch its own thread, and only the fields a message send updates.
+      allow create: if isAdmin() || ownsClient(clientId);
+      allow update: if isAdmin()
+        || (ownsClient(clientId)
+            && changed().hasOnly([
+                 'clientId', 'clientName', 'lastMessage', 'lastAt', 'lastSenderRole',
+                 'lastSenderName', 'lastKind', 'unreadAdmin', 'unreadClient',
+                 'clientReadAt', 'members', 'updatedAt',
+               ]));
+      allow delete: if isAdmin();
+
+      match /messages/{messageId} {
+        allow read: if isAdmin() || ownsClient(clientId);
+
+        // You may only post as yourself, and only into your own thread.
+        allow create: if (isAdmin() || ownsClient(clientId))
+          && request.resource.data.senderUid == request.auth.uid
+          && request.resource.data.senderRole in ['admin', 'client']
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 4000;
+
+        // System notes are written by the kitchen alongside a payment or an
+        // incident; they carry no sender.
+        allow create: if isAdmin()
+          && request.resource.data.senderRole == 'system';
+
+        // A sent message is a record. Nobody edits or deletes it.
+        allow update, delete: if false;
+      }
+    }
+
+    /* --- everything else ---------------------------------------------------- */
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

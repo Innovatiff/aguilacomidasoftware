@@ -1,0 +1,92 @@
+/* ==========================================================================
+   El Águila Cocina — design tokens
+   Orange brand, dark-gray chrome, white pages. Phone first.
+   ========================================================================== */
+
+:root {
+  /* --- Brand orange ----------------------------------------------------- */
+  --brand-50:  #fff5ed;
+  --brand-100: #ffe7d3;
+  --brand-200: #ffcba6;
+  --brand-300: #ffa76d;
+  --brand-400: #fd8a3f;
+  --brand-500: #f2700f;   /* primary */
+  --brand-600: #db5d06;
+  --brand-700: #b04708;
+  --brand-800: #8c3a0e;
+  --brand-900: #71310f;
+
+  /* --- Neutral ink (chrome + text) -------------------------------------- */
+  --ink-900: #14171b;
+  --ink-850: #1a1e23;
+  --ink-800: #21262c;    /* nav bars */
+  --ink-750: #272d34;
+  --ink-700: #2f363e;
+  --ink-600: #414a55;
+  --ink-500: #5b6673;
+  --ink-400: #7d8896;
+  --ink-300: #a7b0bc;
+  --ink-200: #cfd5dd;
+  --ink-150: #e0e4ea;
+  --ink-100: #eceff3;
+  --ink-50:  #f5f7f9;
+  --white:   #ffffff;
+
+  /* --- Status ----------------------------------------------------------- */
+  --ok-50:   #e8f7ee;   --ok-500:   #16a34a;  --ok-600: #128040;
+  --warn-50: #fff6e2;   --warn-500: #e29b0b;  --warn-600: #b87c07;
+  --bad-50:  #fdecec;   --bad-500:  #dc2626;  --bad-600: #b91c1c;
+  --info-50: #e9f0fe;   --info-500: #2563eb;  --info-600: #1d4ed8;
+
+  /* --- Semantic --------------------------------------------------------- */
+  --bg:            var(--white);
+  --bg-sunken:     var(--ink-50);
+  --surface:       var(--white);
+  --surface-alt:   var(--ink-50);
+  --border:        var(--ink-150);
+  --border-strong: var(--ink-200);
+  --text:          var(--ink-900);
+  --text-soft:     var(--ink-500);
+  --text-faint:    var(--ink-400);
+  --text-on-dark:  #f2f4f7;
+  --nav-bg:        var(--ink-800);
+  --nav-fg:        #9aa5b1;
+  --nav-fg-active: var(--brand-400);
+
+  /* --- Type ------------------------------------------------------------- */
+  --font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+  --font-num: "SF Mono", ui-monospace, "Roboto Mono", Menlo, monospace;
+
+  --fs-xs:   0.6875rem;  /* 11 */
+  --fs-sm:   0.8125rem;  /* 13 */
+  --fs-base: 0.9375rem;  /* 15 */
+  --fs-md:   1rem;       /* 16 */
+  --fs-lg:   1.125rem;   /* 18 */
+  --fs-xl:   1.375rem;   /* 22 */
+  --fs-2xl:  1.75rem;    /* 28 */
+  --fs-3xl:  2.125rem;   /* 34 */
+
+  /* --- Space ------------------------------------------------------------ */
+  --s1: 4px;   --s2: 8px;   --s3: 12px;  --s4: 16px;
+  --s5: 20px;  --s6: 24px;  --s7: 32px;  --s8: 40px;  --s9: 56px;
+
+  /* --- Shape ------------------------------------------------------------ */
+  --r-sm: 8px;  --r-md: 12px;  --r-lg: 16px;  --r-xl: 22px;  --r-full: 999px;
+
+  /* --- Elevation -------------------------------------------------------- */
+  --sh-1: 0 1px 2px rgba(20, 23, 27, .06), 0 1px 3px rgba(20, 23, 27, .04);
+  --sh-2: 0 2px 4px rgba(20, 23, 27, .06), 0 4px 12px rgba(20, 23, 27, .07);
+  --sh-3: 0 8px 24px rgba(20, 23, 27, .12), 0 2px 6px rgba(20, 23, 27, .06);
+  --sh-brand: 0 4px 14px rgba(242, 112, 15, .32);
+
+  /* --- Layout ----------------------------------------------------------- */
+  --app-max: 520px;            /* phone-first canvas, centred on desktop */
+  --topbar-h: 56px;
+  --tabbar-h: 60px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  --ease: cubic-bezier(.22, .61, .36, 1);
+  --dur: 180ms;
+}

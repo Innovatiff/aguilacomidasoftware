@@ -1,0 +1,13 @@
+{
+  "projects": {
+    "default": "aguilacocina-24496"
+  },
+  "targets": {
+    "aguilacocina-24496": {
+      "hosting": {
+        "admin": ["aguila-admin"],
+        "clientes": ["aguila-clientes"]
+      }
+    }
+  }
+}

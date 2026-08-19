@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="El Águila Cocina">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fd8a3f"/>
+      <stop offset="1" stop-color="#db5d06"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="114" fill="url(#g)"/>
+  <g fill="none" stroke="#fff" stroke-width="26" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M256 108 141 165v76c0 76 47 145 115 170 68-25 115-94 115-170v-76z"/>
+    <path d="M206 246l50 42 50-42"/>
+    <path d="M256 194v94"/>
+  </g>
+</svg>
