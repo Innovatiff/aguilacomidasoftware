@@ -46,6 +46,7 @@ export async function renderClientForm(context) {
     title: isNew ? 'Nuevo rancho' : 'Editar rancho',
     subtitle: isNew ? null : model.name,
     backTo: isNew ? '/clients' : `/clients/${clientId}`,
+    tab: 'clients',
     body: saving ? loading() : form(),
   });
 

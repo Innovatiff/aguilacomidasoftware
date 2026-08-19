@@ -11,6 +11,7 @@ import { back, currentPath, go } from '../lib/router.js';
 
 let root, topbar, page, tabbar;
 let tabs = [];
+let activeTab = null;
 const badges = new Map();
 const scrollMemory = new Map();
 
@@ -33,7 +34,10 @@ function renderTabs() {
   if (!tabs.length) { tabbar.hidden = true; return; }
   const here = currentPath();
   mount(tabbar, tabs.map((tab) => {
-    const active = here === tab.path || here.startsWith(`${tab.path}/`);
+    // A screen may name its tab explicitly, which is how detail screens under
+    // a different path — an invoice, a client — still light up their section.
+    const active = activeTab ? activeTab === tab.id
+      : here === tab.path || (tab.path !== '/' && here.startsWith(`${tab.path}/`));
     const count = badges.get(tab.id) || 0;
     return h(`button.tab${active ? '.is-active' : ''}`, {
       type: 'button',
@@ -72,9 +76,10 @@ export const showTabs = (visible) => { tabbar.hidden = !visible; };
  * @param {boolean}[config.hideTabs]
  */
 export function screen({
-  title, subtitle, backTo, actions, body, brand,
+  title, subtitle, backTo, actions, body, brand, tab,
   flush = false, sunken = false, sticky, fab, hideTabs = false,
 }) {
+  activeTab = tab || null;
   // Screens re-render on every data change. Re-rendering the *same* route must
   // leave the reader where they were; only an actual navigation restores the
   // position remembered for the route being entered.
@@ -93,13 +98,15 @@ export function screen({
       subtitle ? h('span.topbar__sub.truncate', subtitle) : null),
     ...(actions || []));
 
-  page.className = `page${flush ? ' page--flush' : ''}${sunken ? ' page--sunken' : ''}`;
+  const withTabs = !hideTabs && tabs.length > 0;
+  page.className = `page${flush ? ' page--flush' : ''}${sunken ? ' page--sunken' : ''}`
+    + (withTabs ? ' page--tabs' : '');
   mount(page, sticky || null, body || null);
 
   document.querySelector('.fab')?.remove();
   if (fab) root.append(fab);
 
-  showTabs(!hideTabs && tabs.length > 0);
+  showTabs(withTabs);
   renderTabs();
 
   page.scrollTop = keepScroll;

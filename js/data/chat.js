@@ -70,16 +70,26 @@ export const getConversation = async (clientId) =>
 
 /* --- Writes ---------------------------------------------------------------- */
 
-/** Creates the thread if it does not exist yet. Safe to call repeatedly. */
+/**
+ * Creates the thread if it does not exist yet.
+ *
+ * Reads before writing on purpose. A merge-write here would re-apply
+ * `unreadAdmin: 0` and `unreadClient: 0` every time somebody opened the
+ * conversation — silently clearing the *other* side's unread badge and
+ * hiding messages they had not seen.
+ */
 export async function ensureConversation(client) {
-  await setDoc(doc(db, 'conversations', client.id), {
+  const ref = doc(db, 'conversations', client.id);
+  if ((await getDoc(ref)).exists()) return;
+
+  await setDoc(ref, {
     clientId: client.id,
     clientName: client.name || '',
     members: client.linkedUids || [],
     unreadAdmin: 0,
     unreadClient: 0,
     createdAt: serverTimestamp(),
-  }, { merge: true });
+  });
 }
 
 /**

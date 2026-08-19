@@ -55,6 +55,7 @@ export function renderClientDetail(context) {
       title: client.name,
       subtitle: clientStatusMeta(client.status).label,
       backTo: '/clients',
+      tab: 'clients',
       actions: [
         topbarButton('chat', { label: 'Mensajes', onClick: openChat }),
         topbarButton('edit', { label: 'Editar', onClick: () => go(`/clients/${clientId}/edit`) }),
