@@ -216,6 +216,52 @@ await check('an admin enables an existing account',
 await check('an admin revokes access again',
   updateDoc(doc(admin, 'users/revoked'), { role: 'pending' }), true);
 
+console.log('\n--- The staff email list -------------------------------------');
+
+// The address listed in staffEmails() inside firestore.rules.
+const STAFF_EMAIL = 'alanf7178@gmail.com';
+
+const listed = env.authenticatedContext('listed-uid', { email: STAFF_EMAIL }).firestore();
+const listedCaps = env.authenticatedContext('listed-caps', { email: STAFF_EMAIL.toUpperCase() }).firestore();
+const stranger = env.authenticatedContext('stranger-uid', { email: 'quien@ajeno.com' }).firestore();
+const noEmail = env.authenticatedContext('no-email-uid').firestore();
+
+await check('a listed address writes its own admin profile on first sign-in',
+  setDoc(doc(listed, 'users/listed-uid'),
+    { name: 'Alan', email: STAFF_EMAIL, role: 'admin', clientId: null }), true);
+
+await check('the listed address then really is an admin',
+  getDocs(collection(listed, 'clients')), true);
+
+await check('the list is matched case-insensitively',
+  setDoc(doc(listedCaps, 'users/listed-caps'),
+    { name: 'Alan', email: STAFF_EMAIL, role: 'admin', clientId: null }), true);
+
+await check('an unlisted address cannot write itself an admin profile',
+  setDoc(doc(stranger, 'users/stranger-uid'),
+    { name: 'Z', role: 'admin', clientId: null }), false);
+
+await check('an account with no email on its token cannot either',
+  setDoc(doc(noEmail, 'users/no-email-uid'),
+    { name: 'Z', role: 'admin', clientId: null }), false);
+
+await check('a listed address cannot promote somebody else',
+  setDoc(doc(listed, 'users/stranger-uid'),
+    { name: 'Z', role: 'admin', clientId: null }), false);
+
+// An account left over from the old sign-up flow: profile exists, role pending.
+await env.withSecurityRulesDisabled(async (ctx) => {
+  await setDoc(doc(ctx.firestore(), 'users/leftover'),
+    { name: 'Alan', email: STAFF_EMAIL, role: 'pending', clientId: null });
+});
+const leftover = env.authenticatedContext('leftover', { email: STAFF_EMAIL }).firestore();
+
+await check('a listed address upgrades its own leftover pending profile',
+  setDoc(doc(leftover, 'users/leftover'), { role: 'admin' }, { merge: true }), true);
+
+await check('an unlisted farm still cannot upgrade its own profile',
+  setDoc(doc(stranger, 'users/stranger-uid'), { role: 'admin' }, { merge: true }), false);
+
 await env.cleanup();
 
 const failed = results.filter((r) => !r.passed);

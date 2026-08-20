@@ -1,13 +1,18 @@
 /**
  * Service worker.
  *
- * Caches the app shell so the kitchen can open the app on a farm road with no
- * signal. It deliberately never caches Firestore or Auth traffic: the SDK has
- * its own offline layer (IndexedDB) and a stale cached API response would be
- * worse than no response at all.
+ * Caches the app shell so it opens on a farm road with no signal. Two rules
+ * keep that from turning into a stale app:
+ *
+ *   - Application code is network-first, so a deployed fix is live on the next
+ *     load rather than the one after it. The cache is the offline fallback.
+ *   - Firestore and Auth traffic is never touched. The SDK has its own offline
+ *     layer, and a stale cached API response is worse than no response.
+ *
+ * Bump VERSION when the shell list changes; `activate` drops every older cache.
  */
 
-const VERSION = 'aguila-admin-v1';
+const VERSION = 'aguila-admin-v2';
 const SHELL = [
   './',
   './index.html',
@@ -46,19 +51,39 @@ self.addEventListener('fetch', (event) => {
   const isApi = /googleapis\.com|firebaseio\.com|firebaseapp\.com|identitytoolkit/.test(url.hostname);
   if (isApi) return;   // let the Firebase SDK handle its own offline behaviour
 
-  // Navigations: serve the shell so a deep link works offline.
-  if (request.mode === 'navigate') {
+  const sameOrigin = url.origin === self.location.origin;
+  const isAppCode = sameOrigin
+    && (request.mode === 'navigate' || /\.(?:html|js|css|webmanifest)$/.test(url.pathname));
+
+  /*
+   * Application code is network-first.
+   *
+   * Cache-first was wrong here: a released fix would sit behind the old copy
+   * until the *next* load, so people kept using a version that had already
+   * been replaced — and a stale bundle is far worse than a slow one. The cache
+   * is still the fallback, so the app opens on a farm road with no signal; it
+   * is just no longer the preferred answer when the network can reply.
+   */
+  if (isAppCode) {
     event.respondWith(
-      fetch(request).catch(() => caches.match('./index.html')),
+      fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(VERSION).then((cache) => cache.put(request, copy));
+          }
+          return response;
+        })
+        .catch(() => caches.match(request).then((hit) => hit || caches.match('./index.html'))),
     );
     return;
   }
 
-  // Everything else: cache first, refresh in the background.
+  // Fonts, icons and other static assets: cache first, refresh behind it.
   event.respondWith(
     caches.match(request).then((hit) => {
       const network = fetch(request).then((response) => {
-        if (response.ok && (url.origin === self.location.origin || url.hostname.endsWith('gstatic.com'))) {
+        if (response.ok && (sameOrigin || url.hostname.endsWith('gstatic.com'))) {
           const copy = response.clone();
           caches.open(VERSION).then((cache) => cache.put(request, copy));
         }

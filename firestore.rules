@@ -8,11 +8,18 @@ rules_version = '2';
  *   admin  — kitchen staff. Sees every farm, delivery, invoice and thread.
  *   client — a farm manager. Sees only the farm their login is linked to.
  *
- * The role lives on `users/{uid}`. Nothing a client can do reaches `admin`:
- * the only self-service sign-up in the whole project is a farm creating a
- * `client` profile, which sees nothing until it redeems an access code.
- * Administrators are provisioned deliberately — in the Firebase console, or by
- * an existing administrator from Settings — and never by signing up.
+ * Administrators are named in `staffEmails()` below. That list lives in this
+ * file, which only someone who can deploy the project is able to change, so an
+ * account on it just signs in and is an admin — no Firestore document to
+ * hand-write.
+ *
+ * The list is the authorisation, not the Auth account. This project's API key
+ * is public and the farm app needs open email/password sign-up, so *anyone* can
+ * create an Auth account; having one proves nothing. Being named here does.
+ *
+ * Nothing a farm can do reaches `admin`. The only self-service sign-up in the
+ * project is a farm creating its own `client` profile, which sees nothing until
+ * it redeems an access code.
  *
  * Note on list queries: Firestore evaluates these rules against every document
  * a query would return, so an unscoped `list` on deliveries or invoices simply
@@ -34,6 +41,37 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    /* --- Who is staff ----------------------------------------------------- */
+
+    /**
+     * Every email address allowed to run the kitchen panel.
+     *
+     * To add someone: create their Auth user first (Firebase console →
+     * Authentication → Add user), then add the address here and run
+     *
+     *     firebase deploy --only firestore:rules
+     *
+     * They sign in and the panel sets up their profile on its own.
+     *
+     * Create the Auth account *before* listing the address. An address nobody
+     * has registered yet is one an outsider could register, and their token
+     * would then carry it legitimately.
+     *
+     * To take access away: delete the line, redeploy, and revoke them in
+     * Ajustes → Equipo (or delete the Auth user outright).
+     */
+    function staffEmails() {
+      return [
+        'alanf7178@gmail.com',
+      ];
+    }
+
+    function isStaffEmail() {
+      return request.auth != null
+        && request.auth.token.email != null
+        && request.auth.token.email.lower() in staffEmails();
+    }
 
     /* --- Helpers --------------------------------------------------------- */
 
@@ -96,20 +134,29 @@ service cloud.firestore {
       allow get: if isAdmin() || (signedIn() && request.auth.uid == uid);
       allow list: if isAdmin();
 
-      // The only self-service sign-up is a farm manager creating their own
-      // profile, and it grants nothing until an access code is redeemed.
-      // No caller can write themselves any other role — staff accounts are
-      // provisioned from the console or promoted by an existing admin.
+      // Two ways a profile comes into existence, and no third:
+      //
+      //   - a farm creating its own `client` profile, which grants nothing
+      //     until an access code is redeemed;
+      //   - an address named in staffEmails() claiming its own admin profile,
+      //     which is what makes "add the account, sign in, done" work.
       allow create: if signedIn()
         && request.auth.uid == uid
-        && request.resource.data.role == 'client'
-        && request.resource.data.clientId == null;
+        && ((request.resource.data.role == 'client'
+             && request.resource.data.clientId == null)
+            || (request.resource.data.role == 'admin' && isStaffEmail()));
 
       // Updating your own profile must not change your role, and `clientId` is
       // not a free-text field: pointing it at a farm is what grants sight of
       // that farm's deliveries, invoices and messages, so the farm has to have
       // accepted you first (which needs its live access code — see below).
       allow update: if isAdmin()
+        // A listed address taking its own admin profile. This is the path that
+        // upgrades an account left over from an earlier sign-up, so nobody has
+        // to delete anything by hand.
+        || (isStaffEmail()
+            && request.auth.uid == uid
+            && request.resource.data.role == 'admin')
         || (signedIn()
             && request.auth.uid == uid
             && request.resource.data.role == resource.data.role

@@ -41,35 +41,48 @@ En la [consola de Firebase](https://console.firebase.google.com/project/aguilaco
 
 ### 2. Crear las cuentas del equipo
 
-**El panel no tiene registro.** Un administrador ve todos los ranchos, sus
-datos de contacto y todos los pagos, así que esas cuentas se crean a mano desde
-la consola. Nadie puede otorgarse ese rol llenando un formulario, y las reglas
-lo impiden aunque alguien lo intente desde fuera de la app.
+**El panel no tiene registro.** Quién puede entrar se decide en una lista
+dentro de `firestore.rules`, un archivo que sólo puede cambiar quien despliega
+el proyecto. Son dos pasos por persona:
 
-Para cada persona del equipo, dos pasos en la consola:
+1. **Authentication → Users → Add user**: correo y contraseña.
+2. Agrega ese correo a `staffEmails()` en **`firestore.rules`** y publica:
 
-1. **Authentication → Users → Add user**: correo y contraseña. Copia el **UID**.
-2. **Firestore → colección `users`**, documento nuevo con ese **UID** como id:
+   ```sh
+   firebase deploy --only firestore:rules
+   ```
 
-   | Campo | Tipo | Valor |
-   |---|---|---|
-   | `name` | string | Nombre de la persona |
-   | `email` | string | El mismo correo |
-   | `role` | string | `admin` |
-   | `clientId` | null | *(vacío)* |
+   ```
+   function staffEmails() {
+     return [
+       'alanf7178@gmail.com',
+       'otra.persona@ejemplo.com',   // <- se agrega aquí
+     ];
+   }
+   ```
 
-3. Esa persona ya puede entrar con su correo y contraseña.
+3. Esa persona entra con su correo y contraseña. **No hay tercer paso**: el
+   panel crea su perfil solo la primera vez que entra.
 
-> La primera vez tendrás que crear la colección `users` (**Iniciar colección**).
-> A partir de la segunda cuenta sólo agregas un documento.
+> **Crea primero la cuenta en Authentication y después agrega el correo a la
+> lista.** Un correo listado que nadie ha registrado todavía es un correo que
+> alguien más podría registrar.
 
-Si alguien entra con una cuenta que todavía no tiene su documento en `users`,
-verá **Sin acceso al panel** en lugar de un error, y la pantalla se convierte en
-el panel sola en cuanto la habilites.
+Si alguien entra con un correo que no está en la lista, ve **Sin acceso al
+panel** con el correo exacto que hay que agregar — no un error. La pantalla se
+convierte en el panel sola en cuanto lo habilites.
 
-**Quitar y devolver acceso** sí se hace dentro de la app: **Ajustes → Equipo →
+**Por qué no basta con crear la cuenta en Authentication.** La `apiKey` de este
+proyecto es pública (tiene que serlo, va en el navegador) y la app de los
+ranchos necesita registro abierto por correo. Cualquiera puede crear una cuenta
+de Authentication con la API pública de Firebase; tener una no demuestra nada.
+Estar en la lista sí.
+
+**Quitar y devolver acceso** se hace dentro de la app: **Ajustes → Equipo →
 Quitar**. La cuenta baja a `pending` (no puede leer nada) y aparece en **Ajustes
-→ Cuentas sin acceso**, desde donde la vuelves a habilitar sin tocar la consola.
+→ Cuentas sin acceso**, desde donde la vuelves a habilitar sin redesplegar. Para
+retirar a alguien de forma definitiva, quítalo también de `staffEmails()` — si
+no, volvería a entrar solo.
 
 ### 3. Correr en local
 
@@ -164,7 +177,7 @@ vuelve la conexión.
 ```
 users/{uid}
   name, email, phone
-  role        'admin'    -- equipo de la cocina; se crea en la consola
+  role        'admin'    -- equipo; sólo un correo de staffEmails() lo obtiene
             | 'client'   -- rancho; único rol que alguien puede darse solo
             | 'pending'  -- cuenta existente sin acceso (revocada o sin habilitar)
   clientId    string | null      -- sólo para clientes
@@ -214,9 +227,9 @@ Las reglas en `firestore.rules` descansan en tres cosas:
 
 - **El rol vive en el servidor.** El único registro que existe en todo el
   proyecto es el de un rancho creando su perfil `client`, que no ve nada hasta
-  canjear un código. Ningún usuario puede escribirse a sí mismo otro rol: las
-  cuentas de administrador se crean en la consola o las habilita un
-  administrador que ya lo es.
+  canjear un código. Nadie puede escribirse el rol `admin` salvo un correo
+  listado en `staffEmails()` dentro de las propias reglas, que es un archivo
+  que sólo cambia quien despliega el proyecto.
 - **Un rancho sólo ve lo suyo.** Firestore evalúa las reglas contra cada
   documento que devolvería una consulta, así que una consulta sin
   `where('clientId', '==', <el suyo>)` simplemente falla. No es el código de la
@@ -260,9 +273,9 @@ npm install      # sólo la primera vez
 npm test
 ```
 
-40 pruebas cubren lo que cada rol puede y no puede hacer: el intento de un
+48 pruebas cubren lo que cada rol puede y no puede hacer: el intento de un
 extraño de colarse en un rancho ajeno, la rotación y el vencimiento de códigos,
-y que nadie pueda otorgarse el rol de administrador. Ver
+y que sólo un correo de `staffEmails()` pueda quedar como administrador. Ver
 `tests/rules/README.md`.
 
 ---

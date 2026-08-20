@@ -176,9 +176,18 @@ export function renderNoAccess(host, { name, email, onSignOut }) {
             h('span', { style: { color: 'var(--brand-500)' } }, icon('shield')),
             h('div.w-650', 'Cómo se habilita')),
           h('p.t-sm.c-soft', { style: { lineHeight: '1.5' } },
-            'Un administrador te da acceso desde Ajustes → Cuentas sin acceso. '
-            + 'Si aún no hay ningún administrador, la cuenta se crea desde la '
-            + 'consola de Firebase (ver el README del proyecto).'))),
+            'Si ya hay un administrador, te da acceso desde Ajustes → Cuentas '
+            + 'sin acceso. Si todavía no hay ninguno, hay que agregar este correo '
+            + 'a la lista del equipo en las reglas del proyecto y publicarlas:'),
+          h('div', {
+            style: {
+              padding: '10px 12px', borderRadius: 'var(--r-md)',
+              background: 'var(--ink-800)', color: '#fff',
+              fontFamily: 'var(--font-num)', fontSize: 'var(--fs-xs)',
+              lineHeight: '1.6', overflowX: 'auto', whiteSpace: 'pre',
+            },
+          }, `firestore.rules → staffEmails()\n  '${email || 'tu@correo.com'}'\n\nfirebase deploy --only firestore:rules`),
+          h('p.t-xs.c-faint', 'Después vuelve a entrar: el panel se configura solo.'))),
 
       alert('Esta pantalla se actualiza sola en cuanto te habiliten. '
         + 'Puedes cerrar la aplicación mientras tanto.', 'info'),

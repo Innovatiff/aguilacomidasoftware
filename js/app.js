@@ -13,6 +13,7 @@ import { configureShell, setTabBadge, splash, notePath, screen } from './ui/shel
 import { register, setNotFound, start, go, onNavigate } from './lib/router.js';
 import { startSession, watchSession, session, signOutNow } from './data/session.js';
 import { startStore, stopStore, subscribe, unreadCount } from './data/store.js';
+import { claimStaffProfile } from './data/users.js';
 import { renderAuth, renderNoAccess } from './screens/login.js';
 import { renderDashboard } from './screens/dashboard.js';
 import { renderRoute } from './screens/route.js';
@@ -38,6 +39,7 @@ const host = $('#app');
 let phase = null;          // 'auth' | 'pending' | 'app'
 let routerStarted = false;
 let stopBadge = null;
+let provisionedFor = null; // uid we have already tried to set up
 
 splash(host);
 startSession();
@@ -47,10 +49,24 @@ watchSession(() => {
 
   if (!session.user) return enter('auth');
   if (session.isAdmin) return enter('app');
-  // A client login that wandered into the admin app, or an account still
-  // waiting for approval — both land on the same holding screen.
+
+  // Not an admin — yet. If this address is listed in staffEmails() in the
+  // security rules, the write below is permitted and the profile snapshot
+  // flips us straight into the panel. If it is not, the rules refuse and the
+  // holding screen below explains what to do. Either way the decision is the
+  // rules', not this file's.
+  provisionStaff();
   return enter('pending');
 });
+
+function provisionStaff() {
+  if (!session.user || provisionedFor === session.uid) return;
+  provisionedFor = session.uid;
+  claimStaffProfile(session.user).catch(() => {
+    // Refused: this address is not on the staff list. Nothing to do here —
+    // renderNoAccess already says how access is granted.
+  });
+}
 
 function enter(next) {
   if (phase === next) return;
