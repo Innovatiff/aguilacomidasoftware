@@ -99,15 +99,38 @@ Abre `http://localhost:5173`. Agrega `localhost` en
 > Los módulos ES no funcionan abriendo `index.html` con `file://`. Usa un
 > servidor.
 
-### 4. Publicar
+### 4. Publicar desde GitHub
+
+No hace falta correr nada a mano. `.github/workflows/deploy.yml` publica **las
+reglas y el panel** cada vez que se hace push a la rama de trabajo. Configúralo
+una sola vez:
+
+1. **Crea los dos sitios de Hosting** (una vez): consola de Firebase →
+   **Hosting → Agregar otro sitio** → `aguila-admin` y `aguila-clientes`.
+2. **Genera una llave de servicio**: **Configuración del proyecto → Cuentas de
+   servicio → Generar nueva clave privada**. Se descarga un archivo `.json`.
+3. **Guárdala como secreto en GitHub**: repositorio → **Settings → Secrets and
+   variables → Actions → New repository secret**, con el nombre
+   `FIREBASE_SERVICE_ACCOUNT` y **todo** el contenido del `.json` pegado.
+
+Listo. Cada push publica; también puedes lanzarlo a mano desde la pestaña
+**Actions → Publicar → Run workflow**.
+
+> El mismo secreto va en los dos repositorios. El de la app de los ranchos
+> publica sólo su sitio: las reglas se despliegan desde aquí para que no existan
+> dos copias que se desincronicen.
+
+**Publicar las reglas no publica la app.** Son dos cosas distintas y es la causa
+más común de «ya lo arreglé pero sigo viendo lo mismo». El workflow siempre hace
+las dos, y en ese orden: si las reglas se rechazan, se detiene antes de subir
+una app que fallaría en cada escritura.
+
+Si prefieres hacerlo desde tu máquina:
 
 ```sh
+firebase deploy --only firestore:rules,firestore:indexes
 firebase deploy --only hosting:admin
 ```
-
-Requiere un sitio de Hosting llamado `aguila-admin` en el proyecto
-(**Hosting → Agregar otro sitio**). El sitio `aguila-clientes` es para la app de
-los ranchos.
 
 ---
 
