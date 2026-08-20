@@ -99,38 +99,42 @@ Abre `http://localhost:5173`. Agrega `localhost` en
 > Los módulos ES no funcionan abriendo `index.html` con `file://`. Usa un
 > servidor.
 
-### 4. Publicar desde GitHub
+### 4. Publicar en Netlify
 
-No hace falta correr nada a mano. `.github/workflows/deploy.yml` publica **las
-reglas y el panel** cada vez que se hace push a la rama de trabajo. Configúralo
-una sola vez:
+El sitio se publica solo: Netlify vigila la rama del repositorio y sube cada
+push. No hay build — la raíz del repositorio *es* el sitio, y `netlify.toml` ya
+trae la configuración.
 
-1. **Crea los dos sitios de Hosting** (una vez): consola de Firebase →
-   **Hosting → Agregar otro sitio** → `aguila-admin` y `aguila-clientes`.
-2. **Genera una llave de servicio**: **Configuración del proyecto → Cuentas de
-   servicio → Generar nueva clave privada**. Se descarga un archivo `.json`.
-3. **Guárdala como secreto en GitHub**: repositorio → **Settings → Secrets and
-   variables → Actions → New repository secret**, con el nombre
-   `FIREBASE_SERVICE_ACCOUNT` y **todo** el contenido del `.json` pegado.
+Al conectar el repositorio en Netlify:
 
-Listo. Cada push publica; también puedes lanzarlo a mano desde la pestaña
-**Actions → Publicar → Run workflow**.
+| Campo | Valor |
+|---|---|
+| Branch to deploy | `claude/el-aguila-cocina-app-yo40te` |
+| Build command | *(vacío)* |
+| Publish directory | `.` |
 
-> El mismo secreto va en los dos repositorios. El de la app de los ranchos
-> publica sólo su sitio: las reglas se despliegan desde aquí para que no existan
-> dos copias que se desincronicen.
+**Autoriza el dominio en Firebase.** Sin esto el inicio de sesión falla con
+`auth/unauthorized-domain`: consola de Firebase → **Authentication → Settings →
+Authorized domains → Add domain**, y agrega el dominio de Netlify
+(`tu-sitio.netlify.app` y tu dominio propio si lo tienes).
 
-**Publicar las reglas no publica la app.** Son dos cosas distintas y es la causa
-más común de «ya lo arreglé pero sigo viendo lo mismo». El workflow siempre hace
-las dos, y en ese orden: si las reglas se rechazan, se detiene antes de subir
-una app que fallaría en cada escritura.
+### 5. Publicar las reglas
 
-Si prefieres hacerlo desde tu máquina:
+**Publicar el sitio no publica las reglas.** Son dos cosas distintas y es la
+causa más común de «ya lo arreglé pero sigue igual». Netlify sube la app;
+Firestore no se entera.
 
-```sh
-firebase deploy --only firestore:rules,firestore:indexes
-firebase deploy --only hosting:admin
-```
+Las reglas se publican desde la consola, sin instalar nada:
+
+1. Consola de Firebase → **Firestore Database → Reglas**.
+2. Pega el contenido de `firestore.rules` y **Publicar**.
+
+Los índices sí conviene subirlos una vez con la CLI (`firebase deploy --only
+firestore:indexes`), o crearlos desde el enlace que Firestore muestra en la
+consola la primera vez que una consulta los necesita.
+
+> Cada vez que cambies `staffEmails()` hay que volver a pegar las reglas. Es la
+> única acción manual que queda en todo el flujo.
 
 ---
 

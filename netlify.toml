@@ -1,0 +1,76 @@
+# Netlify configuration — panel de administración.
+#
+# There is no build step: the repository root *is* the site. Netlify serves
+# these files exactly as committed.
+
+[build]
+  publish = "."
+  command = ""
+
+# ---------------------------------------------------------------------------
+# Caching
+#
+# None of these filenames carry a content hash, so a long max-age would pin
+# people to whichever version their browser happened to fetch first — the exact
+# failure this project already hit once. Everything that can change behaviour
+# is revalidated on every load; only immutable assets are cached hard.
+# ---------------------------------------------------------------------------
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+# The service worker must never be stale: it is what decides how everything
+# else is cached, so a pinned copy would keep serving an old app forever.
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/js/*"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/css/*"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/manifest.webmanifest"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+# Icons only change when they are replaced, and then under a new name.
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=604800"
+
+# ---------------------------------------------------------------------------
+# Security headers
+# ---------------------------------------------------------------------------
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    # This app shows every client's contact details and payments; it has no
+    # business being embedded anywhere.
+    X-Frame-Options = "DENY"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+
+# ---------------------------------------------------------------------------
+# Routing
+#
+# Real files win over this rule, so it only catches paths that do not exist —
+# a mistyped URL lands on the app instead of a Netlify 404.
+# ---------------------------------------------------------------------------
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

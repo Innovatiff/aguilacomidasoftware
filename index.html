@@ -41,8 +41,31 @@
   <script>
     // Progressive enhancement only: the app works without it.
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js').catch(() => {});
+      // Whether a worker was already driving this page. On a first visit there
+      // is none, and the handover below is normal rather than an update.
+      var hadController = !!navigator.serviceWorker.controller;
+      var reloading = false;
+
+      // A new deploy installs a new worker, which takes over immediately
+      // (skipWaiting). The page it takes over, though, is still running the
+      // code it loaded a moment ago — so reload once and land on the new
+      // version. Without this, people sit on a replaced build until they
+      // happen to reload, which is exactly how a shipped fix looks like it
+      // never happened.
+      navigator.serviceWorker.addEventListener('controllerchange', function () {
+        if (reloading || !hadController) return;
+        reloading = true;
+        window.location.reload();
+      });
+
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('./sw.js').then(function (reg) {
+          // Also look for a new version when the app is reopened, not only on
+          // a hard refresh.
+          document.addEventListener('visibilitychange', function () {
+            if (document.visibilityState === 'visible') reg.update();
+          });
+        }).catch(function () {});
       });
     }
   </script>
