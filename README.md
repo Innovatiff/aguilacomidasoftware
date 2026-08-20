@@ -124,9 +124,13 @@ Las reglas se publican desde la consola, sin instalar nada:
 1. Consola de Firebase → **Firestore Database → Reglas**.
 2. Pega el contenido de `firestore.rules` y **Publicar**.
 
-Los índices sí conviene subirlos una vez con la CLI (`firebase deploy --only
-firestore:indexes`), o crearlos desde el enlace que Firestore muestra en la
-consola la primera vez que una consulta los necesita.
+**Los índices.** Hacen falta tres, y no se pegan: se crean con un clic. La
+primera vez que abras la ficha de un rancho, si falta alguno el panel te muestra
+**Crear el índice en Firebase** con el enlace ya armado. Tarda un minuto en
+quedar listo y no hay que volver a tocarlo.
+
+Los tres están en `firestore.indexes.json` por si prefieres subirlos de golpe
+con `firebase deploy --only firestore:indexes`.
 
 > Sólo hace falta cuando cambian las reglas mismas. Agregar gente al equipo o
 > registrar ranchos **no** requiere republicar nada: eso se escribe desde el

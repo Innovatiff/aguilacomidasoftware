@@ -245,3 +245,48 @@ export function chips(options, active, onPick) {
 }
 
 export { frag };
+
+/* --- Data failures ---------------------------------------------------------- */
+
+/**
+ * Explains why a listener failed, in terms of the thing to go and fix.
+ *
+ * Firestore's own message is kept verbatim underneath the plain-language part,
+ * because for a missing index it contains a console link that creates the index
+ * in one click — by far the fastest route out, and worth surfacing rather than
+ * paraphrasing away.
+ */
+export function dataErrorCard(error, { onRetry } = {}) {
+  const code = String(error?.code || '');
+  const message = String(error?.message || error || '');
+  const link = (message.match(/https:\/\/console\.firebase\.google\.com\S+/) || [])[0]
+    ?.replace(/[.,)\]]+$/, '');
+
+  const explanation = {
+    'failed-precondition': 'Firestore necesita un índice para esta consulta. Créalo con el enlace de abajo; tarda un minuto en quedar listo.',
+    'permission-denied': 'Las reglas publicadas en Firestore no permiten esta consulta. Vuelve a pegar firestore.rules completo en la consola y publícalas.',
+    unavailable: 'Sin conexión con Firestore. Revisa tu internet.',
+    unauthenticated: 'La sesión caducó. Cierra sesión y vuelve a entrar.',
+  }[code] || 'Firestore rechazó una consulta.';
+
+  return h('div.card', { style: { borderColor: 'var(--bad-500)', borderLeftWidth: '4px' } },
+    h('div.stack.stack-3',
+      h('div.row',
+        h('span', { style: { color: 'var(--bad-500)' } }, icon('alert')),
+        h('div.w-650', 'No se pudieron cargar los datos')),
+
+      h('p.t-sm.c-soft', { style: { lineHeight: '1.5' } }, explanation),
+
+      link
+        ? h('a.btn.btn--primary.btn--block', { href: link, target: '_blank', rel: 'noopener' },
+            icon('shield'), 'Crear el índice en Firebase')
+        : null,
+
+      onRetry ? button('Reintentar', { variant: 'ghost', block: true, icon: 'refresh', onClick: onRetry }) : null,
+
+      h('details',
+        h('summary.t-xs.c-faint', { style: { cursor: 'pointer' } }, 'Detalle técnico'),
+        h('p.t-xs.c-faint', {
+          style: { marginTop: '8px', lineHeight: '1.5', wordBreak: 'break-word', userSelect: 'text' },
+        }, `${code}${code ? ': ' : ''}${message}`))));
+}

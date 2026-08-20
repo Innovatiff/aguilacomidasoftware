@@ -25,7 +25,7 @@ const state = {
   outstanding: [],
   conversations: [],
   loaded: { clients: false, deliveries: false, outstanding: false, conversations: false },
-  error: null,
+  errors: {},
 };
 
 const subscribers = new Set();
@@ -43,33 +43,49 @@ export function subscribe(fn) {
 
 const emit = () => { for (const fn of subscribers) fn(state); };
 
-const onError = (error) => {
-  state.error = error;
+/**
+ * Records a listener's failure and stops waiting on it.
+ *
+ * Marking it loaded is the important half. Screens gate their skeletons on
+ * `loaded`, so a listener that errors and never reports would leave the app
+ * shimmering forever with nothing said — which is exactly the shape of failure
+ * that is hardest to diagnose from the outside. Better to render, and render
+ * the reason.
+ */
+const failed = (key) => (error) => {
+  state.errors[key] = error;
+  state.loaded[key] = true;
   emit();
+};
+
+/** The first listener failure, if any — what the screens surface. */
+export const firstError = () => {
+  const [key] = Object.keys(state.errors);
+  return key ? { key, error: state.errors[key] } : null;
 };
 
 export function startStore() {
   stopStore();
-  state.error = null;
+  state.errors = {};
 
   stops = [
     watchClients((rows) => {
       state.clients = rows;
       state.loaded.clients = true;
       emit();
-    }, onError),
+    }, failed('clients')),
 
     watchOutstanding((rows) => {
       state.outstanding = rows;
       state.loaded.outstanding = true;
       emit();
-    }, onError),
+    }, failed('outstanding')),
 
     watchConversations((rows) => {
       state.conversations = rows;
       state.loaded.conversations = true;
       emit();
-    }, onError),
+    }, failed('conversations')),
   ];
 
   watchSelectedDay();
@@ -83,7 +99,7 @@ export function stopStore() {
   Object.assign(state, {
     clients: [], deliveries: [], outstanding: [], conversations: [],
     loaded: { clients: false, deliveries: false, outstanding: false, conversations: false },
-    error: null,
+    errors: {},
   });
 }
 
@@ -107,7 +123,7 @@ function watchSelectedDay() {
     state.deliveries = rows;
     state.loaded.deliveries = true;
     emit();
-  }, onError);
+  }, failed('deliveries'));
 }
 
 /* --- Derived views --------------------------------------------------------- */

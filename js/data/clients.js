@@ -14,8 +14,8 @@
  */
 
 import {
-  db, doc, collection, getDoc, getDocs, updateDoc,
-  onSnapshot, query, where, orderBy, serverTimestamp,
+  db, doc, collection, getDoc, updateDoc,
+  onSnapshot, query, orderBy, serverTimestamp,
   writeBatch, docData, listData,
 } from '../firebase.js';
 import { today } from '../lib/dates.js';
@@ -60,11 +60,6 @@ export function watchClient(clientId, onData, onError) {
 }
 
 export const getClient = async (clientId) => docData(await getDoc(doc(db, 'clients', clientId)));
-
-export async function listActiveClients() {
-  const snap = await getDocs(query(clientsRef(), where('status', '==', 'active'), orderBy('name')));
-  return listData(snap);
-}
 
 /** Which farm an address already belongs to, if any. */
 export async function clientForEmail(email) {

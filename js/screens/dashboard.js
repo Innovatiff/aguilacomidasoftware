@@ -11,13 +11,13 @@ import { icon } from '../lib/icons.js';
 import { screen, topbarButton } from '../ui/shell.js';
 import {
   card, stat, statGrid, meter, button, itemRow, list, avatar,
-  sectionLabel, skeletonRows,
+  sectionLabel, skeletonRows, dataErrorCard,
 } from '../ui/kit.js';
 import { toastOk, toastBad, confirm } from '../ui/overlay.js';
 import { go } from '../lib/router.js';
 import {
   store, subscribe, dayStats, moneyStats, debtors, unscheduled,
-  activeClients, unreadCount, isReady, setDay,
+  activeClients, unreadCount, isReady, setDay, firstError, startStore,
 } from '../data/store.js';
 import { scheduleDay } from '../data/deliveries.js';
 import { greeting, formatDayLong, today, humanDelta, daysBetween } from '../lib/dates.js';
@@ -29,6 +29,11 @@ export function renderDashboard() {
   // on another date.
   setDay(today());
 
+  // A failed listener is worth the whole screen. Nothing below it would be
+  // showing real numbers anyway, and a half-empty dashboard reads as "no work
+  // today" rather than "this did not load".
+  const failure = () => firstError();
+
   const draw = () => {
     screen({
       title: greeting(),
@@ -38,7 +43,9 @@ export function renderDashboard() {
         label: 'Ajustes',
         onClick: () => go('/settings'),
       })],
-      body: isReady() ? body() : skeletonRows(5),
+      body: failure()
+        ? h('div.page__inner', dataErrorCard(failure().error, { onRetry: () => startStore() }))
+        : isReady() ? body() : skeletonRows(5),
     });
   };
 

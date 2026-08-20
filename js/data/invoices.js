@@ -35,20 +35,33 @@ export function watchClientInvoices(clientId, onData, onError, count = 24) {
   );
 }
 
-/** Everything still carrying a balance, across all farms — the admin's worklist. */
+/**
+ * Everything still carrying a balance, across all farms — the admin's worklist.
+ *
+ * Sorted here rather than in the query. Unpaid invoices are few by definition,
+ * and pairing the filter with an `orderBy` would demand a composite index —
+ * one more thing to create before the panel works at all.
+ */
 export function watchOutstanding(onData, onError) {
   return onSnapshot(
-    query(invoicesRef(), where('settled', '==', false), orderBy('dueDate')),
-    (snap) => onData(listData(snap)),
+    query(invoicesRef(), where('settled', '==', false)),
+    (snap) => onData(listData(snap).sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)))),
     onError,
   );
 }
 
-/** Recently settled bills, for the "Pagadas" tab. */
+/**
+ * Recently settled bills, for the "Pagadas" tab.
+ *
+ * Ordered by `paidAt` alone, which is an automatic single-field index, and
+ * filtered in memory. Only a settled invoice carries a real `paidAt`; the rest
+ * hold null, which Firestore sorts lowest, so a descending page fills with
+ * settled ones first.
+ */
 export function watchSettled(onData, onError, count = 40) {
   return onSnapshot(
-    query(invoicesRef(), where('settled', '==', true), orderBy('paidAt', 'desc'), qLimit(count)),
-    (snap) => onData(listData(snap)),
+    query(invoicesRef(), orderBy('paidAt', 'desc'), qLimit(count)),
+    (snap) => onData(listData(snap).filter((invoice) => invoice.settled)),
     onError,
   );
 }
