@@ -8,14 +8,14 @@ import { icon } from '../lib/icons.js';
 import { screen, topbarButton } from '../ui/shell.js';
 import {
   card, button, badge, avatar, defList, defRow, itemRow, list, sectionLabel,
-  alert, meter, loading,
+  alert, meter, loading, field, input,
 } from '../ui/kit.js';
-import { toastOk, toastBad, confirm, sheet } from '../ui/overlay.js';
+import { toastOk, toastBad, sheet } from '../ui/overlay.js';
 import { openPaymentSheet } from '../ui/payment-sheet.js';
 import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
 import { store, subscribe, billingFor, deliveryFor } from '../data/store.js';
-import { watchClient, rotateAccessCode, unlinkUser } from '../data/clients.js';
+import { watchClient, updateClient } from '../data/clients.js';
 import { watchClientInvoices, issueInvoice } from '../data/invoices.js';
 import { watchClientDeliveries, billableMeals, createDelivery } from '../data/deliveries.js';
 import { ensureConversation } from '../data/chat.js';
@@ -25,15 +25,15 @@ import {
 } from '../lib/billing.js';
 import {
   formatRange, relativeDay, formatDayLong, today, humanDelta, formatDay,
-  weekdayName, capitalize, daysBetween, dayKey,
+  weekdayName, capitalize,
 } from '../lib/dates.js';
 import { money, moneyFull, plural, phone as fmtPhone, telHref, number } from '../lib/format.js';
 import { clientStatusMeta, deliveryMeta } from '../lib/model.js';
-import { dbMessage, toDate } from '../firebase.js';
+import { dbMessage } from '../firebase.js';
 
 export function renderClientDetail(context) {
   const clientId = context.params.id;
-  const welcomeCode = context.query.welcome;
+  const welcomeEmail = context.query.welcome;
 
   let client = store.clients.find((c) => c.id === clientId) || null;
   let invoices = [];
@@ -75,7 +75,7 @@ export function renderClientDetail(context) {
     const stop = deliveryFor(clientId);
 
     return h('div.page__inner.stack.stack-4',
-      welcomeCode ? welcomeBanner(welcomeCode) : null,
+      welcomeEmail ? welcomeBanner(welcomeEmail) : null,
       identityCard(client, openChat),
       todayCard(client, stop),
       billingCard(client, billing, invoices, loadedInvoices),
@@ -86,17 +86,17 @@ export function renderClientDetail(context) {
 
   /* --- Cards ------------------------------------------------------------- */
 
-  function welcomeBanner(code) {
+  function welcomeBanner(email) {
     return h('div.card', { style: { background: 'var(--brand-50)', borderColor: 'var(--brand-200)' } },
       h('div.row.row--top',
-        h('span', { style: { color: 'var(--brand-600)' } }, icon('key')),
+        h('span', { style: { color: 'var(--brand-600)' } }, icon('check')),
         h('div.grow',
           h('div.w-600', 'Rancho registrado'),
           h('p.t-sm.c-soft', { style: { marginTop: '2px' } },
-            'Comparte este código con el encargado para que active su app:'),
+            'El encargado ya puede entrar a la app con este correo:'),
           h('div.row', { style: { marginTop: '10px' } },
-            codeChip(code),
-            button('Copiar', { variant: 'soft', size: 'sm', icon: 'copy', onClick: () => copy(code) })))));
+            emailChip(email),
+            button('Copiar', { variant: 'soft', size: 'sm', icon: 'copy', onClick: () => copy(email) })))));
   }
 
   function identityCard(model, onChat) {
@@ -217,34 +217,32 @@ export function renderClientDetail(context) {
     });
   }
 
+  /**
+   * The farm's access is its email address — there is nothing else to hand over
+   * and nothing for the manager to keep track of. Changing the address here
+   * moves the access with it, which is also how it is taken away.
+   */
   function accessCard(model) {
-    const linked = (model.linkedUids || []).length;
     return h('div.stack.stack-3',
-      sectionLabel('Acceso a la app del cliente'),
+      sectionLabel('Acceso a la app del rancho'),
       card(h('div.stack.stack-3',
         h('div.row.row--between',
-          h('div',
-            h('div.t-xs.upper.c-faint.w-700', 'Código de acceso'),
-            h('div', { style: { marginTop: '6px' } }, codeChip(model.accessCode || '—'))),
-          button('Copiar', { variant: 'ghost', size: 'sm', icon: 'copy', onClick: () => copy(model.accessCode) })),
+          h('div', { style: { minWidth: 0 } },
+            h('div.t-xs.upper.c-faint.w-700', 'Correo de acceso'),
+            h('div', { style: { marginTop: '6px' } }, emailChip(model.email || '—'))),
+          model.email
+            ? button('Copiar', { variant: 'ghost', size: 'sm', icon: 'copy', onClick: () => copy(model.email) })
+            : null),
 
-        codeValidity(model),
+        model.email
+          ? alert('El encargado entra a la app con este correo y la contraseña que él mismo elija. '
+            + 'No hay códigos que compartir.', 'info')
+          : alert('Este rancho no tiene correo registrado, así que nadie puede abrir su app.', 'warn'),
 
-        linked
-          ? alert(`${linked} ${linked === 1 ? 'cuenta vinculada' : 'cuentas vinculadas'} a este rancho.`, 'ok')
-          : alert('Nadie ha activado la app todavía. Comparte el código con el encargado.', 'info'),
-
-        h('div.btn-group',
-          button('Generar código nuevo', {
-            variant: 'ghost', size: 'sm', icon: 'refresh',
-            onClick: () => rotate(model),
-          }),
-          linked
-            ? button('Quitar acceso', {
-                variant: 'danger-soft', size: 'sm', icon: 'ban',
-                onClick: () => revoke(model),
-              })
-            : null))));
+        button('Cambiar correo de acceso', {
+          variant: 'ghost', size: 'sm', block: true, icon: 'mail',
+          onClick: () => changeEmail(model),
+        }))));
   }
 
   function termsCard(model) {
@@ -258,7 +256,6 @@ export function renderClientDetail(context) {
         defRow('Inicio del ciclo', formatDayLong(model.cycleAnchor || today())),
         defRow('Días de gracia', model.graceDays === 0 ? 'Mismo día' : `${model.graceDays} días`),
         model.phone ? defRow('Teléfono', fmtPhone(model.phone)) : null,
-        model.email ? defRow('Correo', model.email) : null,
         model.notes ? defRow('Notas', model.notes) : null,
       ].filter(Boolean))));
   }
@@ -314,71 +311,59 @@ export function renderClientDetail(context) {
       h('div.item__meta', label)),
     icon('chevronR', 'rowlink__chev'));
 
-  async function rotate(model) {
-    if (!await confirm({
-      title: 'Generar código nuevo',
-      message: 'El código anterior dejará de funcionar. Las cuentas ya vinculadas siguen teniendo acceso.',
-      confirmLabel: 'Generar código', icon: 'refresh',
-    })) return;
-    try {
-      const code = await rotateAccessCode(model.id, model.accessCode);
-      toastOk(`Código nuevo: ${code}`);
-    } catch (error) { toastBad(dbMessage(error)); }
-  }
+  /**
+   * Moves the farm's access to another address. The previous one stops working
+   * the moment this is saved, so it doubles as "quitar acceso".
+   */
+  async function changeEmail(model) {
+    const next = await sheet({
+      title: 'Correo de acceso',
+      build: (close) => {
+        let value = model.email || '';
+        return h('div.stack.stack-4',
+          alert('El correo anterior dejará de abrir la app en cuanto guardes.', 'warn'),
+          field({
+            label: 'Correo del encargado',
+            hint: 'Con este correo entra a la app del rancho.',
+            control: input({
+              value, type: 'email', inputmode: 'email', placeholder: 'encargado@rancho.com',
+              oninput: (event) => { value = event.target.value; },
+            }),
+          }),
+          button('Guardar', {
+            variant: 'primary', block: true,
+            onClick: () => close(value.trim()),
+          }));
+      },
+    });
+    if (!next || next.toLowerCase() === (model.email || '').toLowerCase()) return;
 
-  async function revoke(model) {
-    if (!await confirm({
-      title: 'Quitar acceso',
-      message: 'Las cuentas vinculadas dejarán de ver la información de este rancho. Podrán volver a entrar con un código nuevo.',
-      confirmLabel: 'Quitar acceso', tone: 'danger', icon: 'ban',
-    })) return;
     try {
-      for (const uid of model.linkedUids || []) await unlinkUser(model.id, uid);
-      toastOk('Acceso retirado');
-    } catch (error) { toastBad(dbMessage(error)); }
+      await updateClient(model.id, { email: next, name: model.name }, model.email);
+      toastOk('Correo de acceso actualizado');
+    } catch (error) { toastBad(error?.message || dbMessage(error)); }
   }
 
   draw();
   return () => stops.forEach((stop) => stop?.());
 }
 
-/**
- * How long the access code stays usable.
- *
- * An expired code fails at redemption with a permission error the farm manager
- * cannot diagnose, so the state has to be visible on this screen — it is the
- * only place anyone can fix it.
- */
-function codeValidity(model) {
-  const expires = toDate(model.accessCodeExpiresAt);
-  if (!expires) return null;
-
-  const left = daysBetween(today(), dayKey(expires));
-  if (left < 0) {
-    return alert(`El código venció el ${formatDay(dayKey(expires))}. Genera uno nuevo para que puedan conectarse.`, 'bad');
-  }
-  return alert(
-    left === 0
-      ? 'El código vence hoy.'
-      : `El código se puede usar ${humanDelta(left)} (hasta el ${formatDay(dayKey(expires))}).`,
-    left <= 3 ? 'warn' : 'info');
-}
-
 /* --- Small pieces ----------------------------------------------------------- */
 
-const codeChip = (code) => h('div', {
+const emailChip = (email) => h('div.truncate', {
   style: {
-    display: 'inline-block', padding: '8px 14px', borderRadius: 'var(--r-md)',
+    display: 'inline-block', maxWidth: '100%', padding: '8px 14px',
+    borderRadius: 'var(--r-md)',
     background: 'var(--ink-800)', color: '#fff',
-    fontFamily: 'var(--font-num)', fontSize: '20px', fontWeight: '700', letterSpacing: '.18em',
+    fontFamily: 'var(--font-num)', fontSize: 'var(--fs-sm)', fontWeight: '600',
   },
-}, code);
+}, email);
 
 async function copy(text) {
   if (!text) return;
   try {
     await navigator.clipboard.writeText(text);
-    toastOk('Código copiado');
+    toastOk('Correo copiado');
   } catch {
     toastBad('No se pudo copiar. Anótalo manualmente.');
   }

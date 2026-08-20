@@ -85,7 +85,6 @@ export async function ensureConversation(client) {
   await setDoc(ref, {
     clientId: client.id,
     clientName: client.name || '',
-    members: client.linkedUids || [],
     unreadAdmin: 0,
     unreadClient: 0,
     createdAt: serverTimestamp(),
@@ -126,7 +125,6 @@ export async function sendMessage(clientId, { text, kind = 'text', meta = null }
     ...(role === 'admin'
       ? { unreadClient: increment(1) }
       : { unreadAdmin: increment(1) }),
-    ...(client?.linkedUids ? { members: client.linkedUids } : {}),
     updatedAt: serverTimestamp(),
   }, { merge: true });
 

@@ -3,102 +3,79 @@ rules_version = '2';
 /**
  * El Águila Cocina — Firestore security rules.
  *
- * Two audiences share one project:
+ * Identity is decided by the signed-in account's *email address*, and both
+ * lists that matter are written from inside the panel:
  *
- *   admin  — kitchen staff. Sees every farm, delivery, invoice and thread.
- *   client — a farm manager. Sees only the farm their login is linked to.
+ *   staff/{email}         — may run the kitchen panel. Managed in
+ *                           Ajustes → Equipo.
+ *   clientEmails/{email}  — belongs to one farm. Written when the manager
+ *                           registers or edits that farm.
  *
- * Administrators are named in `staffEmails()` below. That list lives in this
- * file, which only someone who can deploy the project is able to change, so an
- * account on it just signs in and is an admin — no Firestore document to
- * hand-write.
+ * So onboarding anybody is the same act: type their email into the panel. No
+ * Firestore documents to hand-write, no access codes to read over the phone,
+ * and nothing in this file to edit after the first day.
  *
- * The list is the authorisation, not the Auth account. This project's API key
- * is public and the farm app needs open email/password sign-up, so *anyone* can
- * create an Auth account; having one proves nothing. Being named here does.
+ * Why not simply "has an Auth account"? Because this project's API key is
+ * public — it ships in the browser — and Firebase's account-creation endpoint
+ * is public with it. Anyone can create an Auth account against this project
+ * without going near either app, so being in Authentication proves nothing.
+ * Being in one of these two lists does, because only an admin can write them.
  *
- * Nothing a farm can do reaches `admin`. The only self-service sign-up in the
- * project is a farm creating its own `client` profile, which sees nothing until
- * it redeems an access code.
+ * The first admin is the one exception, and it happens once: whoever creates
+ * `config/bootstrap` may add themselves to `staff`. Firestore rejects a create
+ * on a document that already exists, so that race has exactly one winner and
+ * the marker can never be updated or deleted.
  *
- * Note on list queries: Firestore evaluates these rules against every document
- * a query would return, so an unscoped `list` on deliveries or invoices simply
- * fails. That is what confines a farm to its own rows — the query must carry
- * `where('clientId', '==', <their own id>)` to be allowed at all.
- *
- * Linking a login to a farm is a two-link chain, and both links are checked
- * here rather than in the app:
- *
- *   1. To join `clients/{id}.linkedUids` you must have staged the farm's
- *      *current* access code at `redemptions/{your uid}`. Rotating the code
- *      breaks every staged copy of the old one.
- *   2. To point `users/{uid}.clientId` at a farm, that farm must already list
- *      you in `linkedUids`.
- *
- * Neither link can be skipped, so knowing a farm's document id is not enough
- * to reach its deliveries, invoices or messages — you need a live code.
+ * On list queries: Firestore evaluates these rules against every document a
+ * query would return, so an unscoped `list` on deliveries or invoices simply
+ * fails. That is what confines a farm to its own rows — the query has to carry
+ * `where('clientId', '==', <their own farm>)` to be allowed at all.
  */
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    /* --- Who is staff ----------------------------------------------------- */
-
-    /**
-     * Every email address allowed to run the kitchen panel.
-     *
-     * To add someone: create their Auth user first (Firebase console →
-     * Authentication → Add user), then add the address here and run
-     *
-     *     firebase deploy --only firestore:rules
-     *
-     * They sign in and the panel sets up their profile on its own.
-     *
-     * Create the Auth account *before* listing the address. An address nobody
-     * has registered yet is one an outsider could register, and their token
-     * would then carry it legitimately.
-     *
-     * To take access away: delete the line, redeploy, and revoke them in
-     * Ajustes → Equipo (or delete the Auth user outright).
-     */
-    function staffEmails() {
-      return [
-        'alanf7178@gmail.com',
-      ];
-    }
-
-    function isStaffEmail() {
-      return request.auth != null
-        && request.auth.token.email != null
-        && request.auth.token.email.lower() in staffEmails();
-    }
-
-    /* --- Helpers --------------------------------------------------------- */
+    /* --- Identity ---------------------------------------------------------- */
 
     function signedIn() {
       return request.auth != null;
     }
 
-    function profile() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-    }
-
-    function profileExists() {
-      return signedIn()
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    /** The signed-in address, lowercased, or '' when there is none. */
+    function myEmail() {
+      return signedIn() && request.auth.token.email != null
+        ? request.auth.token.email.lower()
+        : '';
     }
 
     function isAdmin() {
-      return profileExists() && profile().role == 'admin';
+      return myEmail() != ''
+        && exists(/databases/$(database)/documents/staff/$(myEmail()));
     }
 
-    /** The farm this login is linked to, or null. */
-    function myClientId() {
-      return profileExists() ? profile().clientId : null;
+    /**
+     * The farm this address was registered for, or ''.
+     *
+     * Note there is no step where a farm claims anything: the manager writes
+     * the address, and that write *is* the authorisation. Nothing the farm
+     * does can change which farm it belongs to.
+     */
+    function myClient() {
+      return myEmail() != ''
+        && exists(/databases/$(database)/documents/clientEmails/$(myEmail()))
+        ? get(/databases/$(database)/documents/clientEmails/$(myEmail())).data.clientId
+        : '';
     }
 
     function ownsClient(clientId) {
-      return signedIn() && clientId != null && myClientId() == clientId;
+      return clientId != null && clientId != '' && myClient() == clientId;
+    }
+
+    /** The one account that claimed the first-administrator seat. */
+    function isFounder() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/config/bootstrap)
+        && get(/databases/$(database)/documents/config/bootstrap).data.ownerUid == request.auth.uid;
     }
 
     /** Keys this write is changing. */
@@ -106,129 +83,92 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).affectedKeys();
     }
 
-    /** The access code this uid has staged for redemption, or '' if none. */
-    function stagedCode(uid) {
-      return exists(/databases/$(database)/documents/redemptions/$(uid))
-        ? get(/databases/$(database)/documents/redemptions/$(uid)).data.code
-        : '';
-    }
+    /* --- staff -------------------------------------------------------------- */
 
-    /** True while the farm's access code is still within its validity window. */
-    function codeUnexpired() {
-      return !('accessCodeExpiresAt' in resource.data)
-        || resource.data.accessCodeExpiresAt == null
-        || request.time < resource.data.accessCodeExpiresAt;
-    }
-
-    /** True when `clientId` names a farm that already lists this uid. */
-    function farmListsMe(clientId) {
-      return clientId is string
-        && exists(/databases/$(database)/documents/clients/$(clientId))
-        && request.auth.uid in
-             get(/databases/$(database)/documents/clients/$(clientId)).data.linkedUids;
-    }
-
-    /* --- users ------------------------------------------------------------ */
-
-    match /users/{uid} {
-      allow get: if isAdmin() || (signedIn() && request.auth.uid == uid);
+    // Document id is the lowercased email address. Adding one grants the whole
+    // panel — every farm's contact details, every delivery, every payment — so
+    // only an existing admin may write here.
+    match /staff/{email} {
+      // Anyone signed in may check their own entry; that is how the panel
+      // knows whether to let them in. Reading somebody else's is admin-only.
+      allow get: if isAdmin() || (signedIn() && email == myEmail());
       allow list: if isAdmin();
 
-      // Two ways a profile comes into existence, and no third:
-      //
-      //   - a farm creating its own `client` profile, which grants nothing
-      //     until an access code is redeemed;
-      //   - an address named in staffEmails() claiming its own admin profile,
-      //     which is what makes "add the account, sign in, done" work.
-      allow create: if signedIn()
-        && request.auth.uid == uid
-        && ((request.resource.data.role == 'client'
-             && request.resource.data.clientId == null)
-            || (request.resource.data.role == 'admin' && isStaffEmail()));
+      // The founder adding themselves, once, right after claiming the seat.
+      allow create: if isAdmin()
+        || (isFounder() && email == myEmail());
 
-      // Updating your own profile must not change your role, and `clientId` is
-      // not a free-text field: pointing it at a farm is what grants sight of
-      // that farm's deliveries, invoices and messages, so the farm has to have
-      // accepted you first (which needs its live access code — see below).
-      allow update: if isAdmin()
-        // A listed address taking its own admin profile. This is the path that
-        // upgrades an account left over from an earlier sign-up, so nobody has
-        // to delete anything by hand.
-        || (isStaffEmail()
-            && request.auth.uid == uid
-            && request.resource.data.role == 'admin')
-        || (signedIn()
-            && request.auth.uid == uid
-            && request.resource.data.role == resource.data.role
-            && (request.resource.data.clientId == resource.data.clientId
-                || request.resource.data.clientId == null
-                || farmListsMe(request.resource.data.clientId)));
+      allow update: if isAdmin();
 
+      // An admin may not lock the kitchen out by removing the last of
+      // themselves by accident — that check lives in the app, which can count
+      // the collection; rules cannot.
       allow delete: if isAdmin();
     }
 
-    /* --- clients (farms) --------------------------------------------------- */
+    /* --- config ------------------------------------------------------------- */
 
-    match /clients/{clientId} {
-      allow get: if isAdmin()
-        || (signedIn() && request.auth.uid in resource.data.get('linkedUids', []))
-        || ownsClient(clientId);
+    // Create-once marker for the first administrator. Never updated, never
+    // deleted: the seat cannot be re-claimed.
+    match /config/{docId} {
+      allow get: if signedIn();
       allow list: if isAdmin();
 
-      allow create, delete: if isAdmin();
+      allow create: if docId == 'bootstrap'
+        && signedIn()
+        && request.resource.data.keys().hasOnly(['ownerUid', 'ownerEmail', 'at'])
+        && request.resource.data.ownerUid == request.auth.uid;
 
-      // Admins edit freely. A farm manager redeeming an access code may do
-      // exactly one thing — add their own uid to `linkedUids` — and only while
-      // holding the farm's current code, staged at `redemptions/{uid}`. The
-      // code is compared against `clients.accessCode` itself, so "generar
-      // código nuevo" invalidates every staged copy of the old one instantly.
-      allow update: if isAdmin()
-        || (signedIn()
-            && changed().hasOnly(['linkedUids'])
-            && request.resource.data.linkedUids.hasAll(resource.data.get('linkedUids', []))
-            && request.resource.data.linkedUids.hasOnly(
-                 resource.data.get('linkedUids', []).concat([request.auth.uid]))
-            && stagedCode(request.auth.uid) == resource.data.accessCode
-            && codeUnexpired());
+      allow update, delete: if false;
     }
 
-    /* --- accessCodes ------------------------------------------------------- */
+    /* --- clientEmails -------------------------------------------------------- */
 
-    // Readable one document at a time by exact id — a signed-in farm manager
-    // resolves the code they were given. `list` is denied, so the collection
-    // can never be enumerated to discover farms or codes.
-    match /accessCodes/{code} {
-      allow get: if signedIn();
+    // Which farm an address belongs to. Written by the panel when a farm is
+    // registered or its email changed; read by that farm to find itself.
+    match /clientEmails/{email} {
+      allow get: if isAdmin() || (signedIn() && email == myEmail());
       allow list: if isAdmin();
       allow write: if isAdmin();
     }
 
-    /* --- redemptions -------------------------------------------------------- */
+    /* --- users --------------------------------------------------------------- */
 
-    // Where a farm manager stages the code they were handed. Writing one is
-    // free — it is inert unless it matches a real farm's current code, and the
-    // `clients` rule above is what actually checks it.
-    match /redemptions/{uid} {
-      allow read: if isAdmin() || (signedIn() && request.auth.uid == uid);
+    // Personal details only — a display name and a phone number. This document
+    // carries no authority at all: who you are is decided by `staff` and
+    // `clientEmails`, both of which only an admin can write.
+    match /users/{uid} {
+      allow get: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow list: if isAdmin();
 
-      allow create, update: if signedIn()
-        && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(['code', 'at'])
-        && request.resource.data.code is string
-        && request.resource.data.code.size() >= 4
-        && request.resource.data.code.size() <= 16;
+      allow create, update: if isAdmin()
+        || (signedIn()
+            && request.auth.uid == uid
+            && request.resource.data.keys().hasOnly(
+                 ['name', 'email', 'phone', 'createdAt', 'updatedAt', 'lastSeenAt']));
 
-      allow delete: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow delete: if isAdmin();
     }
 
-    /* --- deliveries -------------------------------------------------------- */
+    /* --- clients (farms) ------------------------------------------------------ */
+
+    match /clients/{clientId} {
+      allow get: if isAdmin() || ownsClient(clientId);
+      allow list: if isAdmin();
+
+      // A farm reads its own terms and can never edit them. Its price per meal
+      // is the kitchen's to set.
+      allow write: if isAdmin();
+    }
+
+    /* --- deliveries ----------------------------------------------------------- */
 
     match /deliveries/{deliveryId} {
       allow read: if isAdmin() || ownsClient(resource.data.clientId);
       allow write: if isAdmin();
     }
 
-    /* --- invoices ---------------------------------------------------------- */
+    /* --- invoices ------------------------------------------------------------- */
 
     match /invoices/{invoiceId} {
       allow read: if isAdmin() || ownsClient(resource.data.clientId);
@@ -237,7 +177,7 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    /* --- conversations ----------------------------------------------------- */
+    /* --- conversations -------------------------------------------------------- */
 
     match /conversations/{clientId} {
       allow get: if isAdmin() || ownsClient(clientId);
@@ -276,7 +216,7 @@ service cloud.firestore {
       }
     }
 
-    /* --- everything else ---------------------------------------------------- */
+    /* --- everything else ------------------------------------------------------- */
 
     match /{document=**} {
       allow read, write: if false;

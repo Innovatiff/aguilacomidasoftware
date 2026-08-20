@@ -5,38 +5,28 @@
  * which weekdays are served, and the anchor date its bi-weekly billing cycles
  * are counted from. Everything else about the client (deliveries, invoices,
  * messages) hangs off `clientId`.
+ *
+ * The email address is not just contact detail: it is how the farm gets into
+ * its app. Registering a farm writes `clientEmails/{email} -> clientId`, and
+ * that document is what the security rules consult when the farm signs in.
+ * Changing the email here moves the access with it, which is also how access is
+ * taken away.
  */
 
 import {
   db, doc, collection, getDoc, getDocs, updateDoc,
-  onSnapshot, query, where, orderBy, serverTimestamp, arrayUnion, arrayRemove,
-  writeBatch, docData, listData, Timestamp,
+  onSnapshot, query, where, orderBy, serverTimestamp,
+  writeBatch, docData, listData,
 } from '../firebase.js';
 import { today } from '../lib/dates.js';
 import { DEFAULT_DELIVERY_DAYS, DEFAULT_GRACE_DAYS } from '../lib/billing.js';
 
 const clientsRef = () => collection(db, 'clients');
 
-/** Ambiguous characters (0/O, 1/I) are left out — codes get read over the phone. */
-const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+/** Lowercased and trimmed — the lookup document id must match the token. */
+export const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
 
-/**
- * How long a fresh access code stays redeemable.
- *
- * Long enough that a farm manager can set the app up next week without a
- * support call, short enough that a code written on a whiteboard two years ago
- * is not still a way in. The security rules enforce it; the kitchen can always
- * mint a new one in a tap.
- */
-export const CODE_VALID_DAYS = 30;
-
-const codeExpiry = () =>
-  Timestamp.fromDate(new Date(Date.now() + CODE_VALID_DAYS * 86400000));
-
-export function generateAccessCode(length = 6) {
-  const bytes = crypto.getRandomValues(new Uint8Array(length));
-  return Array.from(bytes, (b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join('');
-}
+export const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(email));
 
 export const emptyClient = () => ({
   name: '',
@@ -76,102 +66,104 @@ export async function listActiveClients() {
   return listData(snap);
 }
 
+/** Which farm an address already belongs to, if any. */
+export async function clientForEmail(email) {
+  const key = normalizeEmail(email);
+  if (!isValidEmail(key)) return null;
+  const snap = await getDoc(doc(db, 'clientEmails', key));
+  return snap.exists() ? { email: key, ...snap.data() } : null;
+}
+
 /* --- Writes ---------------------------------------------------------------- */
 
 /**
- * Creates the farm and its access code together. The code lives in its own
- * collection so a client app can resolve exactly one code by document id
- * without being able to list — or even see — any other farm.
+ * Registers a farm and grants its email access, in one batch.
+ *
+ * The two writes belong together: a farm whose email lookup is missing cannot
+ * open its app, and a lookup pointing at a farm that does not exist is a
+ * dangling grant. Committing them separately would leave either state
+ * reachable.
  */
 export async function createClient(data, author) {
+  const email = normalizeEmail(data.email);
+  if (!isValidEmail(email)) throw new Error('Escribe un correo válido para el rancho.');
+
+  const taken = await clientForEmail(email);
+  if (taken) throw new Error(`Ese correo ya está registrado para ${taken.clientName || 'otro rancho'}.`);
+
   const ref = doc(clientsRef());
-  const code = generateAccessCode();
   const batch = writeBatch(db);
 
   batch.set(ref, {
     ...emptyClient(),
     ...sanitize(data),
-    accessCode: code,
-    accessCodeExpiresAt: codeExpiry(),
-    linkedUids: [],
+    email,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     createdBy: author?.uid || null,
     createdByName: author?.name || '',
   });
 
-  batch.set(doc(db, 'accessCodes', code), {
+  batch.set(doc(db, 'clientEmails', email), {
     clientId: ref.id,
     clientName: data.name || '',
-    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
   });
 
   await batch.commit();
-  return { id: ref.id, accessCode: code };
+  return { id: ref.id, email };
 }
 
-export async function updateClient(clientId, patch) {
-  await updateDoc(doc(db, 'clients', clientId), {
-    ...sanitize(patch),
-    updatedAt: serverTimestamp(),
-  });
-}
+/**
+ * Updates a farm, moving its access if the email changed.
+ *
+ * The old lookup is deleted in the same batch as the new one is written, so
+ * the previous address never keeps working after the change.
+ */
+export async function updateClient(clientId, patch, previousEmail) {
+  const patchEmail = patch.email !== undefined;
+  const email = patchEmail ? normalizeEmail(patch.email) : null;
+  const previous = normalizeEmail(previousEmail);
 
-/** Issues a fresh code and retires the old one. */
-export async function rotateAccessCode(clientId, previousCode) {
-  const code = generateAccessCode();
+  if (patchEmail) {
+    if (!isValidEmail(email)) throw new Error('Escribe un correo válido para el rancho.');
+    if (email !== previous) {
+      const taken = await clientForEmail(email);
+      if (taken && taken.clientId !== clientId) {
+        throw new Error(`Ese correo ya está registrado para ${taken.clientName || 'otro rancho'}.`);
+      }
+    }
+  }
+
   const batch = writeBatch(db);
-  const client = await getClient(clientId);
-
-  batch.set(doc(db, 'accessCodes', code), {
-    clientId,
-    clientName: client?.name || '',
-    createdAt: serverTimestamp(),
-  });
-  if (previousCode) batch.delete(doc(db, 'accessCodes', previousCode));
   batch.update(doc(db, 'clients', clientId), {
-    accessCode: code,
-    accessCodeExpiresAt: codeExpiry(),
+    ...sanitize(patch),
+    ...(patchEmail ? { email } : {}),
     updatedAt: serverTimestamp(),
   });
 
+  if (patchEmail) {
+    if (previous && previous !== email) batch.delete(doc(db, 'clientEmails', previous));
+    batch.set(doc(db, 'clientEmails', email), {
+      clientId,
+      clientName: patch.name || '',
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+  }
+
   await batch.commit();
-  return code;
 }
 
 export async function setClientStatus(clientId, status) {
   await updateDoc(doc(db, 'clients', clientId), { status, updatedAt: serverTimestamp() });
 }
 
-/** Removes a login's access to a farm (admin side). */
-export async function unlinkUser(clientId, uid) {
-  const batch = writeBatch(db);
-  batch.update(doc(db, 'clients', clientId), { linkedUids: arrayRemove(uid) });
-  batch.update(doc(db, 'users', uid), { clientId: null });
-  await batch.commit();
-}
-
-export async function deleteClient(clientId, accessCode) {
+export async function deleteClient(clientId, email) {
   const batch = writeBatch(db);
   batch.delete(doc(db, 'clients', clientId));
-  if (accessCode) batch.delete(doc(db, 'accessCodes', accessCode));
+  const key = normalizeEmail(email);
+  if (key) batch.delete(doc(db, 'clientEmails', key));
   await batch.commit();
-}
-
-/* --- Access codes ---------------------------------------------------------- */
-
-/** Resolves a code typed by a farm manager. Returns null when it is not valid. */
-export async function resolveAccessCode(code) {
-  const key = String(code || '').trim().toUpperCase();
-  if (!/^[A-Z0-9]{4,10}$/.test(key)) return null;
-  const snap = await getDoc(doc(db, 'accessCodes', key));
-  return snap.exists() ? { code: key, ...snap.data() } : null;
-}
-
-/** Links the signed-in login to a farm. Both writes are permitted by the rules. */
-export async function linkSelfToClient(uid, clientId) {
-  await updateDoc(doc(db, 'clients', clientId), { linkedUids: arrayUnion(uid) });
-  await updateDoc(doc(db, 'users', uid), { clientId, linkedAt: serverTimestamp() });
 }
 
 /* --- Shaping --------------------------------------------------------------- */
@@ -185,6 +177,7 @@ function sanitize(data) {
     if (value === undefined) continue;
     if (NUMERIC.has(key)) out[key] = Number(value) || 0;
     else if (key === 'deliveryDays') out[key] = (value || []).map(Number).sort((a, b) => a - b);
+    else if (key === 'email') out[key] = normalizeEmail(value);
     else if (typeof value === 'string') out[key] = value.trim();
     else out[key] = value;
   }

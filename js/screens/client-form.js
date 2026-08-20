@@ -17,6 +17,7 @@ import { go, back } from '../lib/router.js';
 import { session } from '../data/session.js';
 import {
   createClient, updateClient, getClient, emptyClient, deleteClient, setClientStatus,
+  isValidEmail,
 } from '../data/clients.js';
 import { ensureConversation } from '../data/chat.js';
 import { store } from '../data/store.js';
@@ -38,6 +39,9 @@ export async function renderClientForm(context) {
     return;
   }
   model = { ...emptyClient(), ...model };
+  // Remembered before editing: updating the email has to retire the previous
+  // lookup, or the old address would keep opening the app.
+  const original = { email: model.email };
 
   let saving = false;
   let errors = {};
@@ -64,6 +68,8 @@ export async function renderClientForm(context) {
     if (!(Number(model.mealsPerDay) > 0)) errors.mealsPerDay = 'Debe ser mayor a cero.';
     if (!(Number(model.pricePerMeal) > 0)) errors.pricePerMeal = 'Escribe el precio por comida.';
     if (!model.deliveryDays?.length) errors.deliveryDays = 'Elige al menos un día.';
+    // The email is not a contact detail here: it is how the farm opens its app.
+    if (!isValidEmail(model.email)) errors.email = 'Escribe el correo con el que entrará el encargado.';
     return Object.keys(errors).length === 0;
   }
 
@@ -76,18 +82,18 @@ export async function renderClientForm(context) {
 
     try {
       if (isNew) {
-        const { id, accessCode } = await createClient(model, author);
-        await ensureConversation({ id, name: model.name, linkedUids: [] });
+        const { id, email } = await createClient(model, author);
+        await ensureConversation({ id, name: model.name });
         toastOk('Rancho registrado');
-        go(`/clients/${id}?welcome=${accessCode}`, { replace: true });
+        go(`/clients/${id}?welcome=${encodeURIComponent(email)}`, { replace: true });
       } else {
-        await updateClient(clientId, model);
+        await updateClient(clientId, model, original.email);
         toastOk('Cambios guardados');
         go(`/clients/${clientId}`, { replace: true });
       }
     } catch (error) {
       saving = false; draw();
-      toastBad(dbMessage(error));
+      toastBad(error?.message || dbMessage(error));
     }
   }
 
@@ -119,10 +125,12 @@ export async function renderClientForm(context) {
           }),
         }),
         field({
-          label: 'Correo',
-          hint: 'Con este correo el rancho podrá crear su cuenta en la app.',
+          label: 'Correo de acceso',
+          hint: 'Con este correo el encargado entra a la app del rancho. Es lo único que necesita.',
+          error: errors.email,
           control: input({
-            value: model.email, type: 'email', inputmode: 'email', placeholder: 'contacto@rancho.com',
+            value: model.email, type: 'email', inputmode: 'email', required: true,
+            placeholder: 'encargado@rancho.com',
             oninput: (e) => update({ email: e.target.value }),
           }),
         }),
@@ -260,11 +268,11 @@ export async function renderClientForm(context) {
         onClick: async () => {
           if (!await confirm({
             title: `Eliminar ${model.name}`,
-            message: 'Se borra el rancho y su código de acceso. Las entregas y facturas ya registradas no se eliminan. Esta acción no se puede deshacer.',
+            message: 'Se borra el rancho y el acceso de su correo a la app. Las entregas y facturas ya registradas no se eliminan. Esta acción no se puede deshacer.',
             confirmLabel: 'Eliminar definitivamente', tone: 'danger', icon: 'alert',
           })) return;
           try {
-            await deleteClient(clientId, model.accessCode);
+            await deleteClient(clientId, model.email);
             toastOk('Rancho eliminado');
             go('/clients', { replace: true });
           } catch (error) {

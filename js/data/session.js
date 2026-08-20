@@ -1,36 +1,41 @@
 /**
- * Auth session + the signed-in user's profile document.
+ * Auth session for the kitchen panel.
  *
- * `users/{uid}` carries the role (`admin` | `client`) and, for a farm, the
- * `clientId` that links the login to its `clients/{id}` record. The profile is
- * watched rather than fetched once, so linking a login to a farm — or revoking
- * it — takes effect on the user's phone immediately, without a sign-out.
+ * Who may run the panel is decided by one document: `staff/{your email}`. That
+ * document is watched rather than read once, so adding or removing somebody
+ * from Ajustes → Equipo takes effect on their phone immediately — no sign-out,
+ * no reload.
+ *
+ * `users/{uid}` is watched too, but it holds only a display name and a phone
+ * number. It carries no authority: deleting it would not grant or remove
+ * anything.
  */
 
 import {
-  auth, db, doc, setDoc, updateDoc, onSnapshot, getDoc, serverTimestamp,
-  onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
-  signOut, updateProfile, sendPasswordResetEmail, docData,
+  auth, db, doc, setDoc, updateDoc, onSnapshot, serverTimestamp,
+  onAuthStateChanged, signInWithEmailAndPassword, signOut,
+  sendPasswordResetEmail, docData,
 } from '../firebase.js';
 
-const state = { user: null, profile: null, ready: false, error: null };
+const state = { user: null, staff: null, profile: null, ready: false };
 const listeners = new Set();
+let stopStaff = null;
 let stopProfile = null;
+/** Guards the "last seen" write — see `touchLastSeen`. */
+let seenTouched = false;
 
 export const session = {
   get user() { return state.user; },
-  get profile() { return state.profile; },
-  get ready() { return state.ready; },
   get uid() { return state.user?.uid || null; },
-  get role() { return state.profile?.role || null; },
-  get clientId() { return state.profile?.clientId || null; },
+  /** Lowercased, because that is how both lists are keyed. */
+  get email() { return (state.user?.email || '').trim().toLowerCase(); },
+  get ready() { return state.ready; },
+  get staff() { return state.staff; },
+  get profile() { return state.profile; },
+  get isAdmin() { return !!state.staff; },
   get displayName() {
-    return state.profile?.name || state.user?.displayName || state.user?.email || '';
+    return state.profile?.name || state.staff?.name || state.user?.displayName || state.user?.email || '';
   },
-  get isAdmin() { return state.profile?.role === 'admin'; },
-  get isClient() { return state.profile?.role === 'client'; },
-  /** A client login that has not been linked to a farm yet. */
-  get isUnlinked() { return state.profile?.role === 'client' && !state.profile?.clientId; },
 };
 
 function emit() {
@@ -44,87 +49,90 @@ export function watchSession(fn) {
   return () => listeners.delete(fn);
 }
 
-/** Starts the auth listener. Call once at boot. */
 export function startSession() {
   onAuthStateChanged(auth, (user) => {
+    stopStaff?.();
     stopProfile?.();
+    stopStaff = null;
     stopProfile = null;
+
     state.user = user;
+    state.staff = null;
+    state.profile = null;
+    seenTouched = false;
 
     if (!user) {
-      state.profile = null;
       state.ready = true;
       emit();
       return;
     }
 
+    const email = (user.email || '').trim().toLowerCase();
+    if (!email) {
+      // No address on the token means no way to be on either list.
+      state.ready = true;
+      emit();
+      return;
+    }
+
+    stopStaff = onSnapshot(
+      doc(db, 'staff', email),
+      (snap) => {
+        state.staff = docData(snap);
+        state.ready = true;
+        emit();
+        touchLastSeen(email);
+      },
+      () => {
+        // A refused read means "not staff" just as clearly as an empty one.
+        state.staff = null;
+        state.ready = true;
+        emit();
+      },
+    );
+
     stopProfile = onSnapshot(
       doc(db, 'users', user.uid),
-      (snap) => {
-        state.profile = docData(snap);
-        state.ready = true;
-        state.error = null;
-        emit();
-      },
-      (error) => {
-        state.profile = null;
-        state.ready = true;
-        state.error = error;
-        emit();
-      },
+      (snap) => { state.profile = docData(snap); emit(); },
+      () => {},
     );
   });
 }
 
-/* --- Actions --------------------------------------------------------------- */
+/* --- Actions ---------------------------------------------------------------- */
 
 export async function signIn(email, password) {
   const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
-  await touchLastSeen(credential.user.uid);
   return credential.user;
-}
-
-/**
- * Creates a login and its profile document in one step. The profile is written
- * by the client itself, so the security rules pin `role` to what the caller is
- * allowed to claim (see firestore.rules).
- */
-export async function signUp({ email, password, name, role = 'client', phone = '' }) {
-  const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
-  const user = credential.user;
-  if (name) await updateProfile(user, { displayName: name });
-
-  await setDoc(doc(db, 'users', user.uid), {
-    name: name || '',
-    email: user.email,
-    phone: phone || '',
-    role,
-    clientId: null,
-    createdAt: serverTimestamp(),
-    lastSeenAt: serverTimestamp(),
-  });
-  return user;
 }
 
 export const signOutNow = () => signOut(auth);
 
 export const resetPassword = (email) => sendPasswordResetEmail(auth, email.trim());
 
+/** Saves this person's own name and phone. Grants nothing. */
 export async function updateOwnProfile(patch) {
   if (!state.user) throw new Error('Sin sesión');
-  await updateDoc(doc(db, 'users', state.user.uid), { ...patch, updatedAt: serverTimestamp() });
-  if (patch.name) await updateProfile(state.user, { displayName: patch.name });
+  await setDoc(doc(db, 'users', state.user.uid), {
+    ...patch,
+    email: state.user.email || '',
+    updatedAt: serverTimestamp(),
+  }, { merge: true });
 }
 
-async function touchLastSeen(uid) {
+/**
+ * Stamps when this person last opened the panel.
+ *
+ * Once per session, and never from inside the snapshot that the write itself
+ * produces — this document is being watched, so an unguarded write here would
+ * retrigger the listener that called it and loop forever.
+ */
+async function touchLastSeen(email) {
+  if (seenTouched || !state.staff) return;
+  seenTouched = true;
   try {
-    await updateDoc(doc(db, 'users', uid), { lastSeenAt: serverTimestamp() });
+    await updateDoc(doc(db, 'staff', email), { lastSeenAt: serverTimestamp() });
   } catch {
-    // A brand-new account may not have its profile document yet; harmless.
+    // Not worth surfacing: it is a convenience column in Ajustes → Equipo.
   }
-}
-
-/** One-shot read of any user profile (admins reading a client's contact). */
-export async function fetchProfile(uid) {
-  return docData(await getDoc(doc(db, 'users', uid)));
 }

@@ -39,52 +39,47 @@ En la [consola de Firebase](https://console.firebase.google.com/project/aguilaco
    firebase deploy --only firestore:rules,firestore:indexes
    ```
 
-### 2. Crear las cuentas del equipo
+### 2. La primera cuenta
 
-**El panel no tiene registro.** Quién puede entrar se decide en una lista
-dentro de `firestore.rules`, un archivo que sólo puede cambiar quien despliega
-el proyecto. Son dos pasos por persona:
+Entra al panel con tu correo y tu contraseña de **Authentication**. Como el
+proyecto todavía no tiene administrador, verás **Instalación nueva** y un botón
+para quedarte como el primero. Un toque y estás dentro.
 
-1. **Authentication → Users → Add user**: correo y contraseña.
-2. Agrega ese correo a `staffEmails()` en **`firestore.rules`** y publica:
+Eso pasa **una sola vez**: a partir de ahí el equipo se maneja desde el panel.
 
-   ```sh
-   firebase deploy --only firestore:rules
-   ```
+### 3. Agregar a alguien más
 
-   ```
-   function staffEmails() {
-     return [
-       'alanf7178@gmail.com',
-       'otra.persona@ejemplo.com',   // <- se agrega aquí
-     ];
-   }
-   ```
+**Ajustes → Equipo → Agregar**, escribes su correo, listo. Esa persona entra
+con ese correo y el panel se le abre solo.
 
-3. Esa persona entra con su correo y contraseña. **No hay tercer paso**: el
-   panel crea su perfil solo la primera vez que entra.
+Si todavía no tiene contraseña, la crea desde **Olvidé mi contraseña** en la
+pantalla de entrada, o se la creas tú en **Authentication → Users → Add user**.
 
-> **Crea primero la cuenta en Authentication y después agrega el correo a la
-> lista.** Un correo listado que nadie ha registrado todavía es un correo que
-> alguien más podría registrar.
+**Quitar el acceso** es el mismo lugar: **Ajustes → Equipo → Quitar**. Deja de
+entrar de inmediato; su cuenta sigue existiendo y puedes volver a agregarla
+cuando quieras.
 
-Si alguien entra con un correo que no está en la lista, ve **Sin acceso al
-panel** con el correo exacto que hay que agregar — no un error. La pantalla se
-convierte en el panel sola en cuanto lo habilites.
+Si alguien entra con un correo que no está en el equipo, ve **Sin acceso al
+panel** — no un error — y la pantalla se convierte en el panel sola en cuanto lo
+agregues.
 
-**Por qué no basta con crear la cuenta en Authentication.** La `apiKey` de este
-proyecto es pública (tiene que serlo, va en el navegador) y la app de los
-ranchos necesita registro abierto por correo. Cualquiera puede crear una cuenta
-de Authentication con la API pública de Firebase; tener una no demuestra nada.
-Estar en la lista sí.
+> **Por qué no basta con crear la cuenta en Authentication.** La `apiKey` de
+> este proyecto es pública (tiene que serlo, va en el navegador) y la app de los
+> ranchos necesita registro abierto por correo. Cualquiera puede crear una
+> cuenta de Authentication contra este proyecto con la API pública de Firebase,
+> sin pasar por ninguna de las dos apps — así que tener una no demuestra nada.
+> Estar en la lista `staff`, que sólo un administrador puede escribir, sí.
 
-**Quitar y devolver acceso** se hace dentro de la app: **Ajustes → Equipo →
-Quitar**. La cuenta baja a `pending` (no puede leer nada) y aparece en **Ajustes
-→ Cuentas sin acceso**, desde donde la vuelves a habilitar sin redesplegar. Para
-retirar a alguien de forma definitiva, quítalo también de `staffEmails()` — si
-no, volvería a entrar solo.
+### 4. Registrar un rancho
 
-### 3. Correr en local
+**Ranchos → Nuevo**. El correo que escribas ahí es su acceso: con ese correo el
+encargado entra a la app del rancho y ve lo suyo. No hay códigos que compartir.
+
+Para mover o quitar ese acceso, cambia el correo en la ficha del rancho
+(**Acceso a la app del rancho → Cambiar correo**). El anterior deja de funcionar
+en el momento en que guardas.
+
+### 5. Correr en local
 
 No hay dependencias ni build. Cualquier servidor estático sirve:
 
@@ -99,7 +94,7 @@ Abre `http://localhost:5173`. Agrega `localhost` en
 > Los módulos ES no funcionan abriendo `index.html` con `file://`. Usa un
 > servidor.
 
-### 4. Publicar en Netlify
+### 6. Publicar en Netlify
 
 El sitio se publica solo: Netlify vigila la rama del repositorio y sube cada
 push. No hay build — la raíz del repositorio *es* el sitio, y `netlify.toml` ya
@@ -118,7 +113,7 @@ Al conectar el repositorio en Netlify:
 Authorized domains → Add domain**, y agrega el dominio de Netlify
 (`tu-sitio.netlify.app` y tu dominio propio si lo tienes).
 
-### 5. Publicar las reglas
+### 7. Publicar las reglas
 
 **Publicar el sitio no publica las reglas.** Son dos cosas distintas y es la
 causa más común de «ya lo arreglé pero sigue igual». Netlify sube la app;
@@ -133,8 +128,9 @@ Los índices sí conviene subirlos una vez con la CLI (`firebase deploy --only
 firestore:indexes`), o crearlos desde el enlace que Firestore muestra en la
 consola la primera vez que una consulta los necesita.
 
-> Cada vez que cambies `staffEmails()` hay que volver a pegar las reglas. Es la
-> única acción manual que queda en todo el flujo.
+> Sólo hace falta cuando cambian las reglas mismas. Agregar gente al equipo o
+> registrar ranchos **no** requiere republicar nada: eso se escribe desde el
+> panel.
 
 ---
 
@@ -163,7 +159,7 @@ js/
     model.js          estados de entrega, métodos de pago, respuestas rápidas
     icons.js          set de iconos SVG
   data/               una capa por colección de Firestore
-    session.js  clients.js  deliveries.js  invoices.js  chat.js  users.js
+    session.js  staff.js  clients.js  deliveries.js  invoices.js  chat.js
     store.js          escuchas compartidas del panel
   ui/                 shell, kit de componentes, hojas, chat
   screens/            una pantalla por archivo
@@ -202,12 +198,17 @@ vuelve la conexión.
 ## Modelo de datos
 
 ```
-users/{uid}
+staff/{correo}                   -- quién puede entrar al panel
+  email, name, addedByName, addedAt, lastSeenAt
+
+clientEmails/{correo}            -- a qué rancho pertenece ese correo
+  clientId, clientName
+
+config/bootstrap                 -- quién fue el primer administrador
+  ownerUid, ownerEmail, at       -- se crea una vez y nunca se modifica
+
+users/{uid}                      -- sólo datos personales; no otorga nada
   name, email, phone
-  role        'admin'    -- equipo; sólo un correo de staffEmails() lo obtiene
-            | 'client'   -- rancho; único rol que alguien puede darse solo
-            | 'pending'  -- cuenta existente sin acceso (revocada o sin habilitar)
-  clientId    string | null      -- sólo para clientes
 
 clients/{clientId}
   name, contactName, phone, email, address, notes
@@ -216,16 +217,7 @@ clients/{clientId}
   deliveryWindow, graceDays
   cycleAnchor  'YYYY-MM-DD'      -- inicio del ciclo quincenal
   status       'active' | 'paused' | 'inactive'
-  accessCode                     -- 6 caracteres, para vincular la app
-  accessCodeExpiresAt            -- vencimiento del código (30 días)
-  linkedUids   [uid]
-
-accessCodes/{CODIGO}
-  clientId, clientName           -- se lee de uno en uno, nunca se lista
-
-redemptions/{uid}
-  code, at                       -- el código que el encargado está canjeando;
-                                    inerte salvo que coincida con el vigente
+  email                          -- el acceso del rancho a su app
 
 deliveries/{clientId_YYYY-MM-DD}
   clientId, clientName, date, meals, window, driver, notes
@@ -252,11 +244,10 @@ conversations/{clientId}/messages/{id}
 
 Las reglas en `firestore.rules` descansan en tres cosas:
 
-- **El rol vive en el servidor.** El único registro que existe en todo el
-  proyecto es el de un rancho creando su perfil `client`, que no ve nada hasta
-  canjear un código. Nadie puede escribirse el rol `admin` salvo un correo
-  listado en `staffEmails()` dentro de las propias reglas, que es un archivo
-  que sólo cambia quien despliega el proyecto.
+- **La identidad es el correo, y las dos listas las escribe el panel.**
+  `staff/{correo}` decide quién entra al panel; `clientEmails/{correo}` decide a
+  qué rancho pertenece alguien. Ninguna de las dos la puede escribir quien no es
+  ya administrador, así que nadie se otorga nada a sí mismo.
 - **Un rancho sólo ve lo suyo.** Firestore evalúa las reglas contra cada
   documento que devolvería una consulta, así que una consulta sin
   `where('clientId', '==', <el suyo>)` simplemente falla. No es el código de la
@@ -267,27 +258,11 @@ Las reglas en `firestore.rules` descansan en tres cosas:
 
 ### Vincular una cuenta a un rancho
 
-Conectar un login a un rancho es una cadena de dos eslabones, y los dos se
-verifican en las reglas, no en la app:
-
-1. Para entrar en `clients/{id}.linkedUids` hay que haber dejado el código
-   **vigente** del rancho en `redemptions/{uid}`. La regla lo compara contra
-   `clients.accessCode`, así que **Generar código nuevo** invalida al instante
-   cualquier copia del anterior.
-2. Para apuntar `users/{uid}.clientId` a un rancho, ese rancho ya debe listarte
-   en `linkedUids`.
-
-Ningún eslabón se puede saltar. Conocer el id de un rancho **no alcanza** para
-llegar a sus entregas, facturas o mensajes: hace falta un código vivo.
-
-Los códigos caducan a los 30 días (`CODE_VALID_DAYS` en `js/data/clients.js`).
-La ficha del rancho muestra cuándo vence y avisa si ya venció; los ranchos
-registrados antes de esta función no caducan hasta que se les genere un código
-nuevo.
-
-Todo esto corre en el **plan gratuito**: no hay Cloud Functions ni ningún
-servicio extra. La verificación vive en las reglas, que pueden leer otros
-documentos durante su evaluación.
+No hay paso de vinculación. Cuando el manager registra el rancho con un correo,
+se escribe `clientEmails/{correo} -> clientId`, y las reglas consultan ese
+documento cuando esa persona entra. El rancho no reclama nada ni canjea nada:
+que la cocina escriba el correo **es** la autorización, y cambiarlo mueve el
+acceso con él.
 
 ### Probar las reglas
 
@@ -300,10 +275,10 @@ npm install      # sólo la primera vez
 npm test
 ```
 
-48 pruebas cubren lo que cada rol puede y no puede hacer: el intento de un
-extraño de colarse en un rancho ajeno, la rotación y el vencimiento de códigos,
-y que sólo un correo de `staffEmails()` pueda quedar como administrador. Ver
-`tests/rules/README.md`.
+53 pruebas cubren lo que cada quien puede y no puede hacer: que un rancho no
+alcance a otro, que no pueda tocar su propio precio ni sus facturas, que nadie
+se agregue solo a `staff` ni reapunte su correo a otro rancho, y que la primera
+cuenta se pueda reclamar exactamente una vez. Ver `tests/rules/README.md`.
 
 ---
 
