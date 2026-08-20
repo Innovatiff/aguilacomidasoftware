@@ -40,6 +40,7 @@ let phase = null;          // 'auth' | 'pending' | 'app'
 let routerStarted = false;
 let stopBadge = null;
 let provisionedFor = null; // uid we have already tried to set up
+let provisionError = null; // why the rules refused, if they did
 
 splash(host);
 startSession();
@@ -59,12 +60,37 @@ watchSession(() => {
   return enter('pending');
 });
 
-function provisionStaff() {
-  if (!session.user || provisionedFor === session.uid) return;
+/**
+ * Asks the rules to let this account run the panel.
+ *
+ * A refusal is shown rather than swallowed. "Nothing happened" is the hardest
+ * kind of failure to act on, and the two causes here — an address that is not
+ * on the list, and rules that were published without the list at all — look
+ * identical from the outside unless the app says which it hit.
+ */
+function provisionStaff({ retry = false } = {}) {
+  if (!session.user) return Promise.resolve();
+  if (!retry && provisionedFor === session.uid) return Promise.resolve();
+
   provisionedFor = session.uid;
-  claimStaffProfile(session.user).catch(() => {
-    // Refused: this address is not on the staff list. Nothing to do here —
-    // renderNoAccess already says how access is granted.
+  provisionError = null;
+
+  return claimStaffProfile(session.user).catch((error) => {
+    provisionError = error;
+    if (phase === 'pending') showNoAccess();
+  });
+}
+
+function showNoAccess() {
+  host.replaceChildren();
+  renderNoAccess(host, {
+    // The profile name, not `displayName` — that falls back to the email
+    // address, which reads badly in a greeting.
+    name: session.profile?.name || '',
+    email: session.user?.email || '',
+    error: provisionError,
+    onRetry: () => provisionStaff({ retry: true }),
+    onSignOut: () => signOutNow(),
   });
 }
 
@@ -86,14 +112,7 @@ function enter(next) {
   }
 
   if (next === 'pending') {
-    host.replaceChildren();
-    renderNoAccess(host, {
-      // The profile name, not `displayName` — that falls back to the email
-      // address, which reads badly in a greeting.
-      name: session.profile?.name || '',
-      email: session.user?.email || '',
-      onSignOut: () => signOutNow(),
-    });
+    showNoAccess();
     return;
   }
 

@@ -149,7 +149,9 @@ function passwordInput() {
  * The profile is watched live, so the moment an administrator grants access
  * this screen turns into the panel without anyone reloading anything.
  */
-export function renderNoAccess(host, { name, email, onSignOut }) {
+export function renderNoAccess(host, { name, email, error, onRetry, onSignOut }) {
+  const refused = error?.code === 'permission-denied';
+
   mount(host, h('div.auth',
     h('div.auth__hero',
       h('div.auth__mark',
@@ -170,6 +172,16 @@ export function renderNoAccess(host, { name, email, onSignOut }) {
             h('div.w-650', name || 'Tu cuenta'),
             h('div.t-sm.c-soft', email || '')))),
 
+      // Say exactly which wall we hit. "Nothing happened" is the hardest
+      // failure to act on, and the causes need different fixes.
+      refused
+        ? alert('Las reglas publicadas en Firestore no incluyen este correo en '
+          + 'staffEmails(). Vuelve a pegar el contenido completo de '
+          + 'firestore.rules en la consola y publícalas.', 'bad')
+        : error
+          ? alert(`No se pudo configurar la cuenta: ${error.message || error.code || error}`, 'bad')
+          : null,
+
       h('div.card',
         h('div.stack.stack-3',
           h('div.row',
@@ -177,8 +189,9 @@ export function renderNoAccess(host, { name, email, onSignOut }) {
             h('div.w-650', 'Cómo se habilita')),
           h('p.t-sm.c-soft', { style: { lineHeight: '1.5' } },
             'Si ya hay un administrador, te da acceso desde Ajustes → Cuentas '
-            + 'sin acceso. Si todavía no hay ninguno, hay que agregar este correo '
-            + 'a la lista del equipo en las reglas del proyecto y publicarlas:'),
+            + 'sin acceso. Si todavía no hay ninguno, este correo tiene que estar '
+            + 'en la lista del equipo, dentro de las reglas publicadas en '
+            + 'Firestore → Reglas:'),
           h('div', {
             style: {
               padding: '10px 12px', borderRadius: 'var(--r-md)',
@@ -186,8 +199,14 @@ export function renderNoAccess(host, { name, email, onSignOut }) {
               fontFamily: 'var(--font-num)', fontSize: 'var(--fs-xs)',
               lineHeight: '1.6', overflowX: 'auto', whiteSpace: 'pre',
             },
-          }, `firestore.rules → staffEmails()\n  '${email || 'tu@correo.com'}'\n\nfirebase deploy --only firestore:rules`),
-          h('p.t-xs.c-faint', 'Después vuelve a entrar: el panel se configura solo.'))),
+          }, `function staffEmails() {\n  return [\n    '${email || 'tu@correo.com'}',\n  ];\n}`),
+          h('p.t-xs.c-faint',
+            'Pega el archivo firestore.rules completo en la consola y publícalo. '
+            + 'Después toca «Reintentar».'))),
+
+      onRetry
+        ? button('Reintentar', { variant: 'primary', block: true, icon: 'refresh', onClick: onRetry })
+        : null,
 
       alert('Esta pantalla se actualiza sola en cuanto te habiliten. '
         + 'Puedes cerrar la aplicación mientras tanto.', 'info'),
