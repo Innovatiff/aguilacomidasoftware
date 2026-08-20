@@ -163,10 +163,15 @@ clients/{clientId}
   cycleAnchor  'YYYY-MM-DD'      -- inicio del ciclo quincenal
   status       'active' | 'paused' | 'inactive'
   accessCode                     -- 6 caracteres, para vincular la app
+  accessCodeExpiresAt            -- vencimiento del código (30 días)
   linkedUids   [uid]
 
 accessCodes/{CODIGO}
   clientId, clientName           -- se lee de uno en uno, nunca se lista
+
+redemptions/{uid}
+  code, at                       -- el código que el encargado está canjeando;
+                                    inerte salvo que coincida con el vigente
 
 deliveries/{clientId_YYYY-MM-DD}
   clientId, clientName, date, meals, window, driver, notes
@@ -191,23 +196,57 @@ conversations/{clientId}/messages/{id}
 
 ## Seguridad
 
-Las reglas en `firestore.rules` parten de dos hechos:
+Las reglas en `firestore.rules` descansan en tres cosas:
 
 - **El rol vive en el servidor.** Registrarse sólo permite crear un perfil
   `client` o `pending`. Subir a `admin` únicamente lo puede hacer alguien que ya
   es `admin`.
 - **Un rancho sólo ve lo suyo.** Firestore evalúa las reglas contra cada
   documento que devolvería una consulta, así que una consulta sin
-  `where('clientId', '==', <el suyo>)` simplemente falla.
+  `where('clientId', '==', <el suyo>)` simplemente falla. No es el código de la
+  app el que limita al rancho: es la regla.
+- **El dinero es de un solo sentido.** Los ranchos leen `invoices` y
+  `deliveries`; sólo la cocina escribe. Un mensaje enviado no se edita ni se
+  borra, ni siquiera por un administrador.
 
-**Sobre los códigos de acceso.** Para vincular su app, el encargado del rancho
-canjea un código de 6 caracteres; con él obtiene el id del rancho y se agrega a
-`linkedUids`. La regla permite ese único cambio y nada más, pero se apoya en que
-el id del documento no es adivinable: es la credencial. Es una compensación
-consciente para no depender de Cloud Functions (plan de pago). Si más adelante
-quieres cerrarlo del todo, mueve el canje a una Cloud Function y quita ese
-permiso de escritura de las reglas. Mientras tanto, **Generar código nuevo** en
-la ficha del rancho invalida el código anterior cuando haga falta.
+### Vincular una cuenta a un rancho
+
+Conectar un login a un rancho es una cadena de dos eslabones, y los dos se
+verifican en las reglas, no en la app:
+
+1. Para entrar en `clients/{id}.linkedUids` hay que haber dejado el código
+   **vigente** del rancho en `redemptions/{uid}`. La regla lo compara contra
+   `clients.accessCode`, así que **Generar código nuevo** invalida al instante
+   cualquier copia del anterior.
+2. Para apuntar `users/{uid}.clientId` a un rancho, ese rancho ya debe listarte
+   en `linkedUids`.
+
+Ningún eslabón se puede saltar. Conocer el id de un rancho **no alcanza** para
+llegar a sus entregas, facturas o mensajes: hace falta un código vivo.
+
+Los códigos caducan a los 30 días (`CODE_VALID_DAYS` en `js/data/clients.js`).
+La ficha del rancho muestra cuándo vence y avisa si ya venció; los ranchos
+registrados antes de esta función no caducan hasta que se les genere un código
+nuevo.
+
+Todo esto corre en el **plan gratuito**: no hay Cloud Functions ni ningún
+servicio extra. La verificación vive en las reglas, que pueden leer otros
+documentos durante su evaluación.
+
+### Probar las reglas
+
+Una regla puede leerse bien y estar mal, así que están probadas contra el
+emulador:
+
+```sh
+cd tests/rules
+npm install      # sólo la primera vez
+npm test
+```
+
+33 pruebas cubren lo que cada rol puede y no puede hacer, incluido el intento de
+un extraño de colarse en un rancho ajeno, la rotación de códigos y el
+vencimiento. Ver `tests/rules/README.md`.
 
 ---
 

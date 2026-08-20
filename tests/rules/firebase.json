@@ -1,0 +1,7 @@
+{
+  "emulators": {
+    "firestore": { "port": 8790 },
+    "ui": { "enabled": false }
+  },
+  "firestore": { "rules": "../../firestore.rules" }
+}

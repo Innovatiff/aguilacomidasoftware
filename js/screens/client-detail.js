@@ -24,11 +24,12 @@ import {
   STATUS_LABEL, STATUS_TONE, invoiceId,
 } from '../lib/billing.js';
 import {
-  formatRange, relativeDay, formatDayLong, today, humanDelta, formatDay, weekdayName, capitalize,
+  formatRange, relativeDay, formatDayLong, today, humanDelta, formatDay,
+  weekdayName, capitalize, daysBetween, dayKey,
 } from '../lib/dates.js';
 import { money, moneyFull, plural, phone as fmtPhone, telHref, number } from '../lib/format.js';
 import { clientStatusMeta, deliveryMeta } from '../lib/model.js';
-import { dbMessage } from '../firebase.js';
+import { dbMessage, toDate } from '../firebase.js';
 
 export function renderClientDetail(context) {
   const clientId = context.params.id;
@@ -227,6 +228,8 @@ export function renderClientDetail(context) {
             h('div', { style: { marginTop: '6px' } }, codeChip(model.accessCode || '—'))),
           button('Copiar', { variant: 'ghost', size: 'sm', icon: 'copy', onClick: () => copy(model.accessCode) })),
 
+        codeValidity(model),
+
         linked
           ? alert(`${linked} ${linked === 1 ? 'cuenta vinculada' : 'cuentas vinculadas'} a este rancho.`, 'ok')
           : alert('Nadie ha activado la app todavía. Comparte el código con el encargado.', 'info'),
@@ -337,6 +340,28 @@ export function renderClientDetail(context) {
 
   draw();
   return () => stops.forEach((stop) => stop?.());
+}
+
+/**
+ * How long the access code stays usable.
+ *
+ * An expired code fails at redemption with a permission error the farm manager
+ * cannot diagnose, so the state has to be visible on this screen — it is the
+ * only place anyone can fix it.
+ */
+function codeValidity(model) {
+  const expires = toDate(model.accessCodeExpiresAt);
+  if (!expires) return null;
+
+  const left = daysBetween(today(), dayKey(expires));
+  if (left < 0) {
+    return alert(`El código venció el ${formatDay(dayKey(expires))}. Genera uno nuevo para que puedan conectarse.`, 'bad');
+  }
+  return alert(
+    left === 0
+      ? 'El código vence hoy.'
+      : `El código se puede usar ${humanDelta(left)} (hasta el ${formatDay(dayKey(expires))}).`,
+    left <= 3 ? 'warn' : 'info');
 }
 
 /* --- Small pieces ----------------------------------------------------------- */

@@ -15,6 +15,18 @@ rules_version = '2';
  * a query would return, so an unscoped `list` on deliveries or invoices simply
  * fails. That is what confines a farm to its own rows — the query must carry
  * `where('clientId', '==', <their own id>)` to be allowed at all.
+ *
+ * Linking a login to a farm is a two-link chain, and both links are checked
+ * here rather than in the app:
+ *
+ *   1. To join `clients/{id}.linkedUids` you must have staged the farm's
+ *      *current* access code at `redemptions/{your uid}`. Rotating the code
+ *      breaks every staged copy of the old one.
+ *   2. To point `users/{uid}.clientId` at a farm, that farm must already list
+ *      you in `linkedUids`.
+ *
+ * Neither link can be skipped, so knowing a farm's document id is not enough
+ * to reach its deliveries, invoices or messages — you need a live code.
  */
 
 service cloud.firestore {
@@ -53,6 +65,28 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).affectedKeys();
     }
 
+    /** The access code this uid has staged for redemption, or '' if none. */
+    function stagedCode(uid) {
+      return exists(/databases/$(database)/documents/redemptions/$(uid))
+        ? get(/databases/$(database)/documents/redemptions/$(uid)).data.code
+        : '';
+    }
+
+    /** True while the farm's access code is still within its validity window. */
+    function codeUnexpired() {
+      return !('accessCodeExpiresAt' in resource.data)
+        || resource.data.accessCodeExpiresAt == null
+        || request.time < resource.data.accessCodeExpiresAt;
+    }
+
+    /** True when `clientId` names a farm that already lists this uid. */
+    function farmListsMe(clientId) {
+      return clientId is string
+        && exists(/databases/$(database)/documents/clients/$(clientId))
+        && request.auth.uid in
+             get(/databases/$(database)/documents/clients/$(clientId)).data.linkedUids;
+    }
+
     /* --- users ------------------------------------------------------------ */
 
     match /users/{uid} {
@@ -67,12 +101,17 @@ service cloud.firestore {
         && request.resource.data.role in ['client', 'pending']
         && request.resource.data.clientId == null;
 
-      // Updating your own profile must not change your role. Linking to a farm
-      // is allowed — the farm document write is what actually gates it.
+      // Updating your own profile must not change your role, and `clientId` is
+      // not a free-text field: pointing it at a farm is what grants sight of
+      // that farm's deliveries, invoices and messages, so the farm has to have
+      // accepted you first (which needs its live access code — see below).
       allow update: if isAdmin()
         || (signedIn()
             && request.auth.uid == uid
-            && request.resource.data.role == resource.data.role);
+            && request.resource.data.role == resource.data.role
+            && (request.resource.data.clientId == resource.data.clientId
+                || request.resource.data.clientId == null
+                || farmListsMe(request.resource.data.clientId)));
 
       allow delete: if isAdmin();
     }
@@ -88,15 +127,18 @@ service cloud.firestore {
       allow create, delete: if isAdmin();
 
       // Admins edit freely. A farm manager redeeming an access code may do
-      // exactly one thing: add their own uid to `linkedUids`. Reaching this
-      // write at all requires the farm's document id, which is only obtainable
-      // by redeeming a valid code (see accessCodes below).
+      // exactly one thing — add their own uid to `linkedUids` — and only while
+      // holding the farm's current code, staged at `redemptions/{uid}`. The
+      // code is compared against `clients.accessCode` itself, so "generar
+      // código nuevo" invalidates every staged copy of the old one instantly.
       allow update: if isAdmin()
         || (signedIn()
             && changed().hasOnly(['linkedUids'])
             && request.resource.data.linkedUids.hasAll(resource.data.get('linkedUids', []))
             && request.resource.data.linkedUids.hasOnly(
-                 resource.data.get('linkedUids', []).concat([request.auth.uid])));
+                 resource.data.get('linkedUids', []).concat([request.auth.uid]))
+            && stagedCode(request.auth.uid) == resource.data.accessCode
+            && codeUnexpired());
     }
 
     /* --- accessCodes ------------------------------------------------------- */
@@ -108,6 +150,24 @@ service cloud.firestore {
       allow get: if signedIn();
       allow list: if isAdmin();
       allow write: if isAdmin();
+    }
+
+    /* --- redemptions -------------------------------------------------------- */
+
+    // Where a farm manager stages the code they were handed. Writing one is
+    // free — it is inert unless it matches a real farm's current code, and the
+    // `clients` rule above is what actually checks it.
+    match /redemptions/{uid} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == uid);
+
+      allow create, update: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['code', 'at'])
+        && request.resource.data.code is string
+        && request.resource.data.code.size() >= 4
+        && request.resource.data.code.size() <= 16;
+
+      allow delete: if isAdmin() || (signedIn() && request.auth.uid == uid);
     }
 
     /* --- deliveries -------------------------------------------------------- */

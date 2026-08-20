@@ -10,7 +10,7 @@
 import {
   db, doc, collection, getDoc, getDocs, updateDoc,
   onSnapshot, query, where, orderBy, serverTimestamp, arrayUnion, arrayRemove,
-  writeBatch, docData, listData,
+  writeBatch, docData, listData, Timestamp,
 } from '../firebase.js';
 import { today } from '../lib/dates.js';
 import { DEFAULT_DELIVERY_DAYS, DEFAULT_GRACE_DAYS } from '../lib/billing.js';
@@ -19,6 +19,19 @@ const clientsRef = () => collection(db, 'clients');
 
 /** Ambiguous characters (0/O, 1/I) are left out — codes get read over the phone. */
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+/**
+ * How long a fresh access code stays redeemable.
+ *
+ * Long enough that a farm manager can set the app up next week without a
+ * support call, short enough that a code written on a whiteboard two years ago
+ * is not still a way in. The security rules enforce it; the kitchen can always
+ * mint a new one in a tap.
+ */
+export const CODE_VALID_DAYS = 30;
+
+const codeExpiry = () =>
+  Timestamp.fromDate(new Date(Date.now() + CODE_VALID_DAYS * 86400000));
 
 export function generateAccessCode(length = 6) {
   const bytes = crypto.getRandomValues(new Uint8Array(length));
@@ -79,6 +92,7 @@ export async function createClient(data, author) {
     ...emptyClient(),
     ...sanitize(data),
     accessCode: code,
+    accessCodeExpiresAt: codeExpiry(),
     linkedUids: [],
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -115,7 +129,11 @@ export async function rotateAccessCode(clientId, previousCode) {
     createdAt: serverTimestamp(),
   });
   if (previousCode) batch.delete(doc(db, 'accessCodes', previousCode));
-  batch.update(doc(db, 'clients', clientId), { accessCode: code, updatedAt: serverTimestamp() });
+  batch.update(doc(db, 'clients', clientId), {
+    accessCode: code,
+    accessCodeExpiresAt: codeExpiry(),
+    updatedAt: serverTimestamp(),
+  });
 
   await batch.commit();
   return code;
