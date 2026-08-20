@@ -186,6 +186,36 @@ await check('an already-joined farm can be pointed at by the profile',
 await check('a farm that never accepted you cannot be pointed at',
   updateDoc(doc(u4, 'users/u4'), { clientId: 'cD' }), false);
 
+console.log('\n--- Staff accounts are provisioned, never self-served ---------');
+
+const fresh = env.authenticatedContext('brandnew').firestore();
+
+await check('a new account cannot write itself the admin role',
+  setDoc(doc(fresh, 'users/brandnew'), { name: 'X', role: 'admin', clientId: null }), false);
+
+await check('a new account cannot park itself as pending either',
+  setDoc(doc(fresh, 'users/brandnew'), { name: 'X', role: 'pending', clientId: null }), false);
+
+await check('a farm can still create its own client profile',
+  setDoc(doc(fresh, 'users/brandnew'), { name: 'X', role: 'client', clientId: null }), true);
+
+await check('a client profile cannot arrive pre-linked to a farm',
+  setDoc(doc(env.authenticatedContext('brandnew2').firestore(), 'users/brandnew2'),
+    { name: 'Y', role: 'client', clientId: 'cA' }), false);
+
+await check('a client cannot promote itself later',
+  updateDoc(doc(fresh, 'users/brandnew'), { role: 'admin' }), false);
+
+await env.withSecurityRulesDisabled(async (ctx) => {
+  await setDoc(doc(ctx.firestore(), 'users/revoked'), { name: 'Ex', role: 'pending', clientId: null });
+});
+
+await check('an admin enables an existing account',
+  updateDoc(doc(admin, 'users/revoked'), { role: 'admin' }), true);
+
+await check('an admin revokes access again',
+  updateDoc(doc(admin, 'users/revoked'), { role: 'pending' }), true);
+
 await env.cleanup();
 
 const failed = results.filter((r) => !r.passed);

@@ -13,7 +13,7 @@ import { configureShell, setTabBadge, splash, notePath, screen } from './ui/shel
 import { register, setNotFound, start, go, onNavigate } from './lib/router.js';
 import { startSession, watchSession, session, signOutNow } from './data/session.js';
 import { startStore, stopStore, subscribe, unreadCount } from './data/store.js';
-import { renderAuth, renderPending } from './screens/login.js';
+import { renderAuth, renderNoAccess } from './screens/login.js';
 import { renderDashboard } from './screens/dashboard.js';
 import { renderRoute } from './screens/route.js';
 import { renderClients } from './screens/clients.js';
@@ -71,8 +71,11 @@ function enter(next) {
 
   if (next === 'pending') {
     host.replaceChildren();
-    renderPending(host, {
-      name: session.displayName,
+    renderNoAccess(host, {
+      // The profile name, not `displayName` — that falls back to the email
+      // address, which reads badly in a greeting.
+      name: session.profile?.name || '',
+      email: session.user?.email || '',
       onSignOut: () => signOutNow(),
     });
     return;

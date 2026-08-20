@@ -8,8 +8,11 @@ rules_version = '2';
  *   admin  — kitchen staff. Sees every farm, delivery, invoice and thread.
  *   client — a farm manager. Sees only the farm their login is linked to.
  *
- * The role lives on `users/{uid}` and can only be raised to `admin` by someone
- * who is already an admin, so signing up never grants access to anything.
+ * The role lives on `users/{uid}`. Nothing a client can do reaches `admin`:
+ * the only self-service sign-up in the whole project is a farm creating a
+ * `client` profile, which sees nothing until it redeems an access code.
+ * Administrators are provisioned deliberately — in the Firebase console, or by
+ * an existing administrator from Settings — and never by signing up.
  *
  * Note on list queries: Firestore evaluates these rules against every document
  * a query would return, so an unscoped `list` on deliveries or invoices simply
@@ -93,12 +96,13 @@ service cloud.firestore {
       allow get: if isAdmin() || (signedIn() && request.auth.uid == uid);
       allow list: if isAdmin();
 
-      // Sign-up writes its own profile. A new account may only claim a role
-      // that grants nothing: 'client' (still unlinked) or 'pending' (staff
-      // waiting for approval). 'admin' is unreachable from here by design.
+      // The only self-service sign-up is a farm manager creating their own
+      // profile, and it grants nothing until an access code is redeemed.
+      // No caller can write themselves any other role — staff accounts are
+      // provisioned from the console or promoted by an existing admin.
       allow create: if signedIn()
         && request.auth.uid == uid
-        && request.resource.data.role in ['client', 'pending']
+        && request.resource.data.role == 'client'
         && request.resource.data.clientId == null;
 
       // Updating your own profile must not change your role, and `clientId` is

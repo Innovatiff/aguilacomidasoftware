@@ -39,13 +39,17 @@ En la [consola de Firebase](https://console.firebase.google.com/project/aguilaco
    firebase deploy --only firestore:rules,firestore:indexes
    ```
 
-### 2. Crear el primer administrador
+### 2. Crear las cuentas del equipo
 
-El registro dentro de la app nunca otorga acceso: crea una cuenta `pending` que
-no puede leer nada. El primer administrador se crea una sola vez a mano.
+**El panel no tiene registro.** Un administrador ve todos los ranchos, sus
+datos de contacto y todos los pagos, así que esas cuentas se crean a mano desde
+la consola. Nadie puede otorgarse ese rol llenando un formulario, y las reglas
+lo impiden aunque alguien lo intente desde fuera de la app.
+
+Para cada persona del equipo, dos pasos en la consola:
 
 1. **Authentication → Users → Add user**: correo y contraseña. Copia el **UID**.
-2. **Firestore → Iniciar colección** `users`, con el **UID** como id del documento:
+2. **Firestore → colección `users`**, documento nuevo con ese **UID** como id:
 
    | Campo | Tipo | Valor |
    |---|---|---|
@@ -54,10 +58,18 @@ no puede leer nada. El primer administrador se crea una sola vez a mano.
    | `role` | string | `admin` |
    | `clientId` | null | *(vacío)* |
 
-3. Entra a la app con ese correo.
+3. Esa persona ya puede entrar con su correo y contraseña.
 
-A partir de ahí, quien más necesite acceso usa **Solicitar acceso** en la
-pantalla de entrada y tú lo apruebas en **Ajustes → Solicitudes de acceso**.
+> La primera vez tendrás que crear la colección `users` (**Iniciar colección**).
+> A partir de la segunda cuenta sólo agregas un documento.
+
+Si alguien entra con una cuenta que todavía no tiene su documento en `users`,
+verá **Sin acceso al panel** en lugar de un error, y la pantalla se convierte en
+el panel sola en cuanto la habilites.
+
+**Quitar y devolver acceso** sí se hace dentro de la app: **Ajustes → Equipo →
+Quitar**. La cuenta baja a `pending` (no puede leer nada) y aparece en **Ajustes
+→ Cuentas sin acceso**, desde donde la vuelves a habilitar sin tocar la consola.
 
 ### 3. Correr en local
 
@@ -152,7 +164,9 @@ vuelve la conexión.
 ```
 users/{uid}
   name, email, phone
-  role        'admin' | 'client' | 'pending'
+  role        'admin'    -- equipo de la cocina; se crea en la consola
+            | 'client'   -- rancho; único rol que alguien puede darse solo
+            | 'pending'  -- cuenta existente sin acceso (revocada o sin habilitar)
   clientId    string | null      -- sólo para clientes
 
 clients/{clientId}
@@ -198,9 +212,11 @@ conversations/{clientId}/messages/{id}
 
 Las reglas en `firestore.rules` descansan en tres cosas:
 
-- **El rol vive en el servidor.** Registrarse sólo permite crear un perfil
-  `client` o `pending`. Subir a `admin` únicamente lo puede hacer alguien que ya
-  es `admin`.
+- **El rol vive en el servidor.** El único registro que existe en todo el
+  proyecto es el de un rancho creando su perfil `client`, que no ve nada hasta
+  canjear un código. Ningún usuario puede escribirse a sí mismo otro rol: las
+  cuentas de administrador se crean en la consola o las habilita un
+  administrador que ya lo es.
 - **Un rancho sólo ve lo suyo.** Firestore evalúa las reglas contra cada
   documento que devolvería una consulta, así que una consulta sin
   `where('clientId', '==', <el suyo>)` simplemente falla. No es el código de la
@@ -244,9 +260,10 @@ npm install      # sólo la primera vez
 npm test
 ```
 
-33 pruebas cubren lo que cada rol puede y no puede hacer, incluido el intento de
-un extraño de colarse en un rancho ajeno, la rotación de códigos y el
-vencimiento. Ver `tests/rules/README.md`.
+40 pruebas cubren lo que cada rol puede y no puede hacer: el intento de un
+extraño de colarse en un rancho ajeno, la rotación y el vencimiento de códigos,
+y que nadie pueda otorgarse el rol de administrador. Ver
+`tests/rules/README.md`.
 
 ---
 

@@ -1,20 +1,26 @@
 /**
  * Staff accounts.
  *
- * Sign-up creates a `pending` profile that can read nothing. An existing admin
- * promotes it here, which is the only path to the `admin` role — deliberately a
- * human decision rather than a shared code, because an admin sees every farm's
- * contact details and every payment.
+ * There is no sign-up for staff. An administrator account is created in the
+ * Firebase console — an Auth user, plus a `users/{uid}` document with
+ * `role: 'admin'` — because an admin sees every farm's contact details and
+ * every payment, and that should be a deliberate act by whoever runs the
+ * kitchen, not something an app flow can grant.
+ *
+ * What this module covers is the day-to-day afterwards: seeing who has access,
+ * taking it away, and giving it back. A revoked account drops to `pending`,
+ * which can read nothing but is still a real account, so access can be
+ * restored without touching the console again.
  */
 
 import {
-  db, doc, collection, updateDoc, deleteDoc, onSnapshot, query, where, orderBy,
-  serverTimestamp, listData,
+  db, doc, collection, updateDoc, deleteDoc, onSnapshot,
+  query, where, orderBy, serverTimestamp, listData,
 } from '../firebase.js';
 
 const usersRef = () => collection(db, 'users');
 
-/** Accounts waiting for approval. */
+/** Accounts that exist but cannot get in — revoked, or not set up yet. */
 export function watchPending(onData, onError) {
   return onSnapshot(
     query(usersRef(), where('role', '==', 'pending')),
@@ -32,6 +38,7 @@ export function watchStaff(onData, onError) {
   );
 }
 
+/** Grants (or restores) full access to an existing account. */
 export async function approveStaff(uid, author) {
   await updateDoc(doc(db, 'users', uid), {
     role: 'admin',

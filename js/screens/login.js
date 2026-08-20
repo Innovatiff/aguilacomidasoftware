@@ -1,61 +1,48 @@
 /**
  * Staff sign-in.
  *
- * The first administrator is created once from the Firebase console (see
- * README). After that, new staff request access here: signing up creates a
- * `pending` profile with no read access to anything, and an existing admin
- * promotes them from Settings. That keeps "who can see every client and every
- * payment" a decision a human makes, not a shared code someone can pass on.
+ * There is no sign-up here, on purpose. An administrator sees every farm's
+ * contact details, every delivery and every payment, so those accounts are
+ * created deliberately in the Firebase console — an Auth user plus a
+ * `users/{uid}` document with `role: 'admin'` — and never by anyone filling in
+ * a form. The security rules enforce the same thing: no caller can write
+ * themselves that role.
+ *
+ * See the README for the three-step setup.
  */
 
 import { h, mount } from '../lib/dom.js';
 import { icon } from '../lib/icons.js';
-import { button, field, input, alert } from '../ui/kit.js';
+import { button, field, input, alert, avatar } from '../ui/kit.js';
 import { toastOk } from '../ui/overlay.js';
-import { signIn, signUp, resetPassword } from '../data/session.js';
+import { signIn, resetPassword } from '../data/session.js';
 import { authMessage } from '../firebase.js';
 
 export function renderAuth(host) {
-  let mode = 'signin';   // 'signin' | 'request' | 'reset'
+  let mode = 'signin';   // 'signin' | 'reset'
   let busy = false;
   let error = '';
   let notice = '';
-  /** Set once auth succeeds: the session listener replaces this whole screen,
-   *  and a late redraw here would paint the login form back over the app. */
+  /** Once auth succeeds the session listener replaces this whole screen, and a
+   *  late redraw here would paint the form back over the app. */
   let handedOff = false;
 
   const draw = () => { if (!handedOff) mount(host, view()); };
 
   function set(next) {
-    mode = next;
-    error = '';
-    notice = '';
-    draw();
+    mode = next; error = ''; notice = ''; draw();
   }
 
   async function submit(event) {
     event.preventDefault();
     if (busy) return;
 
-    const form = event.target;
-    const values = Object.fromEntries(new FormData(form).entries());
+    const values = Object.fromEntries(new FormData(event.target).entries());
     busy = true; error = ''; draw();
 
     try {
       if (mode === 'signin') {
         await signIn(values.email, values.password);
-        handedOff = true;
-        return;
-      }
-      if (mode === 'request') {
-        if (values.password.length < 6) throw { code: 'auth/weak-password' };
-        await signUp({
-          email: values.email,
-          password: values.password,
-          name: values.name,
-          phone: values.phone,
-          role: 'pending',
-        });
         handedOff = true;
         return;
       }
@@ -72,11 +59,17 @@ export function renderAuth(host) {
   }
 
   function view() {
-    const copy = {
-      signin:  { lede: 'Panel de la cocina', sub: 'Clientes, entregas y cobros del día en un solo lugar.', cta: 'Entrar' },
-      request: { lede: 'Solicitar acceso', sub: 'Un administrador aprobará tu cuenta antes de que puedas entrar.', cta: 'Enviar solicitud' },
-      reset:   { lede: 'Recuperar acceso', sub: 'Te enviaremos un enlace para crear una contraseña nueva.', cta: 'Enviar enlace' },
-    }[mode];
+    const copy = mode === 'signin'
+      ? {
+          lede: 'Panel de la cocina',
+          sub: 'Clientes, entregas y cobros del día en un solo lugar.',
+          cta: 'Entrar',
+        }
+      : {
+          lede: 'Recuperar acceso',
+          sub: 'Te enviaremos un enlace para crear una contraseña nueva.',
+          cta: 'Enviar enlace',
+        };
 
     return h('div.auth',
       h('div.auth__hero',
@@ -93,11 +86,6 @@ export function renderAuth(host) {
           error ? alert(error, 'bad') : null,
           notice ? alert(notice, 'ok') : null,
 
-          mode === 'request' ? field({
-            label: 'Nombre completo',
-            control: input({ name: 'name', required: true, autocomplete: 'name', placeholder: 'María López' }),
-          }) : null,
-
           field({
             label: 'Correo',
             control: input({
@@ -106,16 +94,9 @@ export function renderAuth(host) {
             }),
           }),
 
-          mode === 'request' ? field({
-            label: 'Teléfono',
-            hint: 'Opcional, para que la cocina pueda contactarte.',
-            control: input({ name: 'phone', type: 'tel', autocomplete: 'tel', placeholder: '(604) 555-0143' }),
-          }) : null,
-
-          mode !== 'reset' ? field({
+          mode === 'signin' ? field({
             label: 'Contraseña',
-            hint: mode === 'request' ? 'Mínimo 6 caracteres.' : null,
-            control: passwordInput(mode),
+            control: passwordInput(),
           }) : null,
 
           h('button.btn.btn--primary.btn--block.btn--lg', { type: 'submit', disabled: busy },
@@ -125,26 +106,24 @@ export function renderAuth(host) {
           mode === 'signin'
             ? h('button.btn.btn--quiet.btn--block', { type: 'button', onclick: () => set('reset') },
                 'Olvidé mi contraseña')
-            : null),
+            : h('button.btn.btn--quiet.btn--block', { type: 'button', onclick: () => set('signin') },
+                'Volver')),
 
-        h('div.auth__switch',
-          mode === 'signin'
-            ? [h('span', '¿Eres nuevo en el equipo? '),
-               h('button', { type: 'button', onclick: () => set('request') }, 'Solicitar acceso')]
-            : [h('span', '¿Ya tienes cuenta? '),
-               h('button', { type: 'button', onclick: () => set('signin') }, 'Iniciar sesión')])));
+        h('p.t-xs.c-faint.center', { style: { marginTop: '20px', lineHeight: '1.5' } },
+          'Las cuentas del equipo las crea el administrador. '
+          + 'Si necesitas acceso, pídeselo.')));
   }
 
   draw();
 }
 
 /** Password field with a show/hide toggle — typing blind on a phone is worse. */
-function passwordInput(mode) {
+function passwordInput() {
   const box = input({
     name: 'password', type: 'password', required: true, minlength: 6,
-    autocomplete: mode === 'request' ? 'new-password' : 'current-password',
-    placeholder: '••••••••',
+    autocomplete: 'current-password', placeholder: '••••••••',
   });
+
   const toggle = h('button.input-group__icon', {
     type: 'button', 'aria-label': 'Mostrar contraseña',
     style: { left: 'auto', right: '12px', pointerEvents: 'auto', background: 'none' },
@@ -162,8 +141,15 @@ function passwordInput(mode) {
   return wrap;
 }
 
-/** Shown to a signed-in account that an admin has not approved yet. */
-export function renderPending(host, { name, onSignOut }) {
+/**
+ * Shown when the credentials were right but the account is not an
+ * administrator — its `users/{uid}` document is missing, carries another role,
+ * or its access was revoked.
+ *
+ * The profile is watched live, so the moment an administrator grants access
+ * this screen turns into the panel without anyone reloading anything.
+ */
+export function renderNoAccess(host, { name, email, onSignOut }) {
   mount(host, h('div.auth',
     h('div.auth__hero',
       h('div.auth__mark',
@@ -171,9 +157,31 @@ export function renderPending(host, { name, onSignOut }) {
         h('div',
           h('div.auth__name', 'El Águila Cocina'),
           h('div.auth__tag', 'Administración'))),
-      h('h1.auth__lede', 'Cuenta en revisión'),
-      h('p.auth__sub', `Gracias ${name || ''}. Un administrador debe aprobar tu acceso antes de que puedas ver la información de los clientes.`)),
+      h('h1.auth__lede', 'Sin acceso al panel'),
+      h('p.auth__sub',
+        'Entraste correctamente, pero esta cuenta todavía no está habilitada '
+        + 'para ver la información de los clientes.')),
+
     h('div.auth__body.stack.stack-4',
-      alert('Te avisaremos en cuanto tu cuenta esté activa. Puedes cerrar la aplicación mientras tanto.', 'info'),
+      h('div.card',
+        h('div.row',
+          avatar(name || email || '?'),
+          h('div.grow',
+            h('div.w-650', name || 'Tu cuenta'),
+            h('div.t-sm.c-soft', email || '')))),
+
+      h('div.card',
+        h('div.stack.stack-3',
+          h('div.row',
+            h('span', { style: { color: 'var(--brand-500)' } }, icon('shield')),
+            h('div.w-650', 'Cómo se habilita')),
+          h('p.t-sm.c-soft', { style: { lineHeight: '1.5' } },
+            'Un administrador te da acceso desde Ajustes → Cuentas sin acceso. '
+            + 'Si aún no hay ningún administrador, la cuenta se crea desde la '
+            + 'consola de Firebase (ver el README del proyecto).'))),
+
+      alert('Esta pantalla se actualiza sola en cuanto te habiliten. '
+        + 'Puedes cerrar la aplicación mientras tanto.', 'info'),
+
       button('Cerrar sesión', { variant: 'ghost', block: true, icon: 'logout', onClick: onSignOut }))));
 }

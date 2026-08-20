@@ -25,7 +25,9 @@ distinto de cero si alguna regla no se comporta como debe.
   ni ranchos, ni leer los de otro.
 - **Un rancho no puede escribir dinero**: ni saldar su factura, ni cambiar su
   precio por comida, ni marcar su propia entrega como entregada.
-- **Nadie se auto-promueve** a administrador.
+- **Nadie se auto-promueve** a administrador: el único perfil que alguien puede
+  crearse es `client`, y no puede llegar pre-vinculado a un rancho.
+- **El administrador habilita y revoca** cuentas existentes desde la app.
 - **Los mensajes son un registro**: no se editan ni se borran, y nadie publica
   a nombre de otro.
 - **La cadena de vinculación**: un extraño que conozca el id de un rancho no

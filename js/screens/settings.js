@@ -1,7 +1,11 @@
 /**
  * Settings — your own account, who else can get in, and what the numbers add
- * up to. The team section is the security surface of the whole product, so it
- * says plainly what an approved account can see.
+ * up to.
+ *
+ * The team section is the security surface of the whole product, so it says
+ * plainly what an enabled account can see. Nobody signs up for the panel;
+ * accounts appear here because someone created them in the Firebase console,
+ * or because their access was revoked and is waiting to be restored.
  */
 
 import { h } from '../lib/dom.js';
@@ -59,8 +63,8 @@ export function renderSettings() {
 
   function requestsCard() {
     return h('div.stack.stack-3',
-      sectionLabel(`Solicitudes de acceso · ${pending.length}`),
-      alert('Estas personas crearon una cuenta y esperan aprobación. Aprobarlas les da acceso a todos los ranchos, entregas y pagos.', 'warn'),
+      sectionLabel(`Cuentas sin acceso · ${pending.length}`),
+      alert('Estas cuentas existen pero no pueden entrar al panel. Habilitarlas les da acceso a todos los ranchos, sus datos de contacto, sus entregas y todos los pagos.', 'warn'),
       list(pending.map((person) => itemRow({
         lead: avatar(person.name || person.email),
         title: person.name || 'Sin nombre',
@@ -71,31 +75,31 @@ export function renderSettings() {
             onclick: async (event) => {
               event.stopPropagation();
               if (!await confirm({
-                title: `Aprobar a ${person.name || person.email}`,
+                title: `Habilitar a ${person.name || person.email}`,
                 message: 'Tendrá acceso completo al panel: todos los ranchos, sus datos de contacto, sus entregas y todos los pagos.',
-                confirmLabel: 'Aprobar acceso', icon: 'shield',
+                confirmLabel: 'Habilitar acceso', icon: 'shield',
               })) return;
               try {
                 await approveStaff(person.id, { name: session.displayName });
-                toastOk('Acceso aprobado');
+                toastOk('Acceso habilitado');
               } catch (error) { toastBad(dbMessage(error)); }
             },
-          }, 'Aprobar'),
+          }, 'Habilitar'),
           h('button.btn.btn--sm.btn--ghost', {
             type: 'button',
             onclick: async (event) => {
               event.stopPropagation();
               if (!await confirm({
-                title: 'Rechazar solicitud',
-                message: 'Se elimina su perfil. La persona podrá volver a solicitar acceso más adelante.',
-                confirmLabel: 'Rechazar', tone: 'danger', icon: 'ban',
+                title: 'Eliminar perfil',
+                message: 'Se borra su perfil del panel. La cuenta de acceso sigue existiendo en Firebase; bórrala también desde la consola si quieres retirarla del todo.',
+                confirmLabel: 'Eliminar perfil', tone: 'danger', icon: 'ban',
               })) return;
               try {
                 await rejectRequest(person.id);
-                toastOk('Solicitud rechazada');
+                toastOk('Perfil eliminado');
               } catch (error) { toastBad(dbMessage(error)); }
             },
-          }, 'Rechazar')),
+          }, 'Eliminar')),
         chevron: false,
       })), { card: true }));
   }
@@ -119,7 +123,7 @@ export function renderSettings() {
                     event.stopPropagation();
                     if (!await confirm({
                       title: `Quitar acceso a ${person.name || person.email}`,
-                      message: 'Dejará de poder entrar al panel. Su cuenta se conserva y puedes volver a aprobarla cuando quieras.',
+                      message: 'Dejará de poder entrar al panel. Su cuenta se conserva y puedes volver a habilitarla cuando quieras, sin pasar por la consola.',
                       confirmLabel: 'Quitar acceso', tone: 'danger', icon: 'ban',
                     })) return;
                     try {
@@ -130,7 +134,11 @@ export function renderSettings() {
                 }, 'Quitar'),
             chevron: false,
           })), { card: true })
-        : emptyState({ icon: 'users', title: 'Sólo tú', text: 'Nadie más tiene acceso al panel.' }));
+        : emptyState({
+            icon: 'users',
+            title: 'Sólo tú',
+            text: 'Nadie más tiene acceso al panel. Las cuentas nuevas se crean desde la consola de Firebase.',
+          }));
   }
 
   function numbersCard() {
