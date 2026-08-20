@@ -1,17 +1,18 @@
 /**
  * The admin app's live data.
  *
- * Clients, the selected day's route, outstanding invoices and the message
- * inbox are needed by several screens at once — the dashboard, the tab badge,
- * the client detail. Opening one listener per screen would mean four copies of
- * the same query and a visible reload on every navigation, so the store keeps a
- * single subscription for each and screens just read from it.
+ * Farms, clients, the selected day's route, outstanding invoices and the
+ * message inbox are needed by several screens at once — the dashboard, the tab
+ * badge, the client detail. Opening one listener per screen would mean five
+ * copies of the same query and a visible reload on every navigation, so the
+ * store keeps a single subscription for each and screens just read from it.
  *
  * Listeners live as long as the signed-in session, and are torn down on
  * sign-out so a second account never sees the previous one's data.
  */
 
 import { watchClients } from './clients.js';
+import { watchFarms } from './farms.js';
 import { watchDay, summarizeDay, missingToday } from './deliveries.js';
 import { watchOutstanding, summarizeInvoices, groupByClient } from './invoices.js';
 import { watchConversations, totalUnread } from './chat.js';
@@ -20,11 +21,14 @@ import { summarize } from '../lib/billing.js';
 
 const state = {
   day: today(),
+  farms: [],
   clients: [],
   deliveries: [],
   outstanding: [],
   conversations: [],
-  loaded: { clients: false, deliveries: false, outstanding: false, conversations: false },
+  loaded: {
+    farms: false, clients: false, deliveries: false, outstanding: false, conversations: false,
+  },
   errors: {},
 };
 
@@ -69,6 +73,12 @@ export function startStore() {
   state.errors = {};
 
   stops = [
+    watchFarms((rows) => {
+      state.farms = rows;
+      state.loaded.farms = true;
+      emit();
+    }, failed('farms')),
+
     watchClients((rows) => {
       state.clients = rows;
       state.loaded.clients = true;
@@ -97,8 +107,10 @@ export function stopStore() {
   dayStop?.();
   dayStop = null;
   Object.assign(state, {
-    clients: [], deliveries: [], outstanding: [], conversations: [],
-    loaded: { clients: false, deliveries: false, outstanding: false, conversations: false },
+    farms: [], clients: [], deliveries: [], outstanding: [], conversations: [],
+    loaded: {
+      farms: false, clients: false, deliveries: false, outstanding: false, conversations: false,
+    },
     errors: {},
   });
 }
@@ -128,9 +140,32 @@ function watchSelectedDay() {
 
 /* --- Derived views --------------------------------------------------------- */
 
+export const farmById = (id) => state.farms.find((farm) => farm.id === id) || null;
+
 export const clientById = (id) => state.clients.find((client) => client.id === id) || null;
 
 export const activeClients = () => state.clients.filter((client) => client.status === 'active');
+
+/** Everyone registered at one farm, alphabetical. */
+export const clientsOfFarm = (farmId) =>
+  state.clients.filter((client) => client.farmId === farmId);
+
+/** Everyone standing at one location of one farm. */
+export const clientsAtLocation = (farmId, locationId) =>
+  state.clients.filter((client) => client.farmId === farmId && client.locationId === locationId);
+
+/** Head-count and money for one farm, from data already in memory. */
+export function farmStats(farmId) {
+  const roster = clientsOfFarm(farmId);
+  const active = roster.filter((client) => client.status === 'active');
+  const balance = roster.reduce((sum, client) => sum + (billingFor(client)?.balance || 0), 0);
+  return {
+    total: roster.length,
+    active: active.length,
+    meals: active.reduce((sum, client) => sum + (Number(client.mealsPerDay) || 0), 0),
+    balance: Math.round(balance * 100) / 100,
+  };
+}
 
 export const dayStats = () => summarizeDay(state.deliveries);
 
@@ -158,4 +193,5 @@ export const conversationFor = (clientId) =>
   state.conversations.find((row) => row.id === clientId) || null;
 
 /** True once the screens have enough to render without skeletons. */
-export const isReady = () => state.loaded.clients && state.loaded.deliveries;
+export const isReady = () =>
+  state.loaded.farms && state.loaded.clients && state.loaded.deliveries;

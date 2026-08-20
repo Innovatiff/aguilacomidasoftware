@@ -1,29 +1,36 @@
 /**
- * Register / edit a farm.
+ * Register / edit a client — one of the people who eat at a farm.
  *
- * The commercial terms live here — meals per day, price per meal, the serving
- * weekdays and the billing anchor — because every invoice the software ever
- * produces is derived from them. The form shows the resulting bi-weekly total
- * as it is filled in, so a wrong price is caught before it becomes a bill.
+ * Two fields decide everything and neither can be skipped: the farm they work
+ * at and the location inside it where the food is left. Everything commercial
+ * — the price, the serving days, the billing cycle — belongs to the farm and
+ * is shown here read-only, so a price is never quietly different for one
+ * person than for the rest of their farm.
+ *
+ * What is genuinely theirs is how many meals they take, their phone, and the
+ * email they use to open the app. That last one is optional: most workers do
+ * not have one on the day they are registered, and a roster that cannot be
+ * built is worse than one where some people cannot log in yet.
  */
 
 import { h, mount } from '../lib/dom.js';
 import { screen } from '../ui/shell.js';
 import {
-  card, field, input, textarea, select, moneyInput, button, alert, sectionLabel, loading,
+  card, field, input, textarea, select, button, alert, sectionLabel, loading,
+  defList, defRow, emptyState,
 } from '../ui/kit.js';
 import { toastOk, toastBad, confirm } from '../ui/overlay.js';
 import { go, back } from '../lib/router.js';
 import { session } from '../data/session.js';
 import {
   createClient, updateClient, getClient, emptyClient, deleteClient, setClientStatus,
-  isValidEmail,
+  isValidEmail, termsOf,
 } from '../data/clients.js';
 import { ensureConversation } from '../data/chat.js';
-import { store } from '../data/store.js';
-import { projectPeriod, periodFor, PERIOD_DAYS } from '../lib/billing.js';
-import { WEEKDAYS_SHORT, today, formatRange } from '../lib/dates.js';
-import { money } from '../lib/format.js';
+import { store, farmById, clientsOfFarm } from '../data/store.js';
+import { projectPeriod, periodFor } from '../lib/billing.js';
+import { today, formatRange, formatDayLong } from '../lib/dates.js';
+import { money, moneyFull, plural } from '../lib/format.js';
 import { dbMessage } from '../firebase.js';
 
 export async function renderClientForm(context) {
@@ -31,45 +38,61 @@ export async function renderClientForm(context) {
   const isNew = !clientId || clientId === 'new';
 
   let model = isNew
-    ? emptyClient()
+    ? emptyClient(farmById(context.query.farm))
     : store.clients.find((c) => c.id === clientId) || await getClient(clientId);
 
   if (!model) {
-    screen({ title: 'Rancho', backTo: '/clients', body: alert('Este rancho ya no existe.', 'bad') });
+    screen({
+      title: 'Cliente', backTo: '/clients', tab: 'clients',
+      body: h('div.page__inner', alert('Este cliente ya no existe.', 'bad')),
+    });
     return;
   }
-  model = { ...emptyClient(), ...model };
-  // Remembered before editing: updating the email has to retire the previous
+
+  if (isNew) {
+    // Arriving from a location's menu pre-selects that location.
+    if (context.query.location) model.locationId = context.query.location;
+  } else {
+    model = { ...emptyClient(farmById(model.farmId)), ...model };
+  }
+
+  // Remembered before editing: moving the email has to retire the previous
   // lookup, or the old address would keep opening the app.
   const original = { email: model.email };
 
   let saving = false;
   let errors = {};
 
+  const farm = () => farmById(model.farmId);
+
   const draw = () => screen({
-    title: isNew ? 'Nuevo rancho' : 'Editar rancho',
-    subtitle: isNew ? null : model.name,
-    backTo: isNew ? '/clients' : `/clients/${clientId}`,
+    title: isNew ? 'Nuevo cliente' : 'Editar cliente',
+    subtitle: isNew ? (farm()?.name || null) : model.name,
+    backTo: isNew ? (model.farmId ? `/farms/${model.farmId}` : '/clients') : `/clients/${clientId}`,
     tab: 'clients',
     body: saving ? loading() : form(),
   });
 
+  /** Field edits that do not change the shape of the form. */
   function update(patch) {
     Object.assign(model, patch);
-    // Only the live estimate depends on the changed values; re-rendering the
-    // whole form here would blur the field being typed into.
-    const preview = document.getElementById('cycle-preview');
-    if (preview) mount(preview, cyclePreview());
+    const preview = document.getElementById('client-preview');
+    if (preview) mount(preview, previewCard());
+  }
+
+  /** Edits that do — picking a farm changes which locations exist. */
+  function updateAndRedraw(patch) {
+    Object.assign(model, patch);
+    draw();
   }
 
   function validate() {
     errors = {};
-    if (!model.name?.trim()) errors.name = 'Escribe el nombre del rancho.';
+    if (!model.name?.trim()) errors.name = 'Escribe el nombre de la persona.';
+    if (!model.farmId) errors.farmId = 'Elige el rancho.';
+    if (!model.locationId) errors.locationId = 'Elige dónde está. Es obligatorio.';
     if (!(Number(model.mealsPerDay) > 0)) errors.mealsPerDay = 'Debe ser mayor a cero.';
-    if (!(Number(model.pricePerMeal) > 0)) errors.pricePerMeal = 'Escribe el precio por comida.';
-    if (!model.deliveryDays?.length) errors.deliveryDays = 'Elige al menos un día.';
-    // The email is not a contact detail here: it is how the farm opens its app.
-    if (!isValidEmail(model.email)) errors.email = 'Escribe el correo con el que entrará el encargado.';
+    if (model.email && !isValidEmail(model.email)) errors.email = 'Ese correo no es válido.';
     return Object.keys(errors).length === 0;
   }
 
@@ -82,12 +105,12 @@ export async function renderClientForm(context) {
 
     try {
       if (isNew) {
-        const { id, email } = await createClient(model, author);
+        const { id, email } = await createClient(model, farm(), author);
         await ensureConversation({ id, name: model.name });
-        toastOk('Rancho registrado');
-        go(`/clients/${id}?welcome=${encodeURIComponent(email)}`, { replace: true });
+        toastOk('Cliente registrado');
+        go(`/clients/${id}${email ? `?welcome=${encodeURIComponent(email)}` : ''}`, { replace: true });
       } else {
-        await updateClient(clientId, model, original.email);
+        await updateClient(clientId, model, original.email, farm());
         toastOk('Cambios guardados');
         go(`/clients/${clientId}`, { replace: true });
       }
@@ -97,24 +120,38 @@ export async function renderClientForm(context) {
     }
   }
 
+  /* --- Form ---------------------------------------------------------------- */
+
   function form() {
+    if (!store.farms.length) return noFarms();
+
     return h('form.page__inner.stack.stack-4', { onsubmit: save, novalidate: true },
 
-      sectionLabel('Identificación'),
+      sectionLabel('Dónde come'),
       card(h('div.stack.stack-4',
         field({
-          label: 'Nombre del rancho',
-          error: errors.name,
-          control: input({
-            value: model.name, required: true, placeholder: 'Rancho El Sol',
-            oninput: (e) => update({ name: e.target.value }),
+          label: 'Rancho',
+          error: errors.farmId,
+          control: select({
+            value: model.farmId,
+            options: [
+              { value: '', label: 'Elige el rancho…' },
+              ...store.farms.map((row) => ({ value: row.id, label: row.name })),
+            ],
+            // Changing farm invalidates the chosen location: they belong to it.
+            onchange: (e) => updateAndRedraw({ farmId: e.target.value, locationId: '' }),
           }),
         }),
+        locationField())),
+
+      sectionLabel('La persona'),
+      card(h('div.stack.stack-4',
         field({
-          label: 'Persona de contacto',
+          label: 'Nombre',
+          error: errors.name,
           control: input({
-            value: model.contactName, placeholder: 'Nombre del encargado',
-            oninput: (e) => update({ contactName: e.target.value }),
+            value: model.name, required: true, placeholder: 'Nombre y apellido',
+            oninput: (e) => update({ name: e.target.value }),
           }),
         }),
         field({
@@ -125,83 +162,33 @@ export async function renderClientForm(context) {
           }),
         }),
         field({
-          label: 'Correo de acceso',
-          hint: 'Con este correo el encargado entra a la app del rancho. Es lo único que necesita.',
+          label: 'Correo para la app',
+          hint: 'Opcional. Con este correo entra a su app y ve su entrega y su cuenta. '
+            + 'Si todavía no tiene, déjalo vacío.',
           error: errors.email,
           control: input({
-            value: model.email, type: 'email', inputmode: 'email', required: true,
-            placeholder: 'encargado@rancho.com',
+            value: model.email, type: 'email', inputmode: 'email',
+            placeholder: 'persona@correo.com',
             oninput: (e) => update({ email: e.target.value }),
           }),
         }),
         field({
-          label: 'Dirección',
+          label: 'Notas',
           control: textarea({
-            value: model.address, rows: 2, placeholder: 'Camino y referencias para llegar',
-            oninput: (e) => update({ address: e.target.value }),
-          }),
-        }))),
-
-      sectionLabel('Servicio'),
-      card(h('div.stack.stack-4',
-        h('div.row', { style: { gap: '12px', alignItems: 'flex-start' } },
-          h('div.grow', field({
-            label: 'Comidas por día',
-            error: errors.mealsPerDay,
-            control: input({
-              value: model.mealsPerDay, type: 'number', inputmode: 'numeric', min: '1', step: '1',
-              oninput: (e) => update({ mealsPerDay: Number(e.target.value) }),
-            }),
-          })),
-          h('div.grow', field({
-            label: 'Precio por comida',
-            error: errors.pricePerMeal,
-            control: moneyInput({
-              value: model.pricePerMeal,
-              oninput: (e) => update({ pricePerMeal: Number(e.target.value) }),
-            }),
-          }))),
-
-        field({
-          label: 'Días de servicio',
-          error: errors.deliveryDays,
-          hint: 'Los días marcados aparecen en la ruta automáticamente.',
-          control: weekdayPicker(model.deliveryDays, (days) => update({ deliveryDays: days })),
-        }),
-
-        field({
-          label: 'Horario de entrega',
-          control: input({
-            value: model.deliveryWindow, placeholder: '11:00 – 13:00',
-            oninput: (e) => update({ deliveryWindow: e.target.value }),
-          }),
-        }),
-
-        field({
-          label: 'Notas para el chofer',
-          control: textarea({
-            value: model.notes, rows: 2, placeholder: 'Entrar por el portón azul, preguntar por…',
+            value: model.notes, rows: 2, placeholder: 'Alergias, horario distinto, quién recibe…',
             oninput: (e) => update({ notes: e.target.value }),
           }),
         }))),
 
-      sectionLabel('Cobro'),
+      sectionLabel('Su servicio'),
       card(h('div.stack.stack-4',
         field({
-          label: 'Inicio del ciclo de cobro',
-          hint: `Los periodos de ${PERIOD_DAYS} días se cuentan desde esta fecha.`,
+          label: 'Comidas por día',
+          error: errors.mealsPerDay,
+          hint: 'Lo único que se cobra distinto entre una persona y otra.',
           control: input({
-            value: model.cycleAnchor, type: 'date',
-            oninput: (e) => update({ cycleAnchor: e.target.value || today() }),
-          }),
-        }),
-        field({
-          label: 'Días de gracia para pagar',
-          hint: 'Días después de cerrar el periodo antes de marcarlo como vencido.',
-          control: select({
-            value: String(model.graceDays),
-            options: [0, 1, 2, 3, 5, 7].map((n) => ({ value: String(n), label: n === 0 ? 'Mismo día' : `${n} días` })),
-            onchange: (e) => update({ graceDays: Number(e.target.value) }),
+            value: model.mealsPerDay, type: 'number', inputmode: 'numeric', min: '1', step: '1',
+            oninput: (e) => update({ mealsPerDay: Number(e.target.value) }),
           }),
         }),
         field({
@@ -211,31 +198,102 @@ export async function renderClientForm(context) {
             options: [
               { value: 'active', label: 'Activo — recibe comida' },
               { value: 'paused', label: 'En pausa — sin entregas por ahora' },
-              { value: 'inactive', label: 'Inactivo — ya no es cliente' },
+              { value: 'inactive', label: 'Inactivo — ya no come aquí' },
             ],
             onchange: (e) => update({ status: e.target.value }),
           }),
         }),
-        h('div', { id: 'cycle-preview' }, cyclePreview()))),
+        h('div', { id: 'client-preview' }, previewCard()))),
 
       h('div.stack.stack-2', { style: { marginTop: '8px' } },
         h('button.btn.btn--primary.btn--block.btn--lg', { type: 'submit' },
-          isNew ? 'Registrar rancho' : 'Guardar cambios'),
-        button('Cancelar', { variant: 'ghost', block: true, onClick: () => back('/clients') })),
+          isNew ? 'Registrar cliente' : 'Guardar cambios'),
+        button('Cancelar', {
+          variant: 'ghost', block: true,
+          onClick: () => back(model.farmId ? `/farms/${model.farmId}` : '/clients'),
+        })),
 
       isNew ? null : dangerZone());
   }
 
-  function cyclePreview() {
-    const period = periodFor(model.cycleAnchor || today(), today());
-    const projection = projectPeriod(model, period);
-    if (!projection.amount) {
-      return alert('Escribe las comidas por día y el precio para ver el estimado del periodo.', 'info');
+  /**
+   * The location picker — the reason this screen exists in this shape.
+   *
+   * A farm with no locations yet cannot take anybody, so instead of an empty
+   * dropdown the field sends you to create one.
+   */
+  function locationField() {
+    const current = farm();
+
+    if (!current) {
+      return field({
+        label: 'Ubicación',
+        control: select({ value: '', options: [{ value: '', label: 'Elige primero el rancho…' }], disabled: true }),
+      });
     }
-    return alert(
-      `Periodo actual ${formatRange(period.start, period.end)}: ${projection.days} días de servicio, `
-      + `${projection.meals} comidas ≈ ${money(projection.amount)}.`,
-      'brand', 'receipt');
+
+    const places = current.locations || [];
+    if (!places.length) {
+      return field({
+        label: 'Ubicación',
+        error: errors.locationId,
+        control: h('div.stack.stack-3',
+          alert(`${current.name} todavía no tiene ubicaciones. Agrega una para poder registrar `
+            + 'gente ahí.', 'warn'),
+          button('Agregar ubicación', {
+            variant: 'ghost', block: true, icon: 'pin',
+            onClick: () => go(`/farms/${current.id}`),
+          })),
+      });
+    }
+
+    return field({
+      label: 'Ubicación',
+      hint: 'Dónde se le deja la comida. Obligatorio.',
+      error: errors.locationId,
+      control: select({
+        value: model.locationId,
+        options: [
+          { value: '', label: 'Elige la ubicación…' },
+          ...places.map((place) => ({
+            value: place.id,
+            label: `${place.name} · ${plural(clientsAt(current.id, place.id), 'cliente', 'clientes')}`,
+          })),
+        ],
+        onchange: (e) => update({ locationId: e.target.value }),
+      }),
+    });
+  }
+
+  /** What this person costs per period, on their farm's terms. */
+  function previewCard() {
+    const current = farm();
+    if (!current) return alert('Elige el rancho para ver sus condiciones.', 'info');
+
+    const terms = termsOf(current);
+    const period = periodFor(terms.cycleAnchor, today());
+    const projection = projectPeriod({ ...terms, mealsPerDay: model.mealsPerDay }, period);
+
+    return h('div.stack.stack-3',
+      alert(`Condiciones de ${current.name}. Para cambiarlas, edita el rancho.`, 'info'),
+      card(defList([
+        defRow('Precio por comida', moneyFull(terms.pricePerMeal)),
+        defRow('Días de servicio', `${projection.days} en el periodo`),
+        defRow('Horario', terms.deliveryWindow || '—'),
+        defRow('Inicio del ciclo', formatDayLong(terms.cycleAnchor)),
+        defRow(`Periodo ${formatRange(period.start, period.end)}`,
+          `${projection.meals} comidas ≈ ${money(projection.amount)}`, { total: true }),
+      ])));
+  }
+
+  function noFarms() {
+    return h('div.page__inner', emptyState({
+      icon: 'farm',
+      title: 'Primero registra un rancho',
+      text: 'Los clientes viven dentro de un rancho y de una de sus ubicaciones, así que el '
+        + 'rancho va primero.',
+      action: button('Registrar rancho', { icon: 'plus', onClick: () => go('/farms/new') }),
+    }));
   }
 
   function dangerZone() {
@@ -247,34 +305,35 @@ export async function renderClientForm(context) {
             onClick: async () => {
               if (!await confirm({
                 title: 'Poner en pausa',
-                message: 'El rancho dejará de aparecer en las rutas nuevas. Sus facturas y su historial se conservan.',
+                message: 'Deja de aparecer en las rutas nuevas. Sus facturas y su historial se conservan.',
                 confirmLabel: 'Poner en pausa', icon: 'pause',
               })) return;
               await setClientStatus(clientId, 'paused');
-              toastOk('Rancho en pausa');
+              toastOk('Cliente en pausa');
               go(`/clients/${clientId}`);
             },
           })
-        : button('Reactivar rancho', {
+        : button('Reactivar cliente', {
             variant: 'ok', block: true, icon: 'play',
             onClick: async () => {
               await setClientStatus(clientId, 'active');
-              toastOk('Rancho reactivado');
+              toastOk('Cliente reactivado');
               go(`/clients/${clientId}`);
             },
           }),
-      button('Eliminar rancho', {
+      button('Eliminar cliente', {
         variant: 'danger-soft', block: true, icon: 'ban',
         onClick: async () => {
           if (!await confirm({
             title: `Eliminar ${model.name}`,
-            message: 'Se borra el rancho y el acceso de su correo a la app. Las entregas y facturas ya registradas no se eliminan. Esta acción no se puede deshacer.',
+            message: 'Se borra la ficha y el acceso de su correo a la app. Las entregas y facturas '
+              + 'ya registradas no se eliminan. Esta acción no se puede deshacer.',
             confirmLabel: 'Eliminar definitivamente', tone: 'danger', icon: 'alert',
           })) return;
           try {
             await deleteClient(clientId, model.email);
-            toastOk('Rancho eliminado');
-            go('/clients', { replace: true });
+            toastOk('Cliente eliminado');
+            go(model.farmId ? `/farms/${model.farmId}` : '/clients', { replace: true });
           } catch (error) {
             toastBad(dbMessage(error));
           }
@@ -285,24 +344,5 @@ export async function renderClientForm(context) {
   draw();
 }
 
-/** Weekday toggles — Sunday last, matching how the week is spoken about here. */
-function weekdayPicker(selected, onChange) {
-  const order = [1, 2, 3, 4, 5, 6, 0];
-  const chosen = new Set(selected || []);
-
-  const wrap = h('div.row.row--wrap', { style: { gap: '6px' } },
-    order.map((day) => {
-      const node = h(`button.chip${chosen.has(day) ? '.is-active' : ''}`, {
-        type: 'button',
-        style: { minWidth: '46px', textAlign: 'center', justifyContent: 'center' },
-        onclick: () => {
-          if (chosen.has(day)) chosen.delete(day); else chosen.add(day);
-          node.classList.toggle('is-active', chosen.has(day));
-          onChange([...chosen].sort((a, b) => a - b));
-        },
-      }, WEEKDAYS_SHORT[day]);
-      return node;
-    }));
-
-  return wrap;
-}
+const clientsAt = (farmId, locationId) =>
+  clientsOfFarm(farmId).filter((client) => client.locationId === locationId).length;

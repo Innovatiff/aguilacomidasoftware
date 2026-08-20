@@ -14,7 +14,7 @@ export const DELIVERY_FLOW = ['scheduled', 'preparing', 'en_route', 'delivered']
 export const DELIVERY = {
   scheduled:  { label: 'Programado',   short: 'Programado', tone: 'info',  icon: 'calendar', clientText: 'Tu comida está programada para hoy.' },
   preparing:  { label: 'En cocina',    short: 'En cocina',  tone: 'warn',  icon: 'utensils', clientText: 'Estamos preparando tu comida.' },
-  en_route:   { label: 'En camino',    short: 'En camino',  tone: 'brand', icon: 'truck',    clientText: 'Tu comida va en camino al rancho.' },
+  en_route:   { label: 'En camino',    short: 'En camino',  tone: 'brand', icon: 'truck',    clientText: 'Tu comida va en camino.' },
   delivered:  { label: 'Entregado',    short: 'Entregado',  tone: 'ok',    icon: 'check',    clientText: 'Tu comida fue entregada.' },
   skipped:    { label: 'Sin servicio', short: 'Sin serv.',  tone: 'muted', icon: 'ban',      clientText: 'Hoy no hay servicio programado.' },
   issue:      { label: 'Con problema', short: 'Problema',   tone: 'bad',   icon: 'alert',    clientText: 'Hubo un problema con la entrega de hoy.' },
@@ -72,20 +72,20 @@ export const MESSAGE_KIND = {
   payment: 'payment',    // a payment-details request or confirmation
 };
 
-/** Canned openers, so a farm manager never has to compose from scratch. */
+/** Canned openers, so nobody has to compose a message from scratch. */
 export const CLIENT_QUICK_REPLIES = [
   '¿Me pueden enviar los datos para el pago?',
   '¿A qué hora llega la comida hoy?',
   'Necesito cambiar el número de comidas.',
-  'Hoy no habrá servicio en el rancho.',
-  'Tuvimos un problema con la entrega.',
+  'Hoy no voy a estar en la ubicación.',
+  'Tuve un problema con mi entrega.',
 ];
 
 export const ADMIN_QUICK_REPLIES = [
   'Buen día, ya salió su pedido.',
   'Los datos para el pago son:',
   'Confirmamos su pago, gracias.',
-  '¿Cuántas comidas necesitan mañana?',
+  '¿Cuántas comidas necesita mañana?',
   'Hoy vamos con retraso, disculpe la demora.',
 ];
 

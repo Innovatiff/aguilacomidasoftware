@@ -57,3 +57,21 @@ export function percent(part, whole) {
   if (!whole) return 0;
   return Math.max(0, Math.min(100, Math.round((part / whole) * 100)));
 }
+
+/**
+ * Accent- and case-insensitive form of a string, for searching.
+ *
+ * Staff type "pena" and expect to find "Peña", so the comparison happens on a
+ * folded copy: decompose to base letter plus combining mark (NFD), then drop
+ * the marks.
+ */
+export const fold = (text) =>
+  String(text ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+/** True when every needle word appears somewhere in `fields`. */
+export function matches(fields, term) {
+  const words = fold(term).split(/\s+/).filter(Boolean);
+  if (!words.length) return true;
+  const hay = fields.filter(Boolean).map(fold).join(' ');
+  return words.every((word) => hay.includes(word));
+}

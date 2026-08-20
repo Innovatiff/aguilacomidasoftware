@@ -1,21 +1,22 @@
 /**
- * A single farm: today's stop, what it owes, how it connects to the client app,
- * and its service terms — in that order, because that is the order staff ask.
+ * A single client: where they are, today's stop, what they owe, how they get
+ * into the app, and the terms their farm sets — in that order, because that is
+ * the order staff ask.
  */
 
-import { h } from '../lib/dom.js';
+import { h, mount } from '../lib/dom.js';
 import { icon } from '../lib/icons.js';
 import { screen, topbarButton } from '../ui/shell.js';
 import {
   card, button, badge, avatar, defList, defRow, itemRow, list, sectionLabel,
-  alert, meter, loading, field, input,
+  alert, meter, loading, field, input, select,
 } from '../ui/kit.js';
 import { toastOk, toastBad, sheet } from '../ui/overlay.js';
 import { openPaymentSheet } from '../ui/payment-sheet.js';
 import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
-import { store, subscribe, billingFor, deliveryFor } from '../data/store.js';
-import { watchClient, updateClient } from '../data/clients.js';
+import { store, subscribe, billingFor, deliveryFor, farmById } from '../data/store.js';
+import { watchClient, updateClient, moveClient } from '../data/clients.js';
 import { watchClientInvoices, issueInvoice } from '../data/invoices.js';
 import { watchClientDeliveries, billableMeals, createDelivery } from '../data/deliveries.js';
 import { ensureConversation } from '../data/chat.js';
@@ -49,13 +50,14 @@ export function renderClientDetail(context) {
 
   function draw() {
     if (!client) {
-      screen({ title: 'Rancho', backTo: '/clients', body: loading() });
+      screen({ title: 'Cliente', backTo: '/clients', tab: 'clients', body: loading() });
       return;
     }
     screen({
       title: client.name,
-      subtitle: clientStatusMeta(client.status).label,
-      backTo: '/clients',
+      subtitle: [client.farmName, client.locationName].filter(Boolean).join(' · ')
+        || clientStatusMeta(client.status).label,
+      backTo: client.farmId ? `/farms/${client.farmId}` : '/clients',
       tab: 'clients',
       actions: [
         topbarButton('chat', { label: 'Mensajes', onClick: openChat }),
@@ -77,6 +79,7 @@ export function renderClientDetail(context) {
     return h('div.page__inner.stack.stack-4',
       welcomeEmail ? welcomeBanner(welcomeEmail) : null,
       identityCard(client, openChat),
+      placeCard(client),
       todayCard(client, stop),
       billingCard(client, billing, invoices, loadedInvoices),
       accessCard(client),
@@ -91,9 +94,9 @@ export function renderClientDetail(context) {
       h('div.row.row--top',
         h('span', { style: { color: 'var(--brand-600)' } }, icon('check')),
         h('div.grow',
-          h('div.w-600', 'Rancho registrado'),
+          h('div.w-600', 'Cliente registrado'),
           h('p.t-sm.c-soft', { style: { marginTop: '2px' } },
-            'El encargado ya puede entrar a la app con este correo:'),
+            'Ya puede entrar a la app con este correo:'),
           h('div.row', { style: { marginTop: '10px' } },
             emailChip(email),
             button('Copiar', { variant: 'soft', size: 'sm', icon: 'copy', onClick: () => copy(email) })))));
@@ -105,20 +108,54 @@ export function renderClientDetail(context) {
         avatar(model.name, { size: 'lg' }),
         h('div.grow',
           h('div.t-lg.w-700', model.name),
-          model.contactName ? h('div.t-sm.c-soft', model.contactName) : null,
+          model.phone ? h('div.t-sm.c-soft', fmtPhone(model.phone)) : null,
           h('div', { style: { marginTop: '6px' } },
             badge(clientStatusMeta(model.status).label, clientStatusMeta(model.status).tone,
               clientStatusMeta(model.status).icon)))),
 
-      model.address ? h('div.row.row--top.t-sm.c-soft',
-        h('span', { style: { color: 'var(--ink-400)', flex: 'none' } }, icon('pin')),
-        h('span', model.address)) : null,
+      model.notes ? h('div.t-sm.c-soft', model.notes) : null,
 
       h('div.btn-group',
         model.phone
           ? h('a.btn.btn--ghost.btn--sm', { href: telHref(model.phone) }, icon('phone'), 'Llamar')
           : null,
         button('Mensaje', { variant: 'ghost', size: 'sm', icon: 'chat', onClick: onChat }))));
+  }
+
+  /**
+   * Where this person is. Shown high up because it is what the kitchen asks
+   * first — the food has to be left somewhere — and because a client whose
+   * location was deleted has to be visibly broken rather than quietly missing
+   * from the route.
+   */
+  function placeCard(model) {
+    const farm = farmById(model.farmId);
+    const stillThere = (farm?.locations || []).some((place) => place.id === model.locationId);
+
+    return card(h('div.stack.stack-3',
+      h('div.row.row--between',
+        h('div.card__title', 'Ubicación'),
+        stillThere ? null : badge('Revisar', 'bad')),
+
+      h('div.row',
+        h('span.item__ico', icon('farm')),
+        h('div.grow', { style: { minWidth: 0 } },
+          h('div.w-650.truncate', model.farmName || 'Sin rancho'),
+          h('div.t-sm.c-soft.truncate', model.locationName || 'Sin ubicación')),
+        model.farmId
+          ? button('Ver rancho', {
+              variant: 'ghost', size: 'sm', onClick: () => go(`/farms/${model.farmId}`),
+            })
+          : null),
+
+      stillThere
+        ? null
+        : alert('Esa ubicación ya no existe en el rancho. Elige otra para que siga apareciendo '
+          + 'en la ruta.', 'warn'),
+
+      button('Cambiar de ubicación', {
+        variant: 'ghost', size: 'sm', block: true, icon: 'pin', onClick: () => changePlace(model),
+      })));
   }
 
   function todayCard(model, stop) {
@@ -139,8 +176,8 @@ export function renderClientDetail(context) {
             }))
         : h('div.stack.stack-2',
             h('div.t-sm.c-soft', servesToday(model)
-              ? 'Este rancho recibe comida hoy pero no tiene entrega generada.'
-              : 'Hoy no le toca servicio según sus días configurados.'),
+              ? 'Hoy le toca comida pero no tiene entrega generada.'
+              : 'Hoy no le toca servicio según los días de su rancho.'),
             button('Agregar entrega de hoy', {
               variant: servesToday(model) ? 'primary' : 'ghost', size: 'sm', block: true, icon: 'plus',
               onClick: async () => {
@@ -224,7 +261,7 @@ export function renderClientDetail(context) {
    */
   function accessCard(model) {
     return h('div.stack.stack-3',
-      sectionLabel('Acceso a la app del rancho'),
+      sectionLabel('Acceso a su app'),
       card(h('div.stack.stack-3',
         h('div.row.row--between',
           h('div', { style: { minWidth: 0 } },
@@ -235,11 +272,12 @@ export function renderClientDetail(context) {
             : null),
 
         model.email
-          ? alert('El encargado entra a la app con este correo y la contraseña que él mismo elija. '
+          ? alert('Entra a la app con este correo y la contraseña que él mismo elija. '
             + 'No hay códigos que compartir.', 'info')
-          : alert('Este rancho no tiene correo registrado, así que nadie puede abrir su app.', 'warn'),
+          : alert('Sin correo registrado no puede abrir la app. Puedes agregarlo cuando lo tenga; '
+            + 'sus entregas y su cuenta se siguen registrando igual.', 'info'),
 
-        button('Cambiar correo de acceso', {
+        button(model.email ? 'Cambiar correo de acceso' : 'Agregar correo', {
           variant: 'ghost', size: 'sm', block: true, icon: 'mail',
           onClick: () => changeEmail(model),
         }))));
@@ -247,17 +285,23 @@ export function renderClientDetail(context) {
 
   function termsCard(model) {
     return h('div.stack.stack-3',
-      sectionLabel('Condiciones del servicio'),
-      card(defList([
-        defRow('Comidas por día', number(model.mealsPerDay)),
-        defRow('Precio por comida', moneyFull(model.pricePerMeal)),
-        defRow('Días de servicio', serviceDays(model.deliveryDays)),
-        defRow('Horario', model.deliveryWindow || '—'),
-        defRow('Inicio del ciclo', formatDayLong(model.cycleAnchor || today())),
-        defRow('Días de gracia', model.graceDays === 0 ? 'Mismo día' : `${model.graceDays} días`),
-        model.phone ? defRow('Teléfono', fmtPhone(model.phone)) : null,
-        model.notes ? defRow('Notas', model.notes) : null,
-      ].filter(Boolean))));
+      sectionLabel('Condiciones del servicio', model.farmId
+        ? h('button.btn.btn--quiet.btn--sm', {
+            type: 'button', onclick: () => go(`/farms/${model.farmId}/edit`),
+          }, icon('edit'), 'Editar en el rancho')
+        : null),
+      card(h('div.stack.stack-3',
+        defList([
+          defRow('Comidas por día', number(model.mealsPerDay)),
+          defRow('Precio por comida', moneyFull(model.pricePerMeal)),
+          defRow('Días de servicio', serviceDays(model.deliveryDays)),
+          defRow('Horario', model.deliveryWindow || '—'),
+          defRow('Inicio del ciclo', formatDayLong(model.cycleAnchor || today())),
+          defRow('Días de gracia', model.graceDays === 0 ? 'Mismo día' : `${model.graceDays} días`),
+        ]),
+        h('p.t-xs.c-faint', model.farmName
+          ? `Todo salvo las comidas por día viene de ${model.farmName} y es igual para su gente.`
+          : 'Estas condiciones vienen del rancho.'))));
   }
 
   function historyCard(rows) {
@@ -321,12 +365,14 @@ export function renderClientDetail(context) {
       build: (close) => {
         let value = model.email || '';
         return h('div.stack.stack-4',
-          alert('El correo anterior dejará de abrir la app en cuanto guardes.', 'warn'),
+          model.email
+            ? alert('El correo anterior dejará de abrir la app en cuanto guardes.', 'warn')
+            : alert('Con este correo podrá entrar a su app.', 'info'),
           field({
-            label: 'Correo del encargado',
-            hint: 'Con este correo entra a la app del rancho.',
+            label: 'Correo de la persona',
+            hint: 'Déjalo vacío para quitarle el acceso.',
             control: input({
-              value, type: 'email', inputmode: 'email', placeholder: 'encargado@rancho.com',
+              value, type: 'email', inputmode: 'email', placeholder: 'persona@correo.com',
               oninput: (event) => { value = event.target.value; },
             }),
           }),
@@ -336,11 +382,61 @@ export function renderClientDetail(context) {
           }));
       },
     });
-    if (!next || next.toLowerCase() === (model.email || '').toLowerCase()) return;
+    if (next == null || next.toLowerCase() === (model.email || '').toLowerCase()) return;
 
     try {
       await updateClient(model.id, { email: next, name: model.name }, model.email);
-      toastOk('Correo de acceso actualizado');
+      toastOk(next ? 'Correo de acceso actualizado' : 'Acceso retirado');
+    } catch (error) { toastBad(error?.message || dbMessage(error)); }
+  }
+
+  /**
+   * Moves someone to another location — of their farm, or of another farm
+   * entirely when they change jobs. Their terms follow the new farm, because
+   * the price is the farm's agreement and not theirs.
+   */
+  async function changePlace(model) {
+    const picked = await sheet({
+      title: 'Cambiar de ubicación',
+      build: (close) => {
+        let farmId = model.farmId || store.farms[0]?.id || '';
+        const places = h('div.stack.stack-2');
+
+        const paint = () => {
+          const farm = farmById(farmId);
+          const options = farm?.locations || [];
+          mount(places, options.length
+            ? options.map((place) => h('button.item.item--tap-target', {
+                type: 'button',
+                style: { border: '1px solid var(--border)', borderRadius: 'var(--r-md)' },
+                onclick: () => close({ farm, locationId: place.id }),
+              },
+              h('span.item__ico', icon('pin')),
+              h('div.item__main',
+                h('div.item__title', place.name),
+                place.id === model.locationId ? h('div.item__meta', 'Donde está ahora') : null),
+              icon('chevronR', 'rowlink__chev')))
+            : alert('Ese rancho todavía no tiene ubicaciones.', 'warn'));
+        };
+        paint();
+
+        return h('div.stack.stack-4',
+          field({
+            label: 'Rancho',
+            control: select({
+              value: farmId,
+              options: store.farms.map((row) => ({ value: row.id, label: row.name })),
+              onchange: (event) => { farmId = event.target.value; paint(); },
+            }),
+          }),
+          field({ label: 'Ubicación', control: places }));
+      },
+    });
+    if (!picked || (picked.farm.id === model.farmId && picked.locationId === model.locationId)) return;
+
+    try {
+      await moveClient(model.id, picked.farm, picked.locationId);
+      toastOk('Ubicación actualizada');
     } catch (error) { toastBad(error?.message || dbMessage(error)); }
   }
 

@@ -1,8 +1,8 @@
 # Pruebas de las reglas de seguridad
 
-Las reglas de `firestore.rules` son lo único que separa a un rancho de los
-pagos de otro rancho. Una regla puede *leerse* bien y estar mal, así que aquí
-se prueban contra el emulador de Firestore — gratis, sin tocar el proyecto real.
+Las reglas de `firestore.rules` son lo único que separa a un cliente de los
+pagos de otro. Una regla puede *leerse* bien y estar mal, así que aquí se
+prueban contra el emulador de Firestore — gratis, sin tocar el proyecto real.
 
 ## Correrlas
 
@@ -19,21 +19,27 @@ distinto de cero si alguna regla no se comporta como debe.
 
 ## Qué cubren
 
+71 comprobaciones, cada una escrita como «esto debe permitirse» o «esto debe
+negarse»:
+
 - **Anónimos** no leen nada.
-- **Administradores** leen y escriben todo.
-- **Un rancho** lee lo suyo y sólo lo suyo: no puede listar entregas, facturas
-  ni ranchos, ni leer los de otro.
-- **Un rancho no puede escribir dinero**: ni saldar su factura, ni cambiar su
-  precio por comida, ni marcar su propia entrega como entregada.
-- **Nadie se auto-promueve** a administrador: el único perfil que alguien puede
-  crearse es `client`, y no puede llegar pre-vinculado a un rancho.
-- **El administrador habilita y revoca** cuentas existentes desde la app.
+- **La cocina** lee y escribe todo: ranchos, ubicaciones, clientes, entregas,
+  facturas y pagos.
+- **Un cliente** lee lo suyo y sólo lo suyo: su ficha, su rancho, sus entregas,
+  sus facturas y su chat. No puede listar ninguna colección completa.
+- **Dos personas del mismo rancho** comparten el documento del rancho y nada
+  más: trabajar en el mismo lugar no da acceso a la ficha, la factura, las
+  entregas ni el chat del compañero.
+- **Un cliente no escribe dinero ni condiciones**: ni salda su factura, ni
+  cambia su precio por comida, ni marca su propia entrega como entregada, ni
+  toca el precio o las ubicaciones de su rancho, ni se cambia de rancho.
+- **Nadie se auto-promueve**: no puede agregarse a `staff`, ni apuntar su correo
+  a otro cliente, ni registrarse un correo nuevo, ni colar un rol en su perfil.
+- **La primera cuenta** se reclama exactamente una vez: `config/bootstrap` no se
+  puede sobrescribir ni borrar, ni siquiera por un administrador.
 - **Los mensajes son un registro**: no se editan ni se borran, y nadie publica
   a nombre de otro.
-- **La cadena de vinculación**: un extraño que conozca el id de un rancho no
-  puede unirse ni apuntar su perfil hacia él; quien tiene un código vigente sí.
-- **Rotación y vencimiento**: generar un código nuevo invalida el anterior al
-  instante, y un código vencido ya no sirve.
+- **Mayúsculas**: un correo en la lista funciona escrito como sea.
 
 ## Notas
 

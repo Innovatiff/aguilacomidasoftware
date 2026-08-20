@@ -1,7 +1,7 @@
 # El Águila Cocina — Administración
 
-Panel de la cocina: ranchos, ruta del día, cobro quincenal y mensajería con los
-clientes. Diseñado para teléfono, sin paso de compilación — HTML, CSS y
+Panel de la cocina: ranchos, sus clientes, ruta del día, cobro quincenal y
+mensajería. Diseñado para teléfono, sin paso de compilación — HTML, CSS y
 JavaScript con módulos ES nativos.
 
 La app del cliente vive en el repositorio `aguilacomidaapp` y usa el mismo
@@ -11,15 +11,21 @@ proyecto de Firebase.
 
 ## Qué resuelve
 
-El Águila Cocina cocina todos los días y reparte a ranchos que pagan cada dos
-semanas. Antes no se llevaba registro de nada. Este panel registra:
+El Águila Cocina cocina todos los días y reparte en ranchos donde la gente paga
+cada dos semanas. Antes no se llevaba registro de nada. Este panel registra:
 
 | | |
 |---|---|
-| **Ranchos** | datos de contacto, comidas por día, precio por comida, días de servicio |
-| **Ruta** | una entrega por rancho por día, con estado en vivo que el rancho ve en su app |
-| **Cobro** | ciclos de 14 días, facturas por periodo, pagos y saldos |
-| **Mensajes** | un hilo por rancho, con avisos automáticos de pagos y problemas |
+| **Ranchos** | el lugar: contacto, **ubicaciones** (Casa 1, Bloque Norte…) y las condiciones acordadas — precio por comida, días de servicio, ciclo de cobro |
+| **Clientes** | cada persona que come, con su rancho y su **ubicación obligatoria**. Hereda las condiciones del rancho; lo suyo es cuántas comidas lleva |
+| **Ruta** | agrupada por rancho → ubicación: un toque mueve una ubicación completa, con estado en vivo que cada quien ve en su app |
+| **Cobro** | ciclos de 14 días, **una factura por persona**, pagos y saldos, agrupados por rancho para cobrar |
+| **Mensajes** | un hilo por cliente, con avisos automáticos de pagos y problemas |
+
+**Por qué el rancho va primero.** Nadie come «en Mucci Farms»: come en Casa 1 de
+Mucci Farms, y el chofer entrega por ubicación, no por persona. Por eso no se
+puede registrar a nadie sin decir dónde está — y por eso el precio se acuerda
+una vez con el rancho, no doscientas veces con su gente.
 
 ---
 
@@ -70,14 +76,34 @@ agregues.
 > sin pasar por ninguna de las dos apps — así que tener una no demuestra nada.
 > Estar en la lista `staff`, que sólo un administrador puede escribir, sí.
 
-### 4. Registrar un rancho
+### 4. Registrar un rancho y a su gente
 
-**Ranchos → Nuevo**. El correo que escribas ahí es su acceso: con ese correo el
-encargado entra a la app del rancho y ve lo suyo. No hay códigos que compartir.
+Son tres pasos y siempre en este orden:
 
-Para mover o quitar ese acceso, cambia el correo en la ficha del rancho
-(**Acceso a la app del rancho → Cambiar correo**). El anterior deja de funcionar
-en el momento en que guardas.
+1. **Ranchos → Nuevo.** El nombre, el contacto y las condiciones: precio por
+   comida, días de servicio, horario y el inicio del ciclo de cobro. Todo esto
+   se aplica a **todos** los clientes de ese rancho.
+2. **Dentro del rancho → Ubicaciones → Agregar.** Casa 1, Bloque Norte,
+   Invernadero 3 — como se le diga ahí. Un rancho sin ubicaciones no puede
+   recibir gente, y el panel te lo dice.
+3. **Dentro de la ubicación → Registrar cliente aquí.** Nombre, cuántas comidas
+   lleva al día y, si tiene, su correo.
+
+**El correo es opcional.** Es lo que abre su app; muchos trabajadores no tienen
+uno el día que los registras y eso no debe frenar el alta. Se agrega después
+desde su ficha, en **Acceso a su app**. Cambiarlo mueve el acceso; borrarlo lo
+quita. No hay códigos que compartir.
+
+**Cambiar el precio de un rancho** lo cambia para toda su gente: el panel te dice
+a cuántos va a alcanzar antes de guardar. Las facturas ya emitidas no se tocan.
+
+**Mover a alguien** — de ubicación o de rancho — se hace desde su ficha, en
+**Cambiar de ubicación**. Al mover de rancho, sus condiciones pasan a ser las
+del rancho nuevo.
+
+Para eliminar una ubicación primero hay que mover a quien esté ahí, y para
+eliminar un rancho primero hay que vaciarlo. Es a propósito: borrar en cascada
+se llevaría entregas, facturas e historial de gente que sigue trabajando.
 
 ### 5. Correr en local
 
@@ -125,16 +151,16 @@ Las reglas se publican desde la consola, sin instalar nada:
 2. Pega el contenido de `firestore.rules` y **Publicar**.
 
 **Los índices.** Hacen falta tres, y no se pegan: se crean con un clic. La
-primera vez que abras la ficha de un rancho, si falta alguno el panel te muestra
+primera vez que abras la ficha de un cliente, si falta alguno el panel te muestra
 **Crear el índice en Firebase** con el enlace ya armado. Tarda un minuto en
 quedar listo y no hay que volver a tocarlo.
 
 Los tres están en `firestore.indexes.json` por si prefieres subirlos de golpe
 con `firebase deploy --only firestore:indexes`.
 
-> Sólo hace falta cuando cambian las reglas mismas. Agregar gente al equipo o
-> registrar ranchos **no** requiere republicar nada: eso se escribe desde el
-> panel.
+> Sólo hace falta cuando cambian las reglas mismas. Agregar gente al equipo,
+> registrar ranchos o dar de alta clientes **no** requiere republicar nada: eso
+> se escribe desde el panel.
 
 ---
 
@@ -163,7 +189,8 @@ js/
     model.js          estados de entrega, métodos de pago, respuestas rápidas
     icons.js          set de iconos SVG
   data/               una capa por colección de Firestore
-    session.js  staff.js  clients.js  deliveries.js  invoices.js  chat.js
+    session.js  staff.js  farms.js  clients.js  deliveries.js
+    invoices.js  chat.js
     store.js          escuchas compartidas del panel
   ui/                 shell, kit de componentes, hojas, chat
   screens/            una pantalla por archivo
@@ -205,7 +232,7 @@ vuelve la conexión.
 staff/{correo}                   -- quién puede entrar al panel
   email, name, addedByName, addedAt, lastSeenAt
 
-clientEmails/{correo}            -- a qué rancho pertenece ese correo
+clientEmails/{correo}            -- a qué cliente pertenece ese correo
   clientId, clientName
 
 config/bootstrap                 -- quién fue el primer administrador
@@ -214,22 +241,33 @@ config/bootstrap                 -- quién fue el primer administrador
 users/{uid}                      -- sólo datos personales; no otorga nada
   name, email, phone
 
-clients/{clientId}
-  name, contactName, phone, email, address, notes
-  mealsPerDay, pricePerMeal
-  deliveryDays [0-6]             -- 0 = domingo
-  deliveryWindow, graceDays
-  cycleAnchor  'YYYY-MM-DD'      -- inicio del ciclo quincenal
+farms/{farmId}                   -- el lugar y lo acordado con él
+  name, contactName, phone, address, notes
   status       'active' | 'paused' | 'inactive'
-  email                          -- el acceso del rancho a su app
+  locations    [{ id, name }]    -- Casa 1, Bloque Norte, Invernadero 3
+  pricePerMeal, deliveryWindow, graceDays
+  deliveryDays [0-6]             -- 0 = domingo
+  cycleAnchor  'YYYY-MM-DD'      -- inicio del ciclo quincenal
+  defaultMealsPerDay             -- valor inicial al registrar a alguien
+
+clients/{clientId}               -- una persona que come
+  name, phone, email, notes
+  farmId, farmName               -- obligatorio
+  locationId, locationName       -- obligatorio
+  mealsPerDay                    -- lo único suyo
+  status       'active' | 'paused' | 'inactive'
+  pricePerMeal, deliveryDays, deliveryWindow, cycleAnchor, graceDays
+                                 -- copiados del rancho al escribir
 
 deliveries/{clientId_YYYY-MM-DD}
   clientId, clientName, date, meals, window, driver, notes
+  farmId, farmName, locationId, locationName
   status  'scheduled' | 'preparing' | 'en_route' | 'delivered' | 'skipped' | 'issue'
   events  [{ status, at, byName }]
 
 invoices/{clientId_YYYY-MM-DD}
-  clientId, clientName, periodStart, periodEnd, dueDate
+  clientId, clientName, farmId, farmName, locationName
+  periodStart, periodEnd, dueDate
   meals, pricePerMeal, amount, paid, settled
   payments [{ amount, method, date, reference, note, byName, at }]
 
@@ -242,6 +280,16 @@ conversations/{clientId}/messages/{id}
   text, kind ('text' | 'system'), senderUid, senderName, senderRole, at
 ```
 
+**Las condiciones se copian a propósito.** Un cliente lleva su precio y sus días
+encima en vez de consultarlos en su rancho: su app lee un solo documento y lo
+tiene todo, y las reglas de seguridad siguen siendo una comparación de id. El
+costo es que cambiar las condiciones del rancho tiene que reescribir a su gente
+—`applyTermsToClients` lo hace por lotes— y es un costo que se paga rara vez.
+
+**El nombre viaja con el id.** La ruta agrupa cientos de paradas por ubicación
+en un teléfono con una barra de señal; hacerlo requeriría leer todas las fichas.
+Por eso cada entrega carga `farmName` y `locationName` además de los ids.
+
 ---
 
 ## Seguridad
@@ -249,22 +297,25 @@ conversations/{clientId}/messages/{id}
 Las reglas en `firestore.rules` descansan en tres cosas:
 
 - **La identidad es el correo, y las dos listas las escribe el panel.**
-  `staff/{correo}` decide quién entra al panel; `clientEmails/{correo}` decide a
-  qué rancho pertenece alguien. Ninguna de las dos la puede escribir quien no es
-  ya administrador, así que nadie se otorga nada a sí mismo.
-- **Un rancho sólo ve lo suyo.** Firestore evalúa las reglas contra cada
+  `staff/{correo}` decide quién entra al panel; `clientEmails/{correo}` decide
+  quién es cada quien. Ninguna de las dos la puede escribir quien no es ya
+  administrador, así que nadie se otorga nada a sí mismo.
+- **Cada quien ve sólo lo suyo.** Firestore evalúa las reglas contra cada
   documento que devolvería una consulta, así que una consulta sin
   `where('clientId', '==', <el suyo>)` simplemente falla. No es el código de la
-  app el que limita al rancho: es la regla.
-- **El dinero es de un solo sentido.** Los ranchos leen `invoices` y
+  app el que limita al cliente: es la regla.
+- **Trabajar en el mismo rancho no da acceso a nadie.** Dos personas de Casa 1
+  comparten exactamente un documento —el del rancho, que sólo se lee— y nada
+  más: ni la ficha, ni la factura, ni el chat del compañero.
+- **El dinero es de un solo sentido.** Los clientes leen `invoices` y
   `deliveries`; sólo la cocina escribe. Un mensaje enviado no se edita ni se
   borra, ni siquiera por un administrador.
 
-### Vincular una cuenta a un rancho
+### Vincular una cuenta a una persona
 
-No hay paso de vinculación. Cuando el manager registra el rancho con un correo,
+No hay paso de vinculación. Cuando la cocina registra a alguien con un correo,
 se escribe `clientEmails/{correo} -> clientId`, y las reglas consultan ese
-documento cuando esa persona entra. El rancho no reclama nada ni canjea nada:
+documento cuando esa persona entra. El cliente no reclama nada ni canjea nada:
 que la cocina escriba el correo **es** la autorización, y cambiarlo mueve el
 acceso con él.
 
@@ -279,21 +330,28 @@ npm install      # sólo la primera vez
 npm test
 ```
 
-53 pruebas cubren lo que cada quien puede y no puede hacer: que un rancho no
-alcance a otro, que no pueda tocar su propio precio ni sus facturas, que nadie
-se agregue solo a `staff` ni reapunte su correo a otro rancho, y que la primera
-cuenta se pueda reclamar exactamente una vez. Ver `tests/rules/README.md`.
+71 pruebas cubren lo que cada quien puede y no puede hacer: que un cliente no
+alcance a otro —ni siquiera al de su misma ubicación—, que no pueda tocar su
+precio, sus facturas ni las condiciones de su rancho, que nadie se agregue solo
+a `staff` ni reapunte su correo, y que la primera cuenta se pueda reclamar
+exactamente una vez. Ver `tests/rules/README.md`.
 
 ---
 
 ## Operación diaria
 
-1. **Generar la ruta** — desde Inicio o Ruta. Crea una entrega por rancho activo
+1. **Generar la ruta** — desde Inicio o Ruta. Crea una entrega por cliente activo
    que reciba comida ese día. Volver a generarla no pisa el avance.
-2. **Avanzar las paradas** — un toque por parada, o el botón masivo del
-   encabezado para mover todas las que están en el mismo estado.
+2. **Avanzar las paradas** — la ruta viene agrupada por rancho y ubicación: el
+   botón del encabezado de una ubicación mueve a toda su gente de un toque, y
+   deja en paz lo que ya se entregó o se reportó con problema. Las excepciones se
+   avanzan una por una desde su renglón.
 3. **Cerrar la quincena** — en Cobranza. Cuenta las comidas realmente entregadas
-   del periodo cerrado y emite una factura por rancho, con vista previa antes de
-   escribir nada.
-4. **Registrar pagos** — desde la factura o la ficha del rancho. El rancho recibe
-   un aviso automático en su chat.
+   del periodo cerrado y emite **una factura por persona**, con vista previa
+   —resumida por rancho— antes de escribir nada.
+4. **Registrar pagos** — desde la factura o la ficha del cliente. Recibe un aviso
+   automático en su chat.
+
+> Buscar a alguien: la lupa en Ranchos busca ranchos *y* personas, y el ícono de
+> gente arriba a la derecha abre la lista completa de clientes con un filtro por
+> rancho. En la ruta, con más de ocho paradas, aparece su propio buscador.

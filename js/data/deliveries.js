@@ -4,6 +4,11 @@
  * The document id is `${clientId}_${YYYY-MM-DD}`, which makes every write
  * idempotent: the kitchen phone and the driver's phone can both mark the same
  * stop without creating duplicates, and a day can be re-scheduled safely.
+ *
+ * Every stop carries the farm and the location it belongs to. The driver works
+ * the route by place — all of Casa 1, then all of Bloque Norte — so grouping
+ * has to work from the delivery documents alone, without joining a few hundred
+ * client records on a phone with one bar of signal.
  */
 
 import {
@@ -23,7 +28,7 @@ const deliveriesRef = () => collection(db, 'deliveries');
 export function watchDay(day, onData, onError) {
   return onSnapshot(
     query(deliveriesRef(), where('date', '==', day)),
-    (snap) => onData(listData(snap).sort(byClientName)),
+    (snap) => onData(listData(snap).sort(byRoute)),
     onError,
   );
 }
@@ -45,6 +50,32 @@ export function watchClientDay(clientId, day, onData, onError) {
 
 export async function getDelivery(clientId, day) {
   return docData(await getDoc(doc(db, 'deliveries', deliveryId(clientId, day))));
+}
+
+/**
+ * Every stop in a date range, for all clients at once.
+ *
+ * Closing a fortnight for a few hundred workers one query at a time is a few
+ * hundred round trips on a phone. The whole period comes back in one read and
+ * is bucketed by client in memory instead.
+ */
+export async function deliveriesInRange(start, end) {
+  const snap = await getDocs(query(
+    deliveriesRef(),
+    where('date', '>=', start),
+    where('date', '<=', end),
+  ));
+  return listData(snap);
+}
+
+/** Delivered meals per client id, across a range read in one go. */
+export async function billableMealsInRange(start, end) {
+  const totals = new Map();
+  for (const row of await deliveriesInRange(start, end)) {
+    if (row.status !== 'delivered') continue;
+    totals.set(row.clientId, (totals.get(row.clientId) || 0) + (Number(row.meals) || 0));
+  }
+  return totals;
 }
 
 /** All delivered days inside a period — the basis for a cycle's invoice. */
@@ -91,6 +122,7 @@ export async function scheduleDay(clients, day, author) {
     const id = deliveryId(client.id, day);
     if (existing.has(id)) continue;
     batch.set(doc(db, 'deliveries', id), {
+      ...placeOf(client),
       clientId: client.id,
       clientName: client.name,
       date: day,
@@ -149,14 +181,42 @@ export async function advanceAll(deliveries, from, author) {
   return targets.length;
 }
 
+/**
+ * Advances a set of stops, each to whatever its own next step is.
+ *
+ * This is the whole-location tap on the route screen: a group is rarely in one
+ * uniform state — someone reported a problem, one was skipped — and the driver
+ * means "move this location along", not "move everything that is exactly at
+ * *en cocina*". Stops with nowhere to go are left alone.
+ */
+export async function advanceMany(deliveries, author) {
+  const targets = deliveries
+    .map((row) => ({ row, next: DELIVERY_FLOW[DELIVERY_FLOW.indexOf(row.status) + 1] }))
+    .filter((entry) => entry.next);
+  if (!targets.length) return 0;
+
+  const batch = writeBatch(db);
+  for (const { row, next } of targets) {
+    batch.update(doc(db, 'deliveries', row.id), {
+      status: next,
+      events: arrayUnion({ status: next, at: new Date(), byName: author?.name || 'Cocina' }),
+      updatedAt: serverTimestamp(),
+      ...(next === 'delivered' ? { deliveredAt: serverTimestamp() } : {}),
+    });
+  }
+  await batch.commit();
+  return targets.length;
+}
+
 export async function updateDelivery(id, patch) {
   await updateDoc(doc(db, 'deliveries', id), { ...patch, updatedAt: serverTimestamp() });
 }
 
-/** Adds a stop that was not on the schedule (an extra farm, a catch-up run). */
+/** Adds a stop that was not on the schedule (an extra person, a catch-up run). */
 export async function createDelivery(client, day, author, meals) {
   const id = deliveryId(client.id, day);
   await setDoc(doc(db, 'deliveries', id), {
+    ...placeOf(client),
     clientId: client.id,
     clientName: client.name,
     date: day,
@@ -199,7 +259,7 @@ export function summarizeDay(deliveries) {
   };
 }
 
-/** Which farms scheduled for today have no delivery document yet. */
+/** Which clients scheduled for today have no delivery document yet. */
 export function missingToday(clients, deliveries, day = today()) {
   const weekday = weekdayOf(day);
   const have = new Set(deliveries.map((row) => row.clientId));
@@ -211,4 +271,55 @@ export function missingToday(clients, deliveries, day = today()) {
 
 export { servingDays };
 
-const byClientName = (a, b) => String(a.clientName || '').localeCompare(String(b.clientName || ''), 'es');
+/** The farm and location a stop belongs to, denormalised onto the document. */
+const placeOf = (client) => ({
+  farmId: client.farmId || '',
+  farmName: client.farmName || '',
+  locationId: client.locationId || '',
+  locationName: client.locationName || '',
+});
+
+/** Run-sheet order: farm, then location, then person. */
+function byRoute(a, b) {
+  return cmp(a.farmName, b.farmName)
+    || cmp(a.locationName, b.locationName)
+    || cmp(a.clientName, b.clientName);
+}
+
+const cmp = (a, b) => String(a || '').localeCompare(String(b || ''), 'es');
+
+/**
+ * Stops grouped the way the route is actually driven: farm, then location.
+ *
+ * Returns `[{ farmId, farmName, locations: [{ locationId, locationName, rows }] }]`,
+ * each level keeping the order `byRoute` put the rows in.
+ */
+export function groupByPlace(rows) {
+  const farms = new Map();
+
+  for (const row of [...rows].sort(byRoute)) {
+    const farmId = row.farmId || '';
+    if (!farms.has(farmId)) {
+      farms.set(farmId, {
+        farmId,
+        farmName: row.farmName || 'Sin rancho',
+        locations: new Map(),
+      });
+    }
+    const farm = farms.get(farmId);
+    const locationId = row.locationId || '';
+    if (!farm.locations.has(locationId)) {
+      farm.locations.set(locationId, {
+        locationId,
+        locationName: row.locationName || 'Sin ubicación',
+        rows: [],
+      });
+    }
+    farm.locations.get(locationId).rows.push(row);
+  }
+
+  return [...farms.values()].map((farm) => ({
+    ...farm,
+    locations: [...farm.locations.values()],
+  }));
+}

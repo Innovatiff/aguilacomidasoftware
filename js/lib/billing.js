@@ -137,6 +137,11 @@ export function draftInvoice(client, period, deliveredMeals, day = todayKey()) {
   return {
     clientId: client.id,
     clientName: client.name,
+    // Carried on the bill so cobranza can group by farm without joining, and
+    // so a printed invoice still says where the person eats a year from now.
+    farmId: client.farmId || '',
+    farmName: client.farmName || '',
+    locationName: client.locationName || '',
     periodStart: period.start,
     periodEnd: period.end,
     dueDate: dueDateFor(period, client.graceDays),

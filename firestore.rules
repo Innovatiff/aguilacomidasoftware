@@ -3,13 +3,17 @@ rules_version = '2';
 /**
  * El Águila Cocina — Firestore security rules.
  *
+ * The shape of the data: a `farm` is a place (Mucci Farms) with its locations
+ * and its commercial terms; a `client` is one person who eats there, belonging
+ * to exactly one farm and one of its locations, billed individually.
+ *
  * Identity is decided by the signed-in account's *email address*, and both
  * lists that matter are written from inside the panel:
  *
  *   staff/{email}         — may run the kitchen panel. Managed in
  *                           Ajustes → Equipo.
- *   clientEmails/{email}  — belongs to one farm. Written when the manager
- *                           registers or edits that farm.
+ *   clientEmails/{email}  — belongs to one client. Written when the kitchen
+ *                           registers that person or changes their email.
  *
  * So onboarding anybody is the same act: type their email into the panel. No
  * Firestore documents to hand-write, no access codes to read over the phone,
@@ -28,8 +32,8 @@ rules_version = '2';
  *
  * On list queries: Firestore evaluates these rules against every document a
  * query would return, so an unscoped `list` on deliveries or invoices simply
- * fails. That is what confines a farm to its own rows — the query has to carry
- * `where('clientId', '==', <their own farm>)` to be allowed at all.
+ * fails. That is what confines a client to their own rows — the query has to
+ * carry `where('clientId', '==', <their own id>)` to be allowed at all.
  */
 
 service cloud.firestore {
@@ -54,11 +58,11 @@ service cloud.firestore {
     }
 
     /**
-     * The farm this address was registered for, or ''.
+     * The client this address was registered for, or ''.
      *
-     * Note there is no step where a farm claims anything: the manager writes
-     * the address, and that write *is* the authorisation. Nothing the farm
-     * does can change which farm it belongs to.
+     * Note there is no step where anybody claims anything: the kitchen writes
+     * the address, and that write *is* the authorisation. Nothing the client
+     * does can change which record they belong to.
      */
     function myClient() {
       return myEmail() != ''
@@ -69,6 +73,20 @@ service cloud.firestore {
 
     function ownsClient(clientId) {
       return clientId != null && clientId != '' && myClient() == clientId;
+    }
+
+    /**
+     * The farm the signed-in client works at, or ''.
+     *
+     * Two hops — email to client, client to farm — so it is only used on the
+     * `farms` collection itself, where a worker may read the place they eat at
+     * and nothing else.
+     */
+    function myFarm() {
+      return myClient() != ''
+        && exists(/databases/$(database)/documents/clients/$(myClient()))
+        ? get(/databases/$(database)/documents/clients/$(myClient())).data.get('farmId', '')
+        : '';
     }
 
     /** The one account that claimed the first-administrator seat. */
@@ -124,8 +142,8 @@ service cloud.firestore {
 
     /* --- clientEmails -------------------------------------------------------- */
 
-    // Which farm an address belongs to. Written by the panel when a farm is
-    // registered or its email changed; read by that farm to find itself.
+    // Which client an address belongs to. Written by the panel when a person is
+    // registered or their email changed; read by that person to find themselves.
     match /clientEmails/{email} {
       allow get: if isAdmin() || (signedIn() && email == myEmail());
       allow list: if isAdmin();
@@ -150,18 +168,34 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    /* --- clients (farms) ------------------------------------------------------ */
+    /* --- farms ---------------------------------------------------------------- */
+
+    // The place, its locations and the terms agreed with it. A worker may read
+    // the farm they eat at — the app shows its name and delivery window — and
+    // can never write it: the price is an agreement between the kitchen and the
+    // farm, not something the person eating gets a say in.
+    match /farms/{farmId} {
+      allow get: if isAdmin() || (farmId != '' && myFarm() == farmId);
+      allow list: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    /* --- clients (the people who eat) ------------------------------------------ */
 
     match /clients/{clientId} {
       allow get: if isAdmin() || ownsClient(clientId);
       allow list: if isAdmin();
 
-      // A farm reads its own terms and can never edit them. Its price per meal
-      // is the kitchen's to set.
+      // A client reads their own record — where they are, what they take, what
+      // it costs — and can never edit it. All of it is the kitchen's to set.
       allow write: if isAdmin();
     }
 
     /* --- deliveries ----------------------------------------------------------- */
+
+    // Each stop names the person it is for. A query without
+    // `where('clientId', '==', <their own>)` fails per-document, which is what
+    // keeps one worker from reading the whole farm's route.
 
     match /deliveries/{deliveryId} {
       allow read: if isAdmin() || ownsClient(resource.data.clientId);
@@ -172,8 +206,8 @@ service cloud.firestore {
 
     match /invoices/{invoiceId} {
       allow read: if isAdmin() || ownsClient(resource.data.clientId);
-      // Money is written by the kitchen only. A farm can see what it owes and
-      // talk about it, never change it.
+      // Money is written by the kitchen only. A client can see what they owe
+      // and talk about it, never change it.
       allow write: if isAdmin();
     }
 
@@ -183,8 +217,8 @@ service cloud.firestore {
       allow get: if isAdmin() || ownsClient(clientId);
       allow list: if isAdmin();
 
-      // Both sides maintain the thread summary as they post. A farm may only
-      // touch its own thread, and only the fields a message send updates.
+      // Both sides maintain the thread summary as they post. A client may only
+      // touch their own thread, and only the fields a message send updates.
       allow create: if isAdmin() || ownsClient(clientId);
       allow update: if isAdmin()
         || (ownsClient(clientId)

@@ -12,6 +12,7 @@ const wrap = (paths) =>
 
 export const PATHS = {
   home:      '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9.5 21v-6h5v6"/>',
+  farm:      '<path d="M3 21V9.5L12 4l9 5.5V21"/><path d="M3 21h18"/><path d="M9 21v-6h6v6"/><path d="M9 12h6"/>',
   users:     '<path d="M16 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 20v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
   userPlus:  '<path d="M15 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/>',
   truck:     '<path d="M3 16V6a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v10"/><path d="M15 9h3.6a1 1 0 0 1 .84.46L21.8 13H15"/><path d="M21.8 13v3h-1.3M8.5 16H15M3 16h1.5"/><circle cx="6.5" cy="18" r="2"/><circle cx="18.5" cy="18" r="2"/>',

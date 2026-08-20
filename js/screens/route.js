@@ -1,24 +1,29 @@
 /**
  * The run sheet.
  *
- * One tap per stop moves it forward — programado → en cocina → en camino →
- * entregado — because this screen is used with one hand while carrying trays.
- * The same tap is what the farm sees in its app, so the tracking is a
+ * Grouped the way the van is actually driven: farm, then location. Nobody
+ * delivers to "Ramírez" — they pull up at Casa 1 and hand over the whole
+ * stack — so a location moves with one tap and the individual stops underneath
+ * are there for the exceptions.
+ *
+ * The same tap is what each person sees in their app, so the tracking is a
  * by-product of the kitchen doing its normal work rather than extra data entry.
  */
 
-import { h } from '../lib/dom.js';
+import { h, mount } from '../lib/dom.js';
 import { icon } from '../lib/icons.js';
 import { screen, topbarButton } from '../ui/shell.js';
 import {
   card, button, badge, meter, emptyState, sectionLabel, skeletonRows,
-  field, input, textarea, select, alert,
+  field, input, textarea, select, alert, searchInput, avatar,
 } from '../ui/kit.js';
 import { toastOk, toastBad, confirm, sheet } from '../ui/overlay.js';
 import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
 import { store, subscribe, setDay, activeClients, dayStats, unscheduled, clientById } from '../data/store.js';
-import { setStatus, advanceAll, scheduleDay, updateDelivery, createDelivery } from '../data/deliveries.js';
+import {
+  setStatus, advanceAll, advanceMany, scheduleDay, updateDelivery, createDelivery, groupByPlace,
+} from '../data/deliveries.js';
 import { postSystemMessage } from '../data/chat.js';
 import {
   deliveryMeta, nextDeliveryStatus, ADVANCE_LABEL, DELIVERY_FLOW, stripeClass,
@@ -26,25 +31,44 @@ import {
 import {
   today, addDays, dayRange, relativeDay, formatDayLong, weekdayShort, parseDay, formatDay,
 } from '../lib/dates.js';
-import { number, plural } from '../lib/format.js';
+import { number, plural, matches } from '../lib/format.js';
 import { dbMessage } from '../firebase.js';
 
 export function renderRoute(context) {
   const requested = context.query.date;
   if (requested) setDay(requested);
 
+  // With a few hundred stops a day, finding one person means searching for
+  // them; the group headers are for driving, this is for answering the phone.
+  let term = '';
+
   const draw = () => {
     const stats = dayStats();
     screen({
       title: 'Ruta',
-      subtitle: formatDayLong(store.day),
+      subtitle: `${formatDayLong(store.day)} · ${plural(store.deliveries.length, 'parada', 'paradas')}`,
       tab: 'route',
       actions: [topbarButton('plus', { label: 'Agregar parada', onClick: addStop })],
       sunken: true,
-      sticky: dayStrip(),
+      sticky: h('div.stack',
+        dayStrip(),
+        store.deliveries.length > 8
+          ? h('div.searchbar.searchbar--sunken', searchInput({
+              placeholder: 'Buscar persona, ubicación o rancho…',
+              value: term,
+              onInput: (value) => { term = value; redraw(); },
+            }))
+          : null),
       body: store.loaded.deliveries ? body(stats) : skeletonRows(5),
     });
   };
+
+  /** Redraws only the results, so typing never steals focus from the box. */
+  function redraw() {
+    const host = document.querySelector('.page > .page__inner');
+    if (!host) return draw();
+    host.replaceWith(body(dayStats()));
+  }
 
   /* --- Day picker ---------------------------------------------------------- */
 
@@ -68,21 +92,91 @@ export function renderRoute(context) {
   /* --- Body ---------------------------------------------------------------- */
 
   function body(stats) {
-    const rows = store.deliveries;
+    const rows = store.deliveries.filter((row) => matches(
+      [row.clientName, row.farmName, row.locationName, row.driver], term));
     const pending = unscheduled();
 
-    if (!rows.length) {
+    if (!store.deliveries.length) {
       return h('div.page__inner', emptyRoute(pending));
     }
 
-    const groups = groupByStatus(rows);
+    if (!rows.length) {
+      return h('div.page__inner.stack.stack-4',
+        progressCard(stats),
+        emptyState({
+          icon: 'search',
+          title: 'Sin resultados',
+          text: `Ninguna parada coincide con “${term}”.`,
+        }));
+    }
 
     return h('div.page__inner.stack.stack-4',
       progressCard(stats),
       pending.length ? pendingNotice(pending) : null,
-      groups.map(([status, items]) => h('div.stack.stack-3',
-        sectionLabel(`${deliveryMeta(status).label} · ${items.length}`),
-        h('div.stack.stack-3', items.map(stopCard)))));
+      groupByPlace(rows).map(farmSection));
+  }
+
+  /* --- Farm → location ----------------------------------------------------- */
+
+  function farmSection(farm) {
+    const rows = farm.locations.flatMap((place) => place.rows);
+    const done = rows.filter((row) => row.status === 'delivered').length;
+
+    return h('div.stack.stack-3',
+      sectionLabel(farm.farmName,
+        h('span.t-sm.c-soft', `${done}/${rows.length}`)),
+      h('div.stack.stack-3', farm.locations.map(locationCard)));
+  }
+
+  /**
+   * One location: the group header carries the tap that moves everybody in it,
+   * and the stops are listed underneath for the ones that go differently.
+   */
+  function locationCard(place) {
+    const rows = place.rows;
+    const meals = rows.reduce((sum, row) => sum + (Number(row.meals) || 0), 0);
+    const movable = rows.filter((row) => nextDeliveryStatus(row.status));
+    const done = rows.filter((row) => row.status === 'delivered').length;
+    const problems = rows.filter((row) => row.status === 'issue').length;
+    // The label follows the stop furthest behind: that is the work left here.
+    const trailing = movable.reduce(
+      (worst, row) => (deliveryRank(row.status) < deliveryRank(worst) ? row.status : worst),
+      movable[0]?.status);
+
+    return h('div.place',
+      h('div.place__head',
+        h('div.grow', { style: { minWidth: 0 } },
+          h('div.row', { style: { gap: '6px' } },
+            h('span.c-faint', icon('pin')),
+            h('div.w-650.truncate', place.locationName)),
+          h('div.t-sm.c-soft', [
+            plural(rows.length, 'persona', 'personas'),
+            plural(meals, 'comida', 'comidas'),
+            done ? `${done} ${done === 1 ? 'entregada' : 'entregadas'}` : null,
+            problems ? `${problems} con problema` : null,
+          ].filter(Boolean).join(' · '))),
+
+        movable.length
+          ? button(ADVANCE_LABEL[trailing] || 'Avanzar', {
+              variant: trailing === 'en_route' ? 'ok' : 'primary', size: 'sm',
+              icon: deliveryMeta(nextDeliveryStatus(trailing)).icon,
+              onClick: () => advancePlace(place, movable),
+            })
+          : badge('Listo', 'ok', 'check')),
+
+      h('div.place__rows', rows.map(stopCard)));
+  }
+
+  async function advancePlace(place, movable) {
+    if (movable.length === 1) {
+      const [row] = movable;
+      await advance(row, nextDeliveryStatus(row.status));
+      return;
+    }
+    try {
+      const moved = await advanceMany(movable, author());
+      toastOk(`${place.locationName}: ${moved} ${moved === 1 ? 'parada avanzada' : 'paradas avanzadas'}`);
+    } catch (error) { toastBad(dbMessage(error)); }
   }
 
   function progressCard(stats) {
@@ -106,12 +200,21 @@ export function renderRoute(context) {
           : null));
   }
 
+  /** Who is missing from today's route, counted by farm rather than listed. */
   function pendingNotice(pending) {
+    const byFarm = new Map();
+    for (const client of pending) {
+      const name = client.farmName || 'Sin rancho';
+      byFarm.set(name, (byFarm.get(name) || 0) + 1);
+    }
+    const summary = [...byFarm.entries()]
+      .map(([name, count]) => `${name} (${count})`).join(' · ');
+
     return card(h('div.row.row--top',
       h('span', { style: { color: 'var(--warn-500)' } }, icon('alert')),
       h('div.grow',
         h('div.w-600', `${pending.length} sin programar`),
-        h('div.t-sm.c-soft', pending.map((c) => c.name).join(', '))),
+        h('div.t-sm.c-soft', summary)),
       button('Agregar', { variant: 'ghost', size: 'sm', onClick: generate })), { className: 'card--tight' });
   }
 
@@ -121,8 +224,8 @@ export function renderRoute(context) {
       icon: 'route',
       title: 'Sin entregas este día',
       text: servable
-        ? `${servable} ${servable === 1 ? 'rancho recibe' : 'ranchos reciben'} comida ${relativeDay(store.day).toLowerCase()}. Genera la ruta para empezar.`
-        : 'Ningún rancho activo tiene servicio programado para este día.',
+        ? `${servable} ${servable === 1 ? 'persona recibe' : 'personas reciben'} comida ${relativeDay(store.day).toLowerCase()}. Genera la ruta para empezar.`
+        : 'Nadie tiene servicio programado para este día.',
       action: servable
         ? button('Generar la ruta', { icon: 'calendar', onClick: generate })
         : button('Agregar una parada', { variant: 'ghost', icon: 'plus', onClick: addStop }),
@@ -136,35 +239,33 @@ export function renderRoute(context) {
     const next = nextDeliveryStatus(row.status);
     const client = clientById(row.clientId);
 
-    return h(`div.route-card${row.status === 'delivered' ? '.is-delivered' : ''}${row.status === 'issue' ? '.is-issue' : ''}${row.status === 'skipped' ? '.is-skipped' : ''}`,
-      h('div.route-card__top',
-        h(`div.${stripeClass(meta.tone).split(' ').join('.')}`),
-        h('div.grow', { style: { minWidth: 0 } },
-          h('div.row.row--between',
-            h('div.w-650.truncate', row.clientName),
-            badge(meta.short, meta.tone, meta.icon)),
-          h('div.t-sm.c-soft.truncate', { style: { marginTop: '2px' } },
-            [plural(row.meals, 'comida', 'comidas'), row.window, row.driver]
-              .filter(Boolean).join(' · ')),
-          row.notes ? h('div.t-xs.c-warn.truncate', { style: { marginTop: '2px' } }, row.notes) : null)),
+    return h(`div.stop${row.status === 'delivered' ? '.is-delivered' : ''}${row.status === 'issue' ? '.is-issue' : ''}${row.status === 'skipped' ? '.is-skipped' : ''}`,
+      h(`div.${stripeClass(meta.tone).split(' ').join('.')}`),
 
-      h('div.route-card__bar',
-        next
-          ? button(ADVANCE_LABEL[row.status] || 'Avanzar', {
-              variant: next === 'delivered' ? 'ok' : 'primary', size: 'sm',
-              icon: deliveryMeta(next).icon,
-              onClick: () => advance(row, next),
-            })
-          : row.status === 'delivered'
-            ? button('Entregado', { variant: 'ghost', size: 'sm', icon: 'check', disabled: true })
-            : button('Reactivar', {
-                variant: 'ghost', size: 'sm', icon: 'refresh',
-                onClick: () => advance(row, 'scheduled'),
-              }),
-        button('', {
-          variant: 'ghost', size: 'sm', icon: 'more', className: 'route-card__more',
-          onClick: () => options(row, client),
-        })));
+      h('div.grow', { style: { minWidth: 0 } },
+        h('div.w-600.truncate', row.clientName),
+        h('div.t-xs.c-soft.truncate',
+          [plural(row.meals, 'comida', 'comidas'), meta.short, row.driver]
+            .filter(Boolean).join(' · ')),
+        row.notes ? h('div.t-xs.c-warn.truncate', row.notes) : null),
+
+      next
+        ? button('', {
+            variant: next === 'delivered' ? 'ok' : 'soft', size: 'sm',
+            icon: deliveryMeta(next).icon,
+            onClick: () => advance(row, next),
+          })
+        : row.status === 'delivered'
+          ? h('span.stop__done', icon('check'))
+          : button('', {
+              variant: 'ghost', size: 'sm', icon: 'refresh',
+              onClick: () => advance(row, 'scheduled'),
+            }),
+
+      button('', {
+        variant: 'quiet', size: 'sm', icon: 'more',
+        onClick: () => options(row, client),
+      }));
   }
 
   /* --- Actions ------------------------------------------------------------- */
@@ -201,20 +302,34 @@ export function renderRoute(context) {
     const candidates = activeClients()
       .filter((client) => !store.deliveries.some((row) => row.clientId === client.id));
 
-    if (!candidates.length) { toastBad('Todos los ranchos activos ya están en la ruta.'); return; }
+    if (!candidates.length) { toastBad('Todos los clientes activos ya están en la ruta.'); return; }
 
     const picked = await sheet({
       title: 'Agregar parada',
-      build: (close) => h('div.stack.stack-2',
-        h('p.t-sm.c-soft', `Se agregará a la ruta de ${formatDay(store.day)}.`),
-        candidates.map((client) => h('button.item', {
-          type: 'button',
-          style: { border: '1px solid var(--border)', borderRadius: 'var(--r-md)' },
-          onclick: () => close(client),
-        },
-        h('div.item__main',
-          h('div.item__title', client.name),
-          h('div.item__meta', plural(client.mealsPerDay, 'comida', 'comidas')))))),
+      build: (close) => {
+        const rows = h('div.stack.stack-2');
+        const paint = (search) => mount(rows, candidates
+          .filter((client) => matches([client.name, client.farmName, client.locationName], search))
+          .slice(0, 30)
+          .map((client) => h('button.item.item--tap-target', {
+            type: 'button',
+            style: { border: '1px solid var(--border)', borderRadius: 'var(--r-md)' },
+            onclick: () => close(client),
+          },
+          avatar(client.name, { size: 'sm' }),
+          h('div.item__main',
+            h('div.item__title', client.name),
+            h('div.item__meta', [
+              client.farmName, client.locationName,
+              plural(client.mealsPerDay, 'comida', 'comidas'),
+            ].filter(Boolean).join(' · '))))));
+        paint('');
+
+        return h('div.stack.stack-3',
+          h('p.t-sm.c-soft', `Se agregará a la ruta de ${formatDay(store.day)}.`),
+          searchInput({ placeholder: 'Buscar…', onInput: paint }),
+          rows);
+      },
     });
     if (!picked) return;
 
@@ -227,7 +342,7 @@ export function renderRoute(context) {
   /** Per-stop menu: meals, driver, notes, problem, skip. */
   async function options(row, client) {
     await sheet({
-      title: row.clientName,
+      title: `${row.clientName}${row.locationName ? ` · ${row.locationName}` : ''}`,
       build: (close) => {
         let meals = row.meals;
         let driver = row.driver || '';
@@ -264,10 +379,14 @@ export function renderRoute(context) {
           h('div.divider'),
 
           h('div.stack.stack-2',
-            button('Ver rancho', {
+            button('Ver ficha del cliente', {
               variant: 'ghost', block: true, icon: 'users',
               onClick: () => { close(); go(`/clients/${row.clientId}`); },
             }),
+            row.farmId ? button('Ver rancho', {
+              variant: 'ghost', block: true, icon: 'farm',
+              onClick: () => { close(); go(`/farms/${row.farmId}`); },
+            }) : null,
             client ? button('Enviar mensaje', {
               variant: 'ghost', block: true, icon: 'chat',
               onClick: () => { close(); go(`/chat/${row.clientId}`); },
@@ -352,13 +471,11 @@ export function renderRoute(context) {
 
 /* --- Helpers ----------------------------------------------------------------- */
 
-/** Stops grouped by status, in the order the day actually moves. */
-function groupByStatus(rows) {
-  const order = ['issue', 'en_route', 'preparing', 'scheduled', 'delivered', 'skipped'];
-  const map = new Map(order.map((status) => [status, []]));
-  for (const row of rows) (map.get(row.status) || map.get('scheduled')).push(row);
-  return [...map.entries()].filter(([, items]) => items.length);
-}
+/** How far along the flow a status is — used to find a group's laggard. */
+const deliveryRank = (status) => {
+  const at = DELIVERY_FLOW.indexOf(status);
+  return at < 0 ? DELIVERY_FLOW.length : at;
+};
 
 /** The one bulk move that makes sense right now, if any. */
 function nextBulkAction(rows) {

@@ -1,6 +1,10 @@
 /**
- * Client list — every farm the kitchen serves, with the two facts staff look
- * for most: is it active today, and does it owe money.
+ * Every client, across every farm.
+ *
+ * The farms screen is the usual way in — people are found through the place
+ * they work. This one exists for the other question: "where is Ramírez?", when
+ * nobody remembers which farm he is at. So it is a flat, searchable list, with
+ * the farm and location on every row.
  */
 
 import { h } from '../lib/dom.js';
@@ -14,22 +18,23 @@ import { store, subscribe, billingFor, deliveryFor } from '../data/store.js';
 import { matchesSearch } from '../data/clients.js';
 import { clientStatusMeta, deliveryMeta } from '../lib/model.js';
 import { money, plural } from '../lib/format.js';
-import { STATUS_LABEL } from '../lib/billing.js';
 
 export function renderClients(context) {
   let term = '';
-  let filter = context.query.filter || 'all';
+  // `?farm=` narrows to one farm, which is how the route screen links here.
+  let filter = context.query.farm || context.query.filter || 'all';
 
   const draw = () => {
     const rows = visible();
 
     screen({
-      title: 'Ranchos',
-      subtitle: `${store.clients.length} registrados`,
+      title: 'Clientes',
+      subtitle: `${store.clients.length} en ${plural(store.farms.length, 'rancho', 'ranchos')}`,
+      backTo: '/farms',
       tab: 'clients',
       sticky: h('div.searchbar',
         searchInput({
-          placeholder: 'Buscar rancho, contacto o teléfono…',
+          placeholder: 'Buscar por nombre, rancho o ubicación…',
           value: term,
           onInput: (value) => { term = value; redraw(); },
         }),
@@ -39,7 +44,7 @@ export function renderClients(context) {
         ? (rows.length ? list(rows.map(row), { card: false }) : empty())
         : skeletonRows(6),
       fab: h('button.fab', { type: 'button', onclick: () => go('/clients/new') },
-        icon('plus'), 'Nuevo'),
+        icon('userPlus'), 'Cliente'),
     });
   };
 
@@ -55,9 +60,14 @@ export function renderClients(context) {
     const owing = store.clients.filter((client) => (billingFor(client)?.balance || 0) > 0).length;
     return [
       { value: 'all', label: 'Todos', count: store.clients.length },
-      { value: 'active', label: 'Activos', count: store.clients.filter((c) => c.status === 'active').length },
       { value: 'owing', label: 'Con adeudo', count: owing },
       { value: 'paused', label: 'En pausa', count: store.clients.filter((c) => c.status !== 'active').length },
+      // One chip per farm, so a long roster can be cut down to the farm in hand.
+      ...store.farms.map((farm) => ({
+        value: farm.id,
+        label: farm.name,
+        count: store.clients.filter((client) => client.farmId === farm.id).length,
+      })),
     ];
   }
 
@@ -65,10 +75,10 @@ export function renderClients(context) {
     return store.clients
       .filter((client) => matchesSearch(client, term))
       .filter((client) => {
-        if (filter === 'active') return client.status === 'active';
-        if (filter === 'paused') return client.status !== 'active';
+        if (filter === 'all') return true;
         if (filter === 'owing') return (billingFor(client)?.balance || 0) > 0;
-        return true;
+        if (filter === 'paused') return client.status !== 'active';
+        return client.farmId === filter;
       });
   }
 
@@ -77,15 +87,20 @@ export function renderClients(context) {
       return emptyState({
         icon: 'search',
         title: 'Sin resultados',
-        text: `Ningún rancho coincide con “${term}”.`,
+        text: `Ningún cliente coincide con “${term}”.`,
       });
     }
     if (!store.clients.length) {
       return emptyState({
         icon: 'users',
-        title: 'Todavía no hay ranchos',
-        text: 'Registra tu primer cliente para empezar a llevar el control de entregas y pagos.',
-        action: button('Registrar rancho', { icon: 'userPlus', onClick: () => go('/clients/new') }),
+        title: 'Todavía no hay clientes',
+        text: store.farms.length
+          ? 'Entra a un rancho y registra a su gente ahí.'
+          : 'Registra primero un rancho: los clientes viven dentro de uno.',
+        action: button(store.farms.length ? 'Registrar cliente' : 'Registrar rancho', {
+          icon: 'userPlus',
+          onClick: () => go(store.farms.length ? '/clients/new' : '/farms/new'),
+        }),
       });
     }
     return emptyState({ icon: 'filter', title: 'Nada en este filtro', text: 'Prueba con otro filtro.' });
@@ -105,10 +120,7 @@ function row(client) {
   return itemRow({
     lead: avatar(client.name),
     title: client.name,
-    meta: [
-      plural(client.mealsPerDay, 'comida/día', 'comidas/día'),
-      client.contactName,
-    ].filter(Boolean).join(' · '),
+    meta: [client.farmName, client.locationName].filter(Boolean).join(' · ') || 'Sin ubicación',
     end: [
       owes
         ? badge(money(billing.balance, { round: true }), billing.status === 'overdue' ? 'bad' : 'warn')
@@ -117,9 +129,7 @@ function row(client) {
           : stop
             ? badge(deliveryMeta(stop.status).short, deliveryMeta(stop.status).tone)
             : null,
-      owes && billing.status === 'overdue'
-        ? h('span.t-xs.c-bad.w-600', STATUS_LABEL.overdue)
-        : null,
+      client.locationId ? null : badge('Sin ubicación', 'bad'),
     ].filter(Boolean),
     onClick: () => go(`/clients/${client.id}`),
   });

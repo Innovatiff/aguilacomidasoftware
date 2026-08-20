@@ -1,16 +1,22 @@
 /**
- * Farms (clients).
+ * Clients — the people who eat.
  *
- * A client record holds the commercial terms — meals per day, price per meal,
- * which weekdays are served, and the anchor date its bi-weekly billing cycles
- * are counted from. Everything else about the client (deliveries, invoices,
- * messages) hangs off `clientId`.
+ * A client is one worker, and every worker belongs to a farm and to one of
+ * that farm's locations. There is no such thing as a client without a place to
+ * take the food to, which is why `farmId` and `locationId` are refused when
+ * empty rather than defaulted.
  *
- * The email address is not just contact detail: it is how the farm gets into
- * its app. Registering a farm writes `clientEmails/{email} -> clientId`, and
- * that document is what the security rules consult when the farm signs in.
- * Changing the email here moves the access with it, which is also how access is
- * taken away.
+ * The commercial terms are the farm's, not the worker's: price per meal, the
+ * serving weekdays, the delivery window and the billing anchor are copied down
+ * from the farm when the worker is registered and re-copied by
+ * `applyTermsToClients` whenever the farm changes them. What belongs to the
+ * worker alone is how many meals they take and whether they are active.
+ *
+ * The email address is optional — plenty of workers do not have one — but when
+ * it is present it is not contact detail: it is how that person opens the app.
+ * Registering it writes `clientEmails/{email} -> clientId`, and that document
+ * is what the security rules consult when they sign in. Changing the address
+ * moves the access with it, which is also how access is taken away.
  */
 
 import {
@@ -20,6 +26,8 @@ import {
 } from '../firebase.js';
 import { today } from '../lib/dates.js';
 import { DEFAULT_DELIVERY_DAYS, DEFAULT_GRACE_DAYS } from '../lib/billing.js';
+import { matches } from '../lib/format.js';
+import { findLocation } from './farms.js';
 
 const clientsRef = () => collection(db, 'clients');
 
@@ -28,25 +36,35 @@ export const normalizeEmail = (email) => String(email || '').trim().toLowerCase(
 
 export const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(email));
 
-export const emptyClient = () => ({
+/** A blank worker, pre-filled with everything their farm already decided. */
+export const emptyClient = (farm) => ({
+  farmId: farm?.id || '',
+  farmName: farm?.name || '',
+  locationId: '',
+  locationName: '',
   name: '',
-  contactName: '',
   phone: '',
   email: '',
-  address: '',
   notes: '',
-  mealsPerDay: 10,
-  pricePerMeal: 0,
-  deliveryDays: [...DEFAULT_DELIVERY_DAYS],
-  deliveryWindow: '11:00 – 13:00',
-  graceDays: DEFAULT_GRACE_DAYS,
-  cycleAnchor: today(),
+  mealsPerDay: Number(farm?.defaultMealsPerDay) || 1,
   status: 'active',
+  ...termsOf(farm),
 });
+
+/** The farm's terms, in the shape they are stored on a worker. */
+export function termsOf(farm) {
+  return {
+    pricePerMeal: Number(farm?.pricePerMeal) || 0,
+    deliveryDays: [...(farm?.deliveryDays?.length ? farm.deliveryDays : DEFAULT_DELIVERY_DAYS)],
+    deliveryWindow: farm?.deliveryWindow || '11:00 – 13:00',
+    cycleAnchor: farm?.cycleAnchor || today(),
+    graceDays: farm?.graceDays ?? DEFAULT_GRACE_DAYS,
+  };
+}
 
 /* --- Reads ----------------------------------------------------------------- */
 
-/** Live list of every farm, alphabetical. Returns an unsubscribe function. */
+/** Live list of every worker, alphabetical. Returns an unsubscribe function. */
 export function watchClients(onData, onError) {
   return onSnapshot(
     query(clientsRef(), orderBy('name')),
@@ -61,7 +79,7 @@ export function watchClient(clientId, onData, onError) {
 
 export const getClient = async (clientId) => docData(await getDoc(doc(db, 'clients', clientId)));
 
-/** Which farm an address already belongs to, if any. */
+/** Which worker an address already belongs to, if any. */
 export async function clientForEmail(email) {
   const key = normalizeEmail(email);
   if (!isValidEmail(key)) return null;
@@ -72,26 +90,31 @@ export async function clientForEmail(email) {
 /* --- Writes ---------------------------------------------------------------- */
 
 /**
- * Registers a farm and grants its email access, in one batch.
+ * Registers a worker at a farm location, and grants their email access if they
+ * gave one.
  *
- * The two writes belong together: a farm whose email lookup is missing cannot
- * open its app, and a lookup pointing at a farm that does not exist is a
- * dangling grant. Committing them separately would leave either state
+ * Both writes go in one batch. A worker whose email lookup is missing cannot
+ * open the app, and a lookup pointing at a worker who does not exist is a
+ * dangling grant; committing them separately would leave either state
  * reachable.
  */
-export async function createClient(data, author) {
+export async function createClient(data, farm, author) {
+  const placed = place(data, farm);
   const email = normalizeEmail(data.email);
-  if (!isValidEmail(email)) throw new Error('Escribe un correo válido para el rancho.');
 
-  const taken = await clientForEmail(email);
-  if (taken) throw new Error(`Ese correo ya está registrado para ${taken.clientName || 'otro rancho'}.`);
+  if (email) {
+    if (!isValidEmail(email)) throw new Error('El correo no es válido. Déjalo vacío si no tiene.');
+    const taken = await clientForEmail(email);
+    if (taken) throw new Error(`Ese correo ya es de ${taken.clientName || 'otro cliente'}.`);
+  }
 
   const ref = doc(clientsRef());
   const batch = writeBatch(db);
 
   batch.set(ref, {
-    ...emptyClient(),
+    ...emptyClient(farm),
     ...sanitize(data),
+    ...placed,
     email,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -99,54 +122,76 @@ export async function createClient(data, author) {
     createdByName: author?.name || '',
   });
 
-  batch.set(doc(db, 'clientEmails', email), {
-    clientId: ref.id,
-    clientName: data.name || '',
-    updatedAt: serverTimestamp(),
-  });
+  if (email) {
+    batch.set(doc(db, 'clientEmails', email), {
+      clientId: ref.id,
+      clientName: data.name || '',
+      updatedAt: serverTimestamp(),
+    });
+  }
 
   await batch.commit();
   return { id: ref.id, email };
 }
 
 /**
- * Updates a farm, moving its access if the email changed.
+ * Updates a worker, moving their access if the email changed.
  *
  * The old lookup is deleted in the same batch as the new one is written, so
- * the previous address never keeps working after the change.
+ * the previous address never keeps working after the change. Clearing the
+ * field removes the access outright.
  */
-export async function updateClient(clientId, patch, previousEmail) {
+export async function updateClient(clientId, patch, previousEmail, farm) {
   const patchEmail = patch.email !== undefined;
   const email = patchEmail ? normalizeEmail(patch.email) : null;
   const previous = normalizeEmail(previousEmail);
 
-  if (patchEmail) {
-    if (!isValidEmail(email)) throw new Error('Escribe un correo válido para el rancho.');
+  if (patchEmail && email) {
+    if (!isValidEmail(email)) throw new Error('El correo no es válido. Déjalo vacío si no tiene.');
     if (email !== previous) {
       const taken = await clientForEmail(email);
       if (taken && taken.clientId !== clientId) {
-        throw new Error(`Ese correo ya está registrado para ${taken.clientName || 'otro rancho'}.`);
+        throw new Error(`Ese correo ya es de ${taken.clientName || 'otro cliente'}.`);
       }
     }
   }
 
+  // Only re-resolve the location when the write is actually moving the worker;
+  // a patch that just renames them has no farm to check against.
+  const placed = (patch.farmId !== undefined || patch.locationId !== undefined)
+    ? place({ ...patch, farmId: patch.farmId ?? farm?.id }, farm)
+    : {};
+
   const batch = writeBatch(db);
   batch.update(doc(db, 'clients', clientId), {
     ...sanitize(patch),
+    ...placed,
     ...(patchEmail ? { email } : {}),
     updatedAt: serverTimestamp(),
   });
 
   if (patchEmail) {
     if (previous && previous !== email) batch.delete(doc(db, 'clientEmails', previous));
-    batch.set(doc(db, 'clientEmails', email), {
-      clientId,
-      clientName: patch.name || '',
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
+    if (email) {
+      batch.set(doc(db, 'clientEmails', email), {
+        clientId,
+        clientName: patch.name || '',
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+    }
   }
 
   await batch.commit();
+}
+
+/** Moves a worker to another location — of their farm, or of another one. */
+export async function moveClient(clientId, farm, locationId) {
+  const placed = place({ farmId: farm?.id, locationId }, farm);
+  await updateDoc(doc(db, 'clients', clientId), {
+    ...placed,
+    ...termsOf(farm),
+    updatedAt: serverTimestamp(),
+  });
 }
 
 export async function setClientStatus(clientId, status) {
@@ -161,18 +206,48 @@ export async function deleteClient(clientId, email) {
   await batch.commit();
 }
 
+/* --- Placement ------------------------------------------------------------- */
+
+/**
+ * Resolves farm + location into the four fields stored on the worker.
+ *
+ * The names travel with the ids on purpose: the route screen groups thousands
+ * of stops by location and the client's own app shows where they eat, and
+ * neither should need a second read to say "Casa 1".
+ */
+function place(data, farm) {
+  const farmId = data.farmId || farm?.id || '';
+  if (!farmId) throw new Error('Elige el rancho al que pertenece.');
+  if (farm && farm.id !== farmId) throw new Error('El rancho no coincide con la ubicación elegida.');
+
+  const locationId = data.locationId || '';
+  if (!locationId) throw new Error('Elige la ubicación donde está esta persona.');
+
+  const location = findLocation(farm, locationId);
+  if (!location) throw new Error('Esa ubicación ya no existe en el rancho.');
+
+  return {
+    farmId,
+    farmName: farm?.name || '',
+    locationId,
+    locationName: location.name,
+  };
+}
+
 /* --- Shaping --------------------------------------------------------------- */
 
 const NUMERIC = new Set(['mealsPerDay', 'pricePerMeal', 'graceDays']);
+
+/** Fields a worker never sets for themselves — they belong to the farm. */
+const NOT_WRITABLE = new Set(['id', 'farmId', 'farmName', 'locationId', 'locationName', 'email']);
 
 /** Coerces form strings into the types Firestore should hold. */
 function sanitize(data) {
   const out = {};
   for (const [key, value] of Object.entries(data)) {
-    if (value === undefined) continue;
+    if (value === undefined || NOT_WRITABLE.has(key)) continue;
     if (NUMERIC.has(key)) out[key] = Number(value) || 0;
     else if (key === 'deliveryDays') out[key] = (value || []).map(Number).sort((a, b) => a - b);
-    else if (key === 'email') out[key] = normalizeEmail(value);
     else if (typeof value === 'string') out[key] = value.trim();
     else out[key] = value;
   }
@@ -180,12 +255,5 @@ function sanitize(data) {
 }
 
 /** Case- and accent-insensitive search across the fields staff actually type. */
-export function matchesSearch(client, term) {
-  const needle = normalize(term);
-  if (!needle) return true;
-  return [client.name, client.contactName, client.phone, client.address, client.email]
-    .some((field) => normalize(field).includes(needle));
-}
-
-const normalize = (text) =>
-  String(text || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+export const matchesSearch = (client, term) => matches(
+  [client.name, client.phone, client.email, client.farmName, client.locationName], term);

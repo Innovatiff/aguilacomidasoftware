@@ -127,6 +127,13 @@
 .item__end { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex: none; }
 .item--tap-target { min-height: 62px; }
 
+/* Icon standing in for an avatar — a location, a period, a document. */
+.item__ico {
+  flex: none; display: grid; place-items: center;
+  width: 38px; height: 38px; border-radius: var(--r-md);
+  background: var(--ink-50); color: var(--text-soft);
+}
+
 .list { background: var(--surface); }
 .list > * + * { border-top: 1px solid var(--border); }
 .list--card {
@@ -315,19 +322,35 @@
 
 /* --- Route / run sheet ------------------------------------------------------ */
 
-.route-card {
+/* A location on the run sheet: header taps the whole group, rows are the
+   exceptions inside it. */
+.place {
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
   background: var(--surface);
   overflow: hidden;
 }
-.route-card__top { display: flex; align-items: center; gap: var(--s3); padding: var(--s3) var(--s4); }
-.route-card__bar { display: flex; gap: var(--s2); padding: 0 var(--s3) var(--s3); }
-.route-card__bar .btn { flex: 1; }
-.route-card__bar .route-card__more { flex: none; width: 46px; padding: 0; }
-.route-card.is-delivered { background: var(--ok-50); border-color: #cdeedb; }
-.route-card.is-issue { background: var(--bad-50); border-color: #f8d6d6; }
-.route-card.is-skipped { opacity: .62; }
+.place__head {
+  display: flex; align-items: center; gap: var(--s3);
+  padding: var(--s3) var(--s4);
+  border-bottom: 1px solid var(--border);
+}
+.place__head .btn { flex: none; }
+.place__rows > * + * { border-top: 1px solid var(--border); }
+
+.stop {
+  display: flex; align-items: center; gap: var(--s3);
+  padding: var(--s2) var(--s4) var(--s2) var(--s3);
+  min-height: 54px;
+}
+.stop .btn--sm { flex: none; width: 42px; padding: 0; }
+.stop__done {
+  flex: none; display: grid; place-items: center;
+  width: 42px; height: 34px; color: var(--ok-600);
+}
+.stop.is-delivered { background: var(--ok-50); }
+.stop.is-issue { background: var(--bad-50); }
+.stop.is-skipped { opacity: .62; }
 
 .stripe {
   width: 4px; align-self: stretch; flex: none;
