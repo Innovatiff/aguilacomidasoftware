@@ -95,19 +95,37 @@ export function humanDelta(days) {
 }
 
 export function formatTime(value) {
-  if (!value) return '';
-  return value.toLocaleTimeString('es-MX', { hour: 'numeric', minute: '2-digit' })
+  const date = asDate(value);
+  if (!date) return '';
+  return date.toLocaleTimeString('es-MX', { hour: 'numeric', minute: '2-digit' })
     .replace(/\s?([ap])\.?\s?m\.?/i, (_, p) => ` ${p.toLowerCase()}.m.`);
+}
+
+/**
+ * A Date, from a Date or from a Firestore Timestamp.
+ *
+ * Firestore hands back Timestamps, and every one of these helpers used to
+ * assume its caller had already converted. Accepting both is one line here and
+ * removes a whole class of "not a function" the moment a new screen renders a
+ * stamp it read straight from a document.
+ */
+function asDate(value) {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (typeof value.toDate === 'function') return value.toDate();
+  if (typeof value === 'number' || typeof value === 'string') return new Date(value);
+  return null;
 }
 
 /** Chat stamp: time today, "Ayer", weekday this week, date beyond. */
 export function formatStamp(value) {
-  if (!value) return '';
-  const diff = daysBetween(dayKey(value), today());
-  if (diff === 0) return formatTime(value);
+  const date = asDate(value);
+  if (!date) return '';
+  const diff = daysBetween(dayKey(date), today());
+  if (diff === 0) return formatTime(date);
   if (diff === 1) return 'Ayer';
-  if (diff < 7) return capitalize(weekdayShort(dayKey(value)));
-  return formatDayShort(dayKey(value));
+  if (diff < 7) return capitalize(weekdayShort(dayKey(date)));
+  return formatDayShort(dayKey(date));
 }
 
 /** Inclusive list of day keys. */

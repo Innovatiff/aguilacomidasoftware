@@ -1,7 +1,7 @@
 /**
- * A single fortnight's bill: what was delivered, what it costs, what came in,
- * and what is still owed — plus the two things staff do from here, take a
- * payment and send a reminder.
+ * A single fortnight's bill: what it costs, what was delivered for it, what
+ * came in, and what is still owed — plus the two things staff do from here,
+ * take a payment and send a reminder.
  */
 
 import { h } from '../lib/dom.js';
@@ -12,10 +12,11 @@ import {
   alert, loading, meter,
 } from '../ui/kit.js';
 import { toastOk, toastBad, confirm, sheet } from '../ui/overlay.js';
-import { openPaymentSheet } from '../ui/payment-sheet.js';
+import { openChargeSheet } from '../ui/charge-sheet.js';
 import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
 import { watchInvoice, reversePayment } from '../data/invoices.js';
+import { store, clientById, invoicesFor } from '../data/store.js';
 import { postSystemMessage } from '../data/chat.js';
 import { balanceOf, invoiceStatus, STATUS_LABEL, STATUS_TONE } from '../lib/billing.js';
 import {
@@ -92,15 +93,14 @@ export function renderInvoice(context) {
 
         balance > 0
           ? h('div.stack.stack-2',
-              button('Registrar pago', {
-                variant: 'primary', block: true, icon: 'wallet',
-                onClick: async () => { await openPaymentSheet(invoice, author()); },
+              button('Cobrar', {
+                variant: 'primary', block: true, icon: 'cash', onClick: charge,
               }),
               button('Enviar recordatorio', {
                 variant: 'ghost', block: true, icon: 'chat',
                 onClick: sendReminder,
               }))
-          : button('Ver el rancho', {
+          : button('Ver la ficha del cliente', {
               variant: 'ghost', block: true, icon: 'users',
               onClick: () => go(`/clients/${invoice.clientId}`),
             }))),
@@ -108,13 +108,18 @@ export function renderInvoice(context) {
       /* Breakdown */
       sectionLabel('Desglose'),
       card(defList([
-        defRow('Rancho', invoice.clientName),
+        defRow('Cliente', invoice.clientName),
+        [invoice.farmName, invoice.locationName].filter(Boolean).length
+          ? defRow('Dónde', [invoice.farmName, invoice.locationName].filter(Boolean).join(' · '))
+          : null,
         defRow('Periodo', `${formatDay(invoice.periodStart)} – ${formatDay(invoice.periodEnd)}`),
+        defRow('Plan', invoice.mealsPerDay
+          ? `${number(invoice.mealsPerDay)} ${invoice.mealsPerDay === 1 ? 'comida' : 'comidas'} al día`
+          : '—'),
         defRow('Comidas entregadas', number(invoice.meals)),
-        defRow('Precio por comida', money(invoice.pricePerMeal)),
         defRow('Fecha límite de pago', formatDayLong(invoice.dueDate)),
-        defRow('Total', moneyFull(amount), { total: true }),
-      ])),
+        defRow('Quincena', moneyFull(amount), { total: true }),
+      ].filter(Boolean))),
 
       /* Payments */
       sectionLabel('Pagos recibidos'),
@@ -152,25 +157,50 @@ export function renderInvoice(context) {
           payment.byName ? defRow('Registró', payment.byName) : null,
           payment.note ? defRow('Nota', payment.note) : null,
         ].filter(Boolean))),
-        button('Eliminar este pago', {
+        payment.receiptId
+          ? button('Ver el recibo', {
+              variant: 'ghost', block: true, icon: 'receipt',
+              onClick: () => { close(); go(`/receipts/${payment.receiptId}`); },
+            })
+          : null,
+        button('Cancelar este pago', {
           variant: 'danger-soft', block: true, icon: 'ban',
           onClick: async () => {
             close();
             if (!await confirm({
-              title: 'Eliminar pago',
-              message: `Se restará ${money(payment.amount)} de lo cobrado y la factura volverá a quedar pendiente.`,
-              confirmLabel: 'Eliminar pago', tone: 'danger', icon: 'alert',
+              title: 'Cancelar pago',
+              message: `Se restará ${money(payment.amount)} de lo cobrado y la factura volverá a quedar `
+                + 'pendiente. Se registra un recibo de cancelación, visible también para el cliente; '
+                + 'el recibo original no se borra.',
+              confirmLabel: 'Cancelar el pago', tone: 'danger', icon: 'alert',
             })) return;
             try {
-              await reversePayment(id, index);
-              toastOk('Pago eliminado');
+              await reversePayment(id, index, author());
+              toastOk('Pago cancelado');
             } catch (error) { toastBad(error?.message || dbMessage(error)); }
           },
         })),
     });
   }
 
-  /** A reminder is a message in the farm's own thread, not a separate channel. */
+  /**
+   * Money in, from the bill. The sheet works from the *person*, so a payment
+   * bigger than this fortnight rolls onto the next one instead of being
+   * refused at the counter.
+   */
+  async function charge() {
+    const client = clientById(invoice.clientId);
+    if (!client) { toastBad('No se encontró la ficha de este cliente.'); return; }
+    const receipt = await openChargeSheet({
+      client,
+      invoices: invoicesFor(client.id),
+      tiers: store.pricing,
+      author: author(),
+    });
+    if (receipt) go(`/receipts/${receipt.id}`);
+  }
+
+  /** A reminder is a message in the client's own thread, not a separate channel. */
   async function sendReminder() {
     const balance = balanceOf(invoice);
     const late = daysBetween(today(), invoice.dueDate);

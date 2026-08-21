@@ -70,9 +70,9 @@ function body() {
       stat({
         label: 'Por cobrar',
         value: money(cash.outstanding, { round: true }),
-        foot: cash.outstanding > 0 ? 'En facturas abiertas' : 'Todo al corriente',
+        foot: cash.outstanding > 0 ? 'Toca para cobrar' : 'Todo al corriente',
         tone: cash.outstanding > 0 ? 'accent' : null,
-        onClick: () => go('/billing'),
+        onClick: () => go(cash.outstanding > 0 ? '/cobrar' : '/billing'),
       }),
       stat({
         label: 'Vencido',
@@ -101,6 +101,7 @@ function body() {
 
     sectionLabel('Acciones'),
     h('div.stack.stack-2',
+      button('Cobrar en la tienda', { variant: 'primary', block: true, icon: 'cash', onClick: () => go('/cobrar') }),
       button('Ver la ruta de hoy', { variant: 'dark', block: true, icon: 'route', onClick: () => go('/route') }),
       button('Registrar un cliente', { variant: 'ghost', block: true, icon: 'userPlus', onClick: () => go('/clients/new') }),
       button('Registrar un rancho', { variant: 'ghost', block: true, icon: 'farm', onClick: () => go('/farms/new') })));

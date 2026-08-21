@@ -13,21 +13,27 @@
 
 import { watchClients } from './clients.js';
 import { watchFarms } from './farms.js';
+import { watchPricing } from './pricing.js';
 import { watchDay, summarizeDay, missingToday } from './deliveries.js';
 import { watchOutstanding, summarizeInvoices, groupByClient } from './invoices.js';
 import { watchConversations, totalUnread } from './chat.js';
 import { today } from '../lib/dates.js';
-import { summarize } from '../lib/billing.js';
+import { summarize, periodFor } from '../lib/billing.js';
+import { DEFAULT_TIERS, priceFor, tierFor } from '../lib/pricing.js';
 
 const state = {
   day: today(),
+  // The price list starts at the defaults so the first render already quotes a
+  // real number instead of $0 while the document loads.
+  pricing: [...DEFAULT_TIERS],
   farms: [],
   clients: [],
   deliveries: [],
   outstanding: [],
   conversations: [],
   loaded: {
-    farms: false, clients: false, deliveries: false, outstanding: false, conversations: false,
+    pricing: false, farms: false, clients: false, deliveries: false,
+    outstanding: false, conversations: false,
   },
   errors: {},
 };
@@ -73,6 +79,12 @@ export function startStore() {
   state.errors = {};
 
   stops = [
+    watchPricing((tiers) => {
+      state.pricing = tiers;
+      state.loaded.pricing = true;
+      emit();
+    }, failed('pricing')),
+
     watchFarms((rows) => {
       state.farms = rows;
       state.loaded.farms = true;
@@ -107,9 +119,11 @@ export function stopStore() {
   dayStop?.();
   dayStop = null;
   Object.assign(state, {
+    pricing: [...DEFAULT_TIERS],
     farms: [], clients: [], deliveries: [], outstanding: [], conversations: [],
     loaded: {
-      farms: false, clients: false, deliveries: false, outstanding: false, conversations: false,
+      pricing: false, farms: false, clients: false, deliveries: false,
+      outstanding: false, conversations: false,
     },
     errors: {},
   });
@@ -177,13 +191,25 @@ export const debtors = () => groupByClient(state.outstanding);
 
 export const unreadCount = () => totalUnread(state.conversations, 'admin');
 
-/** Outstanding invoices for one farm. */
+/** Outstanding invoices for one client. */
 export const invoicesFor = (clientId) =>
   state.outstanding.filter((invoice) => invoice.clientId === clientId);
 
-/** Billing summary for one farm, from data already in memory. */
+/** Billing summary for one client, from data already in memory. */
 export const billingFor = (client) =>
   (client ? summarize(client, invoicesFor(client.id)) : null);
+
+/** What one fortnight costs this person under the current price list. */
+export const fortnightPrice = (client) => priceFor(state.pricing, client?.mealsPerDay);
+
+/** The fortnight they are in right now. */
+export const currentPeriodFor = (client) =>
+  periodFor(client?.cycleAnchor || state.day, today());
+
+/** Clients whose meals-per-day has no plan — they cannot be billed as they are. */
+export const unpriced = () =>
+  state.clients.filter((client) => client.status !== 'inactive'
+    && !tierFor(state.pricing, client.mealsPerDay));
 
 /** The stop for a farm on the selected day, if any. */
 export const deliveryFor = (clientId) =>

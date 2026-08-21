@@ -1,19 +1,22 @@
 /**
  * Register / edit a farm.
  *
- * The commercial terms live here, not on the worker: one price per meal, one
- * serving week, one billing anchor for everybody who eats at this place. That
- * is how the agreement is actually made — with the farm, once — and it means a
- * price change is one edit instead of two hundred.
+ * The service terms live here, not on the worker: one serving week, one
+ * delivery window, one billing anchor for everybody who eats at this place.
+ * That is how the agreement is actually made — with the farm, once.
  *
- * Because those numbers are already copied onto every worker registered here,
+ * What a fortnight *costs* is not here: it is one price list for the whole
+ * business (Ajustes → Precios), charged by plan. A farm decides when food
+ * arrives, not what it costs.
+ *
+ * Because these numbers are already copied onto every worker registered here,
  * saving a change fans them back out. The form says so before it happens.
  */
 
 import { h, mount } from '../lib/dom.js';
 import { screen } from '../ui/shell.js';
 import {
-  card, field, input, textarea, select, moneyInput, button, alert, sectionLabel, loading,
+  card, field, input, textarea, select, button, alert, sectionLabel, loading,
 } from '../ui/kit.js';
 import { toastOk, toastBad, confirm } from '../ui/overlay.js';
 import { go, back } from '../lib/router.js';
@@ -24,7 +27,7 @@ import {
 import { farmById, clientsOfFarm } from '../data/store.js';
 import { periodFor, PERIOD_DAYS, servingDays } from '../lib/billing.js';
 import { WEEKDAYS_SHORT, today, formatRange } from '../lib/dates.js';
-import { money, plural } from '../lib/format.js';
+import { plural } from '../lib/format.js';
 import { dbMessage } from '../firebase.js';
 
 export async function renderFarmForm(context) {
@@ -67,7 +70,6 @@ export async function renderFarmForm(context) {
   function validate() {
     errors = {};
     if (!model.name?.trim()) errors.name = 'Escribe el nombre del rancho.';
-    if (!(Number(model.pricePerMeal) > 0)) errors.pricePerMeal = 'Escribe el precio por comida.';
     if (!model.deliveryDays?.length) errors.deliveryDays = 'Elige al menos un día.';
     return Object.keys(errors).length === 0;
   }
@@ -153,25 +155,17 @@ export async function renderFarmForm(context) {
           }),
         }))),
 
-      sectionLabel('Condiciones para todos sus clientes'),
+      sectionLabel('Servicio para todos sus clientes'),
       card(h('div.stack.stack-4',
-        h('div.row', { style: { gap: '12px', alignItems: 'flex-start' } },
-          h('div.grow', field({
-            label: 'Precio por comida',
-            error: errors.pricePerMeal,
-            control: moneyInput({
-              value: model.pricePerMeal,
-              oninput: (e) => update({ pricePerMeal: Number(e.target.value) }),
-            }),
-          })),
-          h('div.grow', field({
-            label: 'Comidas por persona',
-            hint: 'Valor inicial al registrar a alguien.',
-            control: input({
-              value: model.defaultMealsPerDay, type: 'number', inputmode: 'numeric', min: '1', step: '1',
-              oninput: (e) => update({ defaultMealsPerDay: Number(e.target.value) }),
-            }),
-          }))),
+        field({
+          label: 'Comidas por persona',
+          hint: 'Valor inicial al registrar a alguien aquí. El precio de la quincena sale de '
+            + 'ese número, según los planes en Ajustes.',
+          control: input({
+            value: model.defaultMealsPerDay, type: 'number', inputmode: 'numeric', min: '1', step: '1',
+            oninput: (e) => update({ defaultMealsPerDay: Number(e.target.value) }),
+          }),
+        }),
 
         field({
           label: 'Días de servicio',
@@ -229,19 +223,19 @@ export async function renderFarmForm(context) {
       isNew ? null : dangerZone());
   }
 
-  /** What one person at this farm costs per period — the number to sanity-check. */
+  /** What this farm's week actually looks like — the thing to sanity-check. */
   function termsPreview() {
     const period = periodFor(model.cycleAnchor || today(), today());
     const days = servingDays(period, model.deliveryDays).length;
     const perDay = Number(model.defaultMealsPerDay) || 0;
-    const amount = days * perDay * (Number(model.pricePerMeal) || 0);
 
-    if (!amount) {
-      return alert('Escribe el precio por comida para ver el estimado del periodo.', 'info');
+    if (!days) {
+      return alert('Elige los días de servicio para ver cómo queda el periodo.', 'info');
     }
     return alert(
       `Periodo actual ${formatRange(period.start, period.end)}: ${days} días de servicio. `
-      + `Una persona con ${plural(perDay, 'comida', 'comidas')} al día ≈ ${money(amount)}.`,
+      + `Una persona con ${plural(perDay, 'comida', 'comidas')} al día recibe `
+      + `${days * perDay} comidas en la quincena.`,
       'brand', 'receipt');
   }
 

@@ -126,8 +126,15 @@ service cloud.firestore {
 
     /* --- config ------------------------------------------------------------- */
 
-    // Create-once marker for the first administrator. Never updated, never
-    // deleted: the seat cannot be re-claimed.
+    // Two different things live here.
+    //
+    // `bootstrap` is the create-once marker for the first administrator: never
+    // updated, never deleted, so the seat cannot be re-claimed.
+    //
+    // Everything else is ordinary settings the kitchen maintains — today that
+    // is `pricing`, the fortnight price of each plan. Anybody signed in may
+    // read it, because both apps quote the price of the fortnight in progress;
+    // only an admin may write it.
     match /config/{docId} {
       allow get: if signedIn();
       allow list: if isAdmin();
@@ -137,7 +144,10 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['ownerUid', 'ownerEmail', 'at'])
         && request.resource.data.ownerUid == request.auth.uid;
 
-      allow update, delete: if false;
+      allow create, update: if isAdmin() && docId != 'bootstrap';
+
+      // Settings are corrected by writing over them, never by disappearing.
+      allow delete: if false;
     }
 
     /* --- clientEmails -------------------------------------------------------- */
@@ -209,6 +219,19 @@ service cloud.firestore {
       // Money is written by the kitchen only. A client can see what they owe
       // and talk about it, never change it.
       allow write: if isAdmin();
+    }
+
+    /* --- receipts -------------------------------------------------------------- */
+
+    // Proof that money changed hands, written once at the counter and read by
+    // the person who paid. It is the only record they hold, so nothing may
+    // rewrite it — not an update, not a delete, not an administrator. A payment
+    // taken in error is corrected by a second, negative receipt, which leaves
+    // both halves of what happened visible.
+    match /receipts/{receiptId} {
+      allow read: if isAdmin() || ownsClient(resource.data.clientId);
+      allow create: if isAdmin();
+      allow update, delete: if false;
     }
 
     /* --- conversations -------------------------------------------------------- */

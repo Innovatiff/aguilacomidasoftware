@@ -6,11 +6,11 @@
  * take the food to, which is why `farmId` and `locationId` are refused when
  * empty rather than defaulted.
  *
- * The commercial terms are the farm's, not the worker's: price per meal, the
- * serving weekdays, the delivery window and the billing anchor are copied down
- * from the farm when the worker is registered and re-copied by
- * `applyTermsToClients` whenever the farm changes them. What belongs to the
- * worker alone is how many meals they take and whether they are active.
+ * The service terms are the farm's, not the worker's: the serving weekdays, the
+ * delivery window and the billing anchor are copied down from the farm when the
+ * worker is registered and re-copied by `applyTermsToClients` whenever the farm
+ * changes them. What belongs to the worker alone is how many meals they take —
+ * which is also what decides their price, since a fortnight is sold by plan.
  *
  * The email address is optional — plenty of workers do not have one — but when
  * it is present it is not contact detail: it is how that person opens the app.
@@ -54,7 +54,6 @@ export const emptyClient = (farm) => ({
 /** The farm's terms, in the shape they are stored on a worker. */
 export function termsOf(farm) {
   return {
-    pricePerMeal: Number(farm?.pricePerMeal) || 0,
     deliveryDays: [...(farm?.deliveryDays?.length ? farm.deliveryDays : DEFAULT_DELIVERY_DAYS)],
     deliveryWindow: farm?.deliveryWindow || '11:00 – 13:00',
     cycleAnchor: farm?.cycleAnchor || today(),
@@ -236,7 +235,7 @@ function place(data, farm) {
 
 /* --- Shaping --------------------------------------------------------------- */
 
-const NUMERIC = new Set(['mealsPerDay', 'pricePerMeal', 'graceDays']);
+const NUMERIC = new Set(['mealsPerDay', 'graceDays']);
 
 /** Fields a worker never sets for themselves — they belong to the farm. */
 const NOT_WRITABLE = new Set(['id', 'farmId', 'farmName', 'locationId', 'locationName', 'email']);

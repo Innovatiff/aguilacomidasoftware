@@ -23,6 +23,7 @@ import { session } from '../data/session.js';
 import { store, subscribe, moneyStats, debtors, farmById } from '../data/store.js';
 import { watchSettled, issueInvoice } from '../data/invoices.js';
 import { billableMealsInRange } from '../data/deliveries.js';
+import { priceFor } from '../lib/pricing.js';
 import {
   balanceOf, invoiceStatus, STATUS_LABEL, STATUS_TONE, periodFor, periodByIndex,
 } from '../lib/billing.js';
@@ -46,6 +47,8 @@ export function renderBilling(context) {
       sticky: h('div.searchbar.searchbar--sunken',
         chips(filters(), filter, (value) => { filter = value; draw(); })),
       body: store.loaded.outstanding ? body() : skeletonRows(5),
+      fab: h('button.fab', { type: 'button', onclick: () => go('/cobrar') },
+        icon('cash'), 'Cobrar'),
     });
   };
 
@@ -63,6 +66,12 @@ export function renderBilling(context) {
     const cash = moneyStats();
 
     return h('div.page__inner.stack.stack-4',
+      // The counter is the first thing on the money screen: most of what comes
+      // in arrives with somebody standing at the store, not by chasing.
+      button('Cobrar en la tienda', {
+        variant: 'dark', block: true, icon: 'cash', onClick: () => go('/cobrar'),
+      }),
+
       statGrid([
         stat({
           label: 'Por cobrar', value: money(cash.outstanding, { round: true }),
@@ -186,7 +195,7 @@ export function renderBilling(context) {
 
     return itemRow({
       title: formatRange(invoice.periodStart, invoice.periodEnd),
-      meta: `${status === 'overdue' ? 'Venció' : 'Vence'} ${days} · ${number(invoice.meals)} comidas`,
+      meta: `${status === 'overdue' ? 'Venció' : 'Vence'} ${days} · ${moneyFull(invoice.amount)}`,
       end: [
         h('span.w-700', money(balance, { round: true })),
         badge(STATUS_LABEL[status], STATUS_TONE[status]),
@@ -234,8 +243,12 @@ export function renderBilling(context) {
     const confirmed = await sheet({
       title: 'Cerrar quincena',
       build: (close) => h('div.stack.stack-4',
-        alert(`Se emitirán ${preview.length} facturas por ${moneyFull(total)}, contando sólo las `
-          + 'comidas entregadas.', 'brand', 'receipt'),
+        alert(`Se emitirán ${preview.length} facturas por ${moneyFull(total)}, al precio de cada plan.`,
+          'brand', 'receipt'),
+        preview.unpriced?.length
+          ? alert(`${plural(preview.unpriced.length, 'cliente queda', 'clientes quedan')} fuera por `
+            + 'no tener precio en su plan. Revísalo en Ajustes → Precios.', 'warn')
+          : null,
         card(defList([...farms.entries()].map(([name, entry]) => defRow(
           name,
           `${plural(entry.count, 'factura', 'facturas')} · ${money(entry.amount)}`,
@@ -248,7 +261,7 @@ export function renderBilling(context) {
     try {
       const author = { uid: session.uid, name: session.displayName };
       for (const row of preview) {
-        await issueInvoice(row.client, row.period, row.meals, author);
+        await issueInvoice(row.client, row.period, row.amount, row.meals, author);
       }
       toastOk(`${preview.length} ${preview.length === 1 ? 'factura emitida' : 'facturas emitidas'}`);
     } catch (error) {
@@ -270,21 +283,28 @@ export function renderBilling(context) {
     }
 
     const preview = [];
+    const unpriced = [];
+
     for (const { period, clients: group } of periods.values()) {
       const meals = await billableMealsInRange(period.start, period.end);
       for (const client of group) {
         const count = meals.get(client.id) || 0;
-        if (count > 0) {
-          preview.push({
-            client, period, meals: count,
-            amount: count * (Number(client.pricePerMeal) || 0),
-          });
-        }
+        // No deliveries at all in the period means the fortnight was not
+        // served, and a flat price for nothing is not a bill anybody would
+        // defend at the gate.
+        if (count <= 0) continue;
+
+        const amount = priceFor(store.pricing, client.mealsPerDay);
+        if (!amount) { unpriced.push(client); continue; }
+        preview.push({ client, period, meals: count, amount });
       }
     }
-    return preview.sort((a, b) =>
+
+    preview.sort((a, b) =>
       String(a.client.farmName).localeCompare(String(b.client.farmName), 'es')
       || String(a.client.name).localeCompare(String(b.client.name), 'es'));
+    preview.unpriced = unpriced;
+    return preview;
   }
 
   const unsubscribe = subscribe(draw);

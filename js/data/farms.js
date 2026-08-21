@@ -32,9 +32,15 @@ const clientsRef = () => collection(db, 'clients');
 /** Firestore caps a batch at 500 writes. */
 const BATCH_LIMIT = 450;
 
-/** The fields a client inherits from its farm. */
+/**
+ * The fields a client inherits from its farm.
+ *
+ * No price: what a fortnight costs is one list for the whole business, kept in
+ * `config/pricing` and looked up by how many meals the person takes. A farm
+ * decides *when* and *how often* food arrives, not what it costs.
+ */
 export const TERM_FIELDS = [
-  'pricePerMeal', 'deliveryDays', 'deliveryWindow', 'cycleAnchor', 'graceDays',
+  'deliveryDays', 'deliveryWindow', 'cycleAnchor', 'graceDays',
 ];
 
 export const emptyFarm = () => ({
@@ -46,7 +52,6 @@ export const emptyFarm = () => ({
   status: 'active',
   locations: [],
   // Terms every worker at this farm inherits.
-  pricePerMeal: 0,
   deliveryDays: [...DEFAULT_DELIVERY_DAYS],
   deliveryWindow: '11:00 – 13:00',
   cycleAnchor: today(),
@@ -233,7 +238,7 @@ async function eachClient(clientQuery, write) {
 
 /* --- Shaping ---------------------------------------------------------------- */
 
-const NUMERIC = new Set(['pricePerMeal', 'graceDays', 'defaultMealsPerDay']);
+const NUMERIC = new Set(['graceDays', 'defaultMealsPerDay']);
 
 function sanitize(data) {
   const out = {};

@@ -7,10 +7,17 @@
  * exactly one period with plain arithmetic — no schedule table to maintain and
  * no cron job needed to "open" the next cycle.
  *
+ * A fortnight is sold at a flat price for the plan the person is on — one meal
+ * a day, two meals a day — not counted meal by meal. That is what is quoted
+ * and what is paid, and it means the bill for a period is known the day the
+ * period opens, which is what lets somebody walk into the store and pay for a
+ * fortnight that has not happened yet.
+ *
  * Payment is due `graceDays` after the period closes.
  */
 
 import { addDays, daysBetween, today as todayKey, dayRange, weekdayOf } from './dates.js';
+import { priceFor } from './pricing.js';
 
 export const PERIOD_DAYS = 14;
 export const DEFAULT_GRACE_DAYS = 3;
@@ -53,14 +60,21 @@ export function servingDays(period, deliveryDays = DEFAULT_DELIVERY_DAYS) {
   return dayRange(period.start, period.end).filter((day) => serve.has(weekdayOf(day)));
 }
 
-/** What a full period should cost if every serving day is delivered. */
-export function projectPeriod(client, period) {
+/**
+ * What a period costs this person, and what they get for it.
+ *
+ * The amount is the plan's flat price; the day and meal counts are what the
+ * kitchen has committed to serving for it, shown so the number can be checked
+ * against reality rather than taken on faith.
+ */
+export function projectPeriod(client, period, tiers) {
   const days = servingDays(period, client.deliveryDays);
-  const meals = days.length * (Number(client.mealsPerDay) || 0);
+  const perDay = Number(client.mealsPerDay) || 0;
   return {
     days: days.length,
-    meals,
-    amount: round2(meals * (Number(client.pricePerMeal) || 0)),
+    meals: days.length * perDay,
+    mealsPerDay: perDay,
+    amount: priceFor(tiers, perDay),
   };
 }
 
@@ -130,9 +144,14 @@ export function summarize(client, invoices = [], day = todayKey()) {
   };
 }
 
-/** Builds the invoice document for a client's period from delivered meals. */
-export function draftInvoice(client, period, deliveredMeals, day = todayKey()) {
-  const price = Number(client.pricePerMeal) || 0;
+/**
+ * Builds the invoice document for a client's period.
+ *
+ * `amount` is the plan price, stamped onto the bill so a later change to the
+ * price list cannot rewrite what somebody was charged. `meals` records what was
+ * actually delivered in the period — information, not the basis of the total.
+ */
+export function draftInvoice(client, period, amount, deliveredMeals, day = todayKey()) {
   const meals = Number(deliveredMeals) || 0;
   return {
     clientId: client.id,
@@ -145,9 +164,9 @@ export function draftInvoice(client, period, deliveredMeals, day = todayKey()) {
     periodStart: period.start,
     periodEnd: period.end,
     dueDate: dueDateFor(period, client.graceDays),
+    mealsPerDay: Number(client.mealsPerDay) || 0,
     meals,
-    pricePerMeal: price,
-    amount: round2(meals * price),
+    amount: round2(amount),
     paid: 0,
     payments: [],
     status: daysBetween(period.end, day) >= 0 ? 'due' : 'open',

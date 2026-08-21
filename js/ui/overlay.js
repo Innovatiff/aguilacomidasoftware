@@ -82,7 +82,10 @@ export function sheet({ title, build, foot, dismissible = true }) {
 }
 
 /** Yes/no confirmation. Resolves true only when the action is confirmed. */
-export function confirm({ title, message, confirmLabel = 'Confirmar', tone = 'primary', icon: ico }) {
+export function confirm({
+  title, message, confirmLabel = 'Confirmar', cancelLabel = 'Cancelar',
+  tone = 'primary', icon: ico,
+}) {
   return sheet({
     title,
     build: () => h('div.stack.stack-3',
@@ -90,7 +93,7 @@ export function confirm({ title, message, confirmLabel = 'Confirmar', tone = 'pr
       h('p.t-base.c-soft.center', { style: { lineHeight: '1.5' } }, message)),
     foot: (close) => h('div.stack.stack-2',
       button(confirmLabel, { variant: tone, block: true, onClick: () => close(true) }),
-      button('Cancelar', { variant: 'ghost', block: true, onClick: () => close(false) })),
+      button(cancelLabel, { variant: 'ghost', block: true, onClick: () => close(false) })),
   }).then((value) => value === true);
 }
 

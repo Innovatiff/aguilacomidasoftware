@@ -1,6 +1,9 @@
 /**
- * Settings — your own account, who else can get in, and what the numbers add
- * up to.
+ * Settings — the price list, your own account, and who else can get in.
+ *
+ * Prices come first because they are the setting anybody actually comes here to
+ * change, and because they are the one number the whole business runs on: a
+ * fortnight costs what this screen says it costs.
  *
  * The team section is the security surface of the whole product. Adding an
  * address here grants every farm's contact details, every delivery and every
@@ -8,17 +11,19 @@
  * invitation.
  */
 
-import { h } from '../lib/dom.js';
+import { h, mount } from '../lib/dom.js';
 import { screen } from '../ui/shell.js';
+import { icon } from '../lib/icons.js';
 import {
   card, button, badge, avatar, itemRow, list, defList, defRow, sectionLabel,
-  alert, emptyState, field, input, statGrid, stat,
+  alert, emptyState, field, input, moneyInput, statGrid, stat,
 } from '../ui/kit.js';
 import { toastOk, toastBad, confirm, sheet } from '../ui/overlay.js';
 import { session, signOutNow, updateOwnProfile } from '../data/session.js';
 import { watchStaff, addStaff, removeStaff, isValidEmail, normalizeEmail } from '../data/staff.js';
-import { store, subscribe, moneyStats } from '../data/store.js';
-import { money, number } from '../lib/format.js';
+import { savePricing } from '../data/pricing.js';
+import { store, subscribe, moneyStats, unpriced } from '../data/store.js';
+import { money, number, plural } from '../lib/format.js';
 import { formatStamp } from '../lib/dates.js';
 import { toDate, dbMessage } from '../firebase.js';
 
@@ -37,6 +42,7 @@ export function renderSettings() {
       tab: 'settings',
       sunken: true,
       body: h('div.page__inner.stack.stack-4',
+        pricesCard(),
         profileCard(),
         teamCard(),
         numbersCard(),
@@ -46,6 +52,48 @@ export function renderSettings() {
   }
 
   /* --- Cards --------------------------------------------------------------- */
+
+  /**
+   * The price of a fortnight, by plan.
+   *
+   * One meal a day is one price, two is another; that is the whole price list.
+   * Changing a number here changes what the next fortnight costs everywhere —
+   * the counter, the bills issued from now on, what each client's app quotes —
+   * and changes nothing about the fortnights already billed.
+   */
+  function pricesCard() {
+    const missing = unpriced();
+
+    return h('div.stack.stack-3',
+      sectionLabel('Precios por quincena', h('button.btn.btn--soft.btn--sm', {
+        type: 'button', onclick: editPrices,
+      }, 'Cambiar')),
+
+      list(store.pricing.map((tier) => itemRow({
+        lead: h('span.item__ico', icon('utensils')),
+        title: `${plural(tier.mealsPerDay, 'comida', 'comidas')} al día`,
+        meta: `${countOn(tier.mealsPerDay)} con este plan`,
+        end: h('span.t-lg.w-700', money(tier.price)),
+        chevron: false,
+      })), { card: true }),
+
+      missing.length
+        ? alert(`${plural(missing.length, 'cliente', 'clientes')} sin plan: `
+          + `${[...new Set(missing.map((client) => client.mealsPerDay))].sort((a, b) => a - b)
+            .map((meals) => `${meals} al día`).join(', ')}. `
+          + 'Agrega ese precio o cámbiales las comidas por día; mientras tanto no se les puede cobrar.', 'warn')
+        : h('p.t-xs.c-faint',
+            'Es lo que cuesta una quincena completa. Las facturas ya emitidas conservan el '
+            + 'precio con el que se emitieron.'));
+  }
+
+  // A declaration, not a const: the listeners fire `draw()` the moment they are
+  // set up, which is before a `const` further down this function would exist.
+  function countOn(mealsPerDay) {
+    return plural(
+      store.clients.filter((client) => Number(client.mealsPerDay) === Number(mealsPerDay)).length,
+      'cliente', 'clientes');
+  }
 
   function profileCard() {
     return card(h('div.stack.stack-3',
@@ -111,7 +159,7 @@ export function renderSettings() {
     return h('div.stack.stack-3',
       sectionLabel('Resumen'),
       statGrid([
-        stat({ label: 'Ranchos activos', value: number(active), foot: `${store.clients.length} en total` }),
+        stat({ label: 'Clientes activos', value: number(active), foot: `en ${plural(store.farms.length, 'rancho', 'ranchos')}` }),
         stat({ label: 'Por cobrar', value: money(cash.outstanding, { round: true }), foot: `${store.outstanding.length} facturas` }),
       ]));
   }
@@ -130,6 +178,81 @@ export function renderSettings() {
   }
 
   /* --- Actions -------------------------------------------------------------- */
+
+  /**
+   * Editing the price list.
+   *
+   * Rows can be added because plans do change — somebody starts taking three
+   * meals a day — but a plan that people are on cannot be removed out from
+   * under them, so the sheet says how many are on each before letting it go.
+   */
+  async function editPrices() {
+    const result = await sheet({
+      title: 'Precios por quincena',
+      build: (close) => {
+        const draft = store.pricing.map((tier) => ({ ...tier }));
+        const rows = h('div.stack.stack-3');
+
+        const paint = () => mount(rows, draft.map((tier, index) => h('div.card.card--tight',
+          h('div.row',
+            h('div.grow',
+              field({
+                label: 'Comidas al día',
+                control: input({
+                  value: tier.mealsPerDay, type: 'number', inputmode: 'numeric', min: '1', step: '1',
+                  oninput: (event) => { draft[index].mealsPerDay = Number(event.target.value); },
+                }),
+              })),
+            h('div.grow',
+              field({
+                label: 'Precio por quincena',
+                control: moneyInput({
+                  value: tier.price,
+                  oninput: (event) => { draft[index].price = Number(event.target.value); },
+                }),
+              })),
+            h('button.btn.btn--ghost.btn--sm.btn--icon', {
+              type: 'button', 'aria-label': 'Quitar plan',
+              style: { marginTop: '18px' },
+              onclick: () => {
+                const onIt = store.clients.filter(
+                  (client) => Number(client.mealsPerDay) === Number(draft[index].mealsPerDay)).length;
+                if (onIt) {
+                  toastBad(`${plural(onIt, 'cliente está', 'clientes están')} en ese plan.`);
+                  return;
+                }
+                draft.splice(index, 1);
+                paint();
+              },
+            }, icon('x'))),
+          h('div.t-xs.c-faint', countOn(tier.mealsPerDay) + ' en este plan'))));
+        paint();
+
+        return h('div.stack.stack-4',
+          h('p.t-sm.c-soft', 'Lo que cuesta una quincena completa en cada plan. Se aplica a las '
+            + 'facturas que se emitan de aquí en adelante.'),
+          rows,
+          button('Agregar un plan', {
+            variant: 'ghost', block: true, icon: 'plus',
+            onClick: () => {
+              const next = Math.max(0, ...draft.map((tier) => Number(tier.mealsPerDay) || 0)) + 1;
+              draft.push({ mealsPerDay: next, price: 0 });
+              paint();
+            },
+          }),
+          button('Guardar precios', {
+            variant: 'primary', block: true,
+            onClick: () => close(draft),
+          }));
+      },
+    });
+    if (!result) return;
+
+    try {
+      const saved = await savePricing(result, { name: session.displayName });
+      toastOk(`${plural(saved.length, 'plan guardado', 'planes guardados')}`);
+    } catch (error) { toastBad(error?.message || dbMessage(error)); }
+  }
 
   async function addMember() {
     const result = await sheet({

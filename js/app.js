@@ -23,7 +23,9 @@ import { renderClients } from './screens/clients.js';
 import { renderClientForm } from './screens/client-form.js';
 import { renderClientDetail } from './screens/client-detail.js';
 import { renderBilling } from './screens/billing.js';
+import { renderCheckout } from './screens/checkout.js';
 import { renderInvoice } from './screens/invoice.js';
+import { renderReceipt } from './screens/receipt.js';
 import { renderMessages } from './screens/messages.js';
 import { renderChat } from './screens/chat.js';
 import { renderSettings } from './screens/settings.js';
@@ -121,7 +123,10 @@ function registerRoutes() {
   register('/clients/:id', renderClientDetail);
   register('/clients/:id/edit', renderClientForm);
   register('/billing', renderBilling);
+  // The counter: find somebody and take their money.
+  register('/cobrar', renderCheckout);
   register('/invoices/:id', renderInvoice);
+  register('/receipts/:id', renderReceipt);
   register('/messages', renderMessages);
   register('/chat/:id', renderChat);
   register('/settings', renderSettings);

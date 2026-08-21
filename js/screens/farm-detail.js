@@ -21,7 +21,7 @@ import {
 } from '../data/store.js';
 import { watchFarm, addLocation, renameLocation, removeLocation } from '../data/farms.js';
 import { clientStatusMeta, deliveryMeta } from '../lib/model.js';
-import { money, moneyFull, number, plural, phone as fmtPhone, telHref } from '../lib/format.js';
+import { money, number, plural, phone as fmtPhone, telHref } from '../lib/format.js';
 import { formatDayLong, today } from '../lib/dates.js';
 import { dbMessage } from '../firebase.js';
 
@@ -183,19 +183,20 @@ export function renderFarmDetail(context) {
 
   function termsCard() {
     return h('div.stack.stack-3',
-      sectionLabel('Condiciones del rancho', h('button.btn.btn--quiet.btn--sm', {
+      sectionLabel('Servicio del rancho', h('button.btn.btn--quiet.btn--sm', {
         type: 'button', onclick: () => go(`/farms/${farmId}/edit`),
       }, icon('edit'), 'Editar')),
       card(h('div.stack.stack-3',
         defList([
-          defRow('Precio por comida', moneyFull(farm.pricePerMeal)),
           defRow('Días de servicio', serviceDays(farm.deliveryDays)),
           defRow('Horario', farm.deliveryWindow || '—'),
           defRow('Inicio del ciclo', formatDayLong(farm.cycleAnchor || today())),
           defRow('Días de gracia', farm.graceDays === 0 ? 'Mismo día' : `${farm.graceDays} días`),
+          defRow('Comidas al registrar', plural(farm.defaultMealsPerDay || 1, 'comida', 'comidas')),
         ]),
-        h('p.t-xs.c-faint', 'Estas condiciones se aplican a todos los clientes del rancho. '
-          + 'Al cambiarlas se actualizan sus fichas.'))));
+        h('p.t-xs.c-faint', 'Se aplica a todos los clientes del rancho; al cambiarlo se '
+          + 'actualizan sus fichas. El precio de la quincena no es del rancho: sale del plan '
+          + 'de cada quien, en Ajustes → Precios.'))));
   }
 
   /* --- Rows ---------------------------------------------------------------- */

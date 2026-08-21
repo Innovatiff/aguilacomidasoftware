@@ -19,7 +19,7 @@ distinto de cero si alguna regla no se comporta como debe.
 
 ## Qué cubren
 
-71 comprobaciones, cada una escrita como «esto debe permitirse» o «esto debe
+84 comprobaciones, cada una escrita como «esto debe permitirse» o «esto debe
 negarse»:
 
 - **Anónimos** no leen nada.
@@ -31,8 +31,13 @@ negarse»:
   más: trabajar en el mismo lugar no da acceso a la ficha, la factura, las
   entregas ni el chat del compañero.
 - **Un cliente no escribe dinero ni condiciones**: ni salda su factura, ni
-  cambia su precio por comida, ni marca su propia entrega como entregada, ni
-  toca el precio o las ubicaciones de su rancho, ni se cambia de rancho.
+  cambia la lista de precios, ni marca su propia entrega como entregada, ni
+  toca las ubicaciones de su rancho, ni se cambia de rancho, ni se escribe un
+  recibo a sí mismo.
+- **Los recibos son inmutables**: nadie los edita ni los borra —tampoco un
+  administrador— y sólo los ve quien pagó y la cocina.
+- **La lista de precios** la lee cualquiera que haya entrado, porque las dos
+  apps cotizan la quincena en curso; escribirla es sólo de la cocina.
 - **Nadie se auto-promueve**: no puede agregarse a `staff`, ni apuntar su correo
   a otro cliente, ni registrarse un correo nuevo, ni colar un rol en su perfil.
 - **La primera cuenta** se reclama exactamente una vez: `config/bootstrap` no se
