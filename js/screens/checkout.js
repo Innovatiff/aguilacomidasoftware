@@ -7,8 +7,10 @@
  * which fortnight, how much — is already worked out and shown, because the
  * queue is what makes a slow screen expensive.
  *
- * Below the search, the day's takings: what has been collected today and by
- * whom, which is what closing the till at night needs.
+ * With the box empty the screen is not blank: it lists whoever owes money,
+ * because that is who is most likely to be walking up, and underneath it the
+ * day's takings — what has been collected today and by whom, which is what
+ * closing the till at night needs.
  */
 
 import { h } from '../lib/dom.js';
@@ -115,15 +117,20 @@ export function renderCheckout() {
     });
   }
 
-  const byDebtThenName = (a, b) => {
+  // A declaration, not a const: the receipts listener fires `draw()` the moment
+  // it is attached, before a `const` further down this function would exist.
+  function byDebtThenName(a, b) {
     const owed = (client) => billingFor(client)?.balance || 0;
     return owed(b) - owed(a) || String(a.name).localeCompare(String(b.name), 'es');
-  };
+  }
 
   /* --- The till ------------------------------------------------------------ */
 
   function todayCard() {
     const taken = totalOf(receipts);
+    const owing = store.clients
+      .filter((client) => (billingFor(client)?.balance || 0) > 0)
+      .sort(byDebtThenName);
 
     return h('div.stack.stack-4',
       card(h('div.stack.stack-3',
@@ -148,6 +155,13 @@ export function renderCheckout() {
           onClick: () => go('/billing'),
         }),
       ]),
+
+      owing.length
+        ? h('div.stack.stack-3',
+            sectionLabel(`Con adeudo · ${owing.length}`,
+              h('span.t-sm.c-soft', 'Tócalos para cobrar')),
+            list(owing.slice(0, 12).map(clientRow), { card: true }))
+        : alert('Nadie debe nada ahora mismo.', 'ok'),
 
       receipts.length
         ? h('div.stack.stack-3',

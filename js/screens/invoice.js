@@ -68,7 +68,7 @@ export function renderInvoice(context) {
     const amount = Number(invoice.amount) || 0;
     const late = daysBetween(today(), invoice.dueDate);
 
-    return h('div.page__inner.stack.stack-4',
+    return h('div.page__inner.page__inner--flow.stack.stack-4',
 
       /* Headline */
       card(h('div.stack.stack-4',

@@ -77,8 +77,8 @@ export function renderClientDetail(context) {
     const billing = billingFor(client) || { balance: 0, status: 'paid', outstanding: [] };
     const stop = deliveryFor(clientId);
 
-    return h('div.page__inner.stack.stack-4',
-      welcomeEmail ? welcomeBanner(welcomeEmail) : null,
+    return h('div.page__inner.page__inner--flow.stack.stack-4',
+      welcomeEmail ? h('div.span-all', welcomeBanner(welcomeEmail)) : null,
       identityCard(client, openChat),
       placeCard(client),
       todayCard(client, stop),

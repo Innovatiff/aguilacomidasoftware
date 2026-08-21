@@ -81,11 +81,17 @@
   --sh-brand: 0 4px 14px rgba(242, 112, 15, .32);
 
   /* --- Layout ----------------------------------------------------------- */
-  --app-max: 520px;            /* phone-first canvas, centred on desktop */
+  --app-max: 520px;            /* phone canvas, up to the desktop breakpoint */
   --topbar-h: 56px;
   --tabbar-h: 60px;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  /* Desktop: the tab bar becomes a rail and the page fills the window. */
+  --rail-w: 88px;              /* icon rail, 900px and up */
+  --rail-w-wide: 236px;        /* labelled sidebar, 1280px and up */
+  --content-max: 1180px;       /* wide enough to scan, narrow enough to read */
+  --content-narrow: 720px;     /* forms and conversations */
 
   --ease: cubic-bezier(.22, .61, .36, 1);
   --dur: 180ms;

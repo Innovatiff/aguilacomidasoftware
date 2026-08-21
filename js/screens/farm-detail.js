@@ -66,7 +66,7 @@ export function renderFarmDetail(context) {
     const stats = farmStats(farmId);
     const roster = clientsOfFarm(farmId);
 
-    return h('div.page__inner.stack.stack-4',
+    return h('div.page__inner.page__inner--flow.stack.stack-4',
       headCard(),
       statGrid([
         stat({ label: 'Clientes', value: number(stats.active), foot: stats.total !== stats.active ? `${stats.total} registrados` : 'activos' }),
@@ -78,7 +78,7 @@ export function renderFarmDetail(context) {
         }),
       ]),
       locationsCard(),
-      rosterSection(roster),
+      h('div.span-all', rosterSection(roster)),
       termsCard());
   }
 

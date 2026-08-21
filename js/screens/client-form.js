@@ -160,7 +160,7 @@ export async function renderClientForm(context) {
   function form() {
     if (!store.farms.length) return noFarms();
 
-    return h('form.page__inner.stack.stack-4', { onsubmit: save, novalidate: true },
+    return h('form.page__inner.page__inner--narrow.stack.stack-4', { onsubmit: save, novalidate: true },
 
       sectionLabel('Dónde come'),
       card(h('div.stack.stack-4',

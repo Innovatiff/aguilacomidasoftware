@@ -1,8 +1,14 @@
 /**
- * The app frame: dark top bar, white scrolling page, dark bottom tab bar.
+ * The app frame: dark top bar, white scrolling page, dark tab bar.
  *
  * Screens do not build chrome. They call `screen({ title, body, tab })` and the
  * shell keeps the bars, the active tab and the scroll position consistent.
+ *
+ * The same three elements serve both layouts. On a phone the tab bar is pinned
+ * across the bottom; from 900px CSS moves it to the left as a rail and gives
+ * the page the whole window. Nothing here changes between the two — the
+ * `app--shell` class simply tells the stylesheet that the frame is mounted, so
+ * the sign-in screen (which has no frame) can be laid out differently.
  */
 
 import { h, mount, $ } from '../lib/dom.js';
@@ -15,39 +21,65 @@ let activeTab = null;
 const badges = new Map();
 const scrollMemory = new Map();
 
+/** Shown at the top of the rail; the phone layout has no room for it. */
+let brandName = { name: 'El Águila', sub: 'Cocina' };
+
+/** Shown at the top of the rail; the phone layout has no room for it. */
+
 /** Called once at boot with the app's tab set. */
-export function configureShell({ mount: host, tabs: tabConfig = [] }) {
+export function configureShell({ mount: host, tabs: tabConfig = [], brand } = {}) {
   root = host;
   tabs = tabConfig;
+  brandName = brand || brandName;
 
   topbar = h('header.topbar');
   page = h('main.page', { id: 'page' });
   tabbar = h('nav.tabbar', { 'aria-label': 'Navegación principal' });
 
+  root.classList.add('app--shell');
   mount(root, topbar, page, tabbar);
   renderTabs();
 }
+
+/** Drops the frame — the sign-in and no-access screens stand on their own. */
+export function clearShell(host) {
+  host.classList.remove('app--shell');
+  host.replaceChildren();
+}
+
 
 /* --- Tab bar --------------------------------------------------------------- */
 
 function renderTabs() {
   if (!tabs.length) { tabbar.hidden = true; return; }
   const here = currentPath();
-  mount(tabbar, tabs.map((tab) => {
+
+  const tab = (config) => {
     // A screen may name its tab explicitly, which is how detail screens under
     // a different path — an invoice, a client — still light up their section.
-    const active = activeTab ? activeTab === tab.id
-      : here === tab.path || (tab.path !== '/' && here.startsWith(`${tab.path}/`));
-    const count = badges.get(tab.id) || 0;
+    const active = activeTab ? activeTab === config.id
+      : here === config.path || (config.path !== '/' && here.startsWith(`${config.path}/`));
+    const count = badges.get(config.id) || 0;
+
     return h(`button.tab${active ? '.is-active' : ''}`, {
       type: 'button',
       'aria-current': active ? 'page' : null,
-      onclick: () => go(tab.path),
+      onclick: () => go(config.path),
     },
-    icon(tab.icon),
-    h('span', tab.label),
+    icon(config.icon),
+    h('span', config.label),
     count > 0 ? h('span.tab__dot', count > 99 ? '99+' : count) : null);
-  }));
+  };
+
+  mount(tabbar,
+    // Only visible once the tab bar is a rail: on a phone the top bar already
+    // says where you are, and 60px of bottom bar has no room to spare.
+    h('div.tabbar__brand',
+      icon('eagle'),
+      h('div.tabbar__name.truncate',
+        brandName.name,
+        h('span', brandName.sub))),
+    tabs.map(tab));
 }
 
 /** Unread counter on a tab, e.g. `setTabBadge('messages', 3)`. */

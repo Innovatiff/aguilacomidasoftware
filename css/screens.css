@@ -454,3 +454,50 @@
   font-family: var(--font-num); font-size: var(--fs-xs); font-weight: 700;
   letter-spacing: .06em;
 }
+
+
+/* ==========================================================================
+   Desktop adjustments
+   ========================================================================== */
+
+@media (min-width: 900px) {
+  .daystrip {
+    padding-inline: max(var(--s6), calc((100% - var(--content-max)) / 2));
+    justify-content: flex-start;
+  }
+
+  /* The composer no longer has to clear a tab bar. */
+  .page--chat.page--tabs .chat__composer,
+  .chat__composer { padding-bottom: var(--s3); }
+
+  /* A conversation reads in a column. The width is set with padding on the
+     scroller rather than on the messages, because a message aligns itself to
+     its side and an auto margin would drag every one of them to the middle. */
+  .chat__scroll {
+    padding-inline: max(var(--s4), calc((100% - var(--content-narrow)) / 2));
+  }
+  .chat__composer {
+    padding-inline: max(var(--s3), calc((100% - var(--content-narrow)) / 2));
+  }
+
+  /* Signing in has no shell around it, so the app element itself becomes the
+     ground and the auth panel becomes a card standing on it. */
+  #app:not(.app--shell) {
+    display: grid;
+    place-items: center;
+    padding: var(--s6);
+    background:
+      radial-gradient(120% 90% at 80% 0%, rgba(253, 138, 63, .26) 0%, transparent 62%),
+      linear-gradient(160deg, var(--ink-850) 0%, var(--ink-800) 55%, #2a2119 100%);
+  }
+  .auth {
+    width: 100%;
+    max-width: 460px;
+    min-height: 0;
+    border-radius: var(--r-xl);
+    overflow: hidden;
+    box-shadow: var(--sh-3);
+  }
+  .auth__hero { padding: var(--s7) var(--s6) var(--s6); border-radius: 0; }
+  .auth__body { padding: var(--s6); flex: none; }
+}

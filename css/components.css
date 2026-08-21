@@ -423,3 +423,55 @@
   border-bottom: 1px solid var(--border);
 }
 .searchbar--sunken { background: var(--bg-sunken); }
+
+
+/* ==========================================================================
+   Desktop adjustments
+   ==========================================================================
+   Three things are anchored to the phone's bottom bar and have to be re-hung
+   once that bar is a rail on the left.
+   ========================================================================== */
+
+@media (min-width: 900px) {
+  /* The action button sits in the corner of the window, clear of the rail. */
+  .fab {
+    right: var(--s6);
+    bottom: var(--s6);
+  }
+
+  /* A bar pinned under the top bar spans the window, but what is *in* it lines
+     up with the content underneath — otherwise the search box floats a hand's
+     width away from the list it filters. */
+  .searchbar {
+    padding-inline: max(var(--s6), calc((100% - var(--content-max)) / 2));
+  }
+
+  /* A bottom sheet is a phone gesture. With a mouse it should be a dialog in
+     the middle of the screen, and it should arrive by fading rather than by
+     sliding up from an edge that is no longer there. */
+  .scrim { align-items: center; padding: var(--s6); }
+  .sheet {
+    max-width: 560px;
+    max-height: min(88dvh, 760px);
+    border-radius: var(--r-xl);
+    padding-bottom: 0;
+    box-shadow: var(--sh-3);
+    animation: pop 200ms var(--ease);
+  }
+  .sheet__grip { display: none; }
+  .sheet__head { padding-top: var(--s4); }
+
+  /* Toasts come from the corner the work is happening in. */
+  .toasts {
+    left: auto;
+    right: var(--s6);
+    bottom: var(--s6);
+    transform: none;
+    width: auto;
+    max-width: 420px;
+    padding: 0;
+    align-items: flex-end;
+  }
+}
+
+@keyframes pop { from { transform: scale(.97); opacity: 0; } }

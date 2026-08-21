@@ -61,10 +61,14 @@ function body() {
   const unread = unreadCount();
   const owing = debtors();
 
-  return h('div.page__inner.stack.stack-4',
-    routeHero(stats),
-    alerts({ pendingSchedule, problems, unread, cash }),
+  // Each section is one unit — its label and its content together — so that on
+  // a wide screen the sections can sit side by side without a heading drifting
+  // away from what it heads.
+  return h('div.page__inner.page__inner--cards.stack.stack-4',
+    h('div.span-all', routeHero(stats)),
+    h('div.span-all', alerts({ pendingSchedule, problems, unread, cash })),
 
+    h('div.stack.stack-3',
     sectionLabel('Cobranza'),
     statGrid([
       stat({
@@ -81,8 +85,9 @@ function body() {
         tone: cash.overdue > 0 ? 'bad' : 'ok',
         onClick: () => go('/billing?filter=overdue'),
       }),
-    ]),
+    ])),
 
+    h('div.stack.stack-3',
     sectionLabel('Hoy'),
     statGrid([
       stat({ label: 'Comidas', value: number(stats.meals), foot: `${stats.mealsDelivered} entregadas` }),
@@ -92,19 +97,23 @@ function body() {
         foot: `${plural(store.farms.length, 'rancho', 'ranchos')} · ${stats.total} en ruta hoy`,
         onClick: () => go('/farms'),
       }),
-    ]),
+    ])),
 
-    owing.length ? sectionLabel('Quién debe', h('button.btn.btn--quiet.btn--sm', {
-      type: 'button', onclick: () => go('/billing'),
-    }, 'Ver todo')) : null,
-    owing.length ? debtorList(owing.slice(0, 4)) : null,
+    owing.length
+      ? h('div.stack.stack-3',
+          sectionLabel('Quién debe', h('button.btn.btn--quiet.btn--sm', {
+            type: 'button', onclick: () => go('/billing'),
+          }, 'Ver todo')),
+          debtorList(owing.slice(0, 4)))
+      : null,
 
+    h('div.stack.stack-3',
     sectionLabel('Acciones'),
     h('div.stack.stack-2',
       button('Cobrar en la tienda', { variant: 'primary', block: true, icon: 'cash', onClick: () => go('/cobrar') }),
       button('Ver la ruta de hoy', { variant: 'dark', block: true, icon: 'route', onClick: () => go('/route') }),
       button('Registrar un cliente', { variant: 'ghost', block: true, icon: 'userPlus', onClick: () => go('/clients/new') }),
-      button('Registrar un rancho', { variant: 'ghost', block: true, icon: 'farm', onClick: () => go('/farms/new') })));
+      button('Registrar un rancho', { variant: 'ghost', block: true, icon: 'farm', onClick: () => go('/farms/new') }))));
 }
 
 /* --- Hero: the day's progress ---------------------------------------------- */

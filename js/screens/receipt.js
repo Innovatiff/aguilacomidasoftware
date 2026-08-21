@@ -57,8 +57,8 @@ export function renderReceipt(context) {
   function body() {
     const reversal = Number(receipt.amount) < 0;
 
-    return h('div.page__inner.stack.stack-4',
-      h('div.receipt',
+    return h('div.page__inner.page__inner--flow.stack.stack-4',
+      h('div.receipt.span-all',
         h('div.receipt__mark', icon(reversal ? 'refresh' : 'check')),
         h('div.receipt__amount', money(Math.abs(receipt.amount))),
         h('div.receipt__what', reversal ? 'Pago cancelado' : 'Pago recibido'),

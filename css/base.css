@@ -37,8 +37,9 @@ img, svg { display: block; max-width: 100%; }
 }
 
 /* --- The phone canvas ----------------------------------------------------
-   The whole product is designed for a phone. On larger screens we centre the
-   same canvas rather than stretching it, so the layout never has to change. */
+   Everything below is the phone: a 520px column with a bar at the bottom.
+   The desktop layout at the end of this file rearranges the same elements
+   into a rail and a full window — the markup never changes. */
 
 #app {
   position: relative;
@@ -54,6 +55,14 @@ img, svg { display: block; max-width: 100%; }
 @media (min-width: 560px) {
   body { background: var(--ink-100); }
   #app { min-height: 100dvh; }
+}
+
+/* A tablet in portrait is still a touch device — the bar belongs at the bottom,
+   under a thumb — but a 520px column on a 800px screen is half a screen wasted.
+   Widening the canvas is one variable: the frame, the bar, the action button
+   and the sheets are all measured from it. */
+@media (min-width: 700px) and (max-width: 899px) {
+  :root { --app-max: 720px; }
 }
 
 /* --- Top app bar ---------------------------------------------------------- */
@@ -141,6 +150,9 @@ img, svg { display: block; max-width: 100%; }
   background: var(--nav-bg);
   border-top: 1px solid rgba(255, 255, 255, .06);
 }
+
+/* Hidden until the tab bar becomes a rail — see the desktop section. */
+.tabbar__brand { display: none; }
 
 .tab {
   position: relative;
@@ -248,4 +260,195 @@ img, svg { display: block; max-width: 100%; }
     animation-iteration-count: 1 !important;
     transition-duration: .01ms !important;
   }
+}
+
+
+/* ==========================================================================
+   Desktop
+   ==========================================================================
+   The kitchen runs the panel on a computer at the store, so past 900px this
+   stops being a phone screen stretched wide and becomes a window: the tab bar
+   swings to the left as a rail, the page takes the whole height and scrolls in
+   its own pane, and content sits in a column wide enough to actually use.
+
+   No markup changes — `#app` becomes a grid and the three elements that are
+   already there are placed into named areas.
+   ========================================================================== */
+
+@media (min-width: 900px) {
+  body { background: var(--bg); }
+
+  #app {
+    max-width: none;
+    box-shadow: none;
+  }
+
+  /* Only the mounted frame becomes the rail-and-window grid. Signing in has no
+     frame, and inheriting these columns would drop the whole card inside the
+     88px the rail would have occupied. */
+  #app.app--shell {
+    height: 100dvh;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: var(--rail-w) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas:
+      "rail topbar"
+      "rail page";
+  }
+
+  /* --- Top bar ----------------------------------------------------------- */
+
+  .topbar {
+    grid-area: topbar;
+    position: static;
+    height: var(--topbar-h);
+    padding: 0 var(--s6);
+    border-bottom: 1px solid rgba(255, 255, 255, .07);
+  }
+  .topbar__title { font-size: var(--fs-xl); }
+
+  /* --- Page -------------------------------------------------------------- */
+
+  .page {
+    grid-area: page;
+    padding-bottom: 0;
+  }
+  .page__inner {
+    max-width: var(--content-max);
+    margin-inline: auto;
+    /* The tail of the page has to clear the floating action button, the same
+       way the tab bar's padding does it on a phone. */
+    padding: var(--s6) var(--s6) var(--s9);
+  }
+  .page__inner--tight { padding: var(--s5) var(--s6); }
+
+  /* A form or a conversation is read line by line: it gets a column, not a
+     field. Everything else earns the full width. */
+  .page__inner--narrow { max-width: var(--content-narrow); }
+
+  /* --- The rail ---------------------------------------------------------- */
+
+  .tabbar {
+    grid-area: rail;
+    position: static;
+    transform: none;
+    left: auto; bottom: auto;
+    width: auto; max-width: none;
+    height: auto;
+    padding: var(--s4) var(--s2);
+    grid-auto-flow: row;
+    grid-auto-columns: auto;
+    grid-auto-rows: max-content;
+    align-content: start;
+    gap: var(--s1);
+    border-top: 0;
+    border-right: 1px solid rgba(255, 255, 255, .07);
+  }
+
+  .tabbar__brand {
+    display: flex;
+    align-items: center;
+    gap: var(--s3);
+    padding: var(--s2) var(--s2) var(--s5);
+    color: #fff;
+    min-width: 0;
+  }
+  .tabbar__brand svg { width: 30px; height: 30px; color: var(--brand-500); flex: none; }
+  .tabbar__name {
+    font-size: var(--fs-base); font-weight: 700; letter-spacing: -.015em;
+    line-height: 1.15; display: none;
+  }
+  .tabbar__name span { display: block; font-size: var(--fs-xs); font-weight: 500; color: var(--nav-fg); }
+
+  .tab {
+    height: 62px;
+    border-radius: var(--r-md);
+    transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+  }
+  .tab.is-active { background: rgba(255, 255, 255, .07); }
+  .tab.is-active::before {
+    top: 50%;
+    left: 0;
+    width: 3px;
+    height: 24px;
+    transform: translateY(-50%);
+    border-radius: 0 2px 2px 0;
+  }
+  .tab__dot { top: 8px; margin-left: 14px; }
+
+  /* --- Wide content patterns --------------------------------------------- */
+
+  /* Two ways to use the extra width, for two different kinds of screen.
+
+     A grid, when the blocks are peers that should line up: two summaries side
+     by side read as a pair, and a row that ends short is honest about it. */
+  .page__inner--cards {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+  .page__inner--cards > .span-all { grid-column: 1 / -1; }
+
+  /* Columns, when the blocks are a list of unrelated sections of wildly
+     different heights — a client's file, a settings page. A grid would leave a
+     hole beside every short card; columns pack them, and the reading order
+     stays exactly what it is on a phone: straight down, then over. */
+  .page__inner--flow {
+    display: block;
+    columns: 2;
+    column-gap: var(--s4);
+  }
+  .page__inner--flow > * {
+    break-inside: avoid;
+    margin-bottom: var(--s4);
+  }
+  .page__inner--flow > .span-all { column-span: all; }
+
+  /* Repeated blocks — route locations, invoice groups — tile instead of
+     stacking, because on a wide screen a single column is mostly empty space. */
+  /* auto-fit, not auto-fill: a group of two locations should share the row
+     rather than huddle on the left of three empty tracks. */
+  .tile-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    align-items: start;
+  }
+}
+
+/* Past 1280px the rail has room for its labels. */
+@media (min-width: 1280px) {
+  #app.app--shell { grid-template-columns: var(--rail-w-wide) minmax(0, 1fr); }
+
+  .tabbar { padding-inline: var(--s3); }
+  .tabbar__name { display: block; }
+
+  .tab {
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: var(--s3);
+    height: 46px;
+    padding-inline: var(--s3);
+    font-size: var(--fs-base);
+    font-weight: 600;
+  }
+  .tab__dot {
+    position: static;
+    margin: 0 0 0 auto;
+    border-width: 0;
+  }
+}
+
+/* --- Pointer affordances --------------------------------------------------
+   The phone build only has `:active`, because a finger has no hover. A mouse
+   does, and a row that does not respond to it reads as disabled. */
+
+@media (hover: hover) and (pointer: fine) {
+  .item:hover { background: var(--ink-50); }
+  .tab:hover { color: var(--nav-fg-active); }
+  .topbar__btn:hover { background: rgba(255, 255, 255, .12); }
+  .btn:hover:not(:disabled) { filter: brightness(.96); }
+  .fab:hover { transform: translateY(-1px); }
+  .stat:hover { border-color: var(--ink-200); }
+  .chip:hover { border-color: var(--ink-300); }
 }

@@ -9,7 +9,7 @@
  */
 
 import { $ } from './lib/dom.js';
-import { configureShell, setTabBadge, splash, notePath, screen } from './ui/shell.js';
+import { configureShell, clearShell, setTabBadge, splash, notePath, screen } from './ui/shell.js';
 import { register, setNotFound, start, go, onNavigate } from './lib/router.js';
 import { startSession, watchSession, session, signOutNow } from './data/session.js';
 import { startStore, stopStore, subscribe, unreadCount } from './data/store.js';
@@ -59,7 +59,7 @@ watchSession(() => {
 });
 
 function showNoAccess() {
-  host.replaceChildren();
+  clearShell(host);
   renderNoAccess(host, {
     // The profile name, not `displayName` — that falls back to the email
     // address, which reads badly in a greeting.
@@ -81,7 +81,7 @@ function enter(next) {
   phase = next;
 
   if (next === 'auth') {
-    host.replaceChildren();
+    clearShell(host);
     renderAuth(host);
     return;
   }
@@ -92,7 +92,11 @@ function enter(next) {
   }
 
   host.replaceChildren();
-  configureShell({ mount: host, tabs: TABS });
+  configureShell({
+    mount: host,
+    tabs: TABS,
+    brand: { name: 'El Águila', sub: 'Administración' },
+  });
   startStore();
   stopBadge = subscribe(() => setTabBadge('messages', unreadCount()));
 

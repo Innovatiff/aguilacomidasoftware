@@ -125,7 +125,7 @@ export function renderRoute(context) {
     return h('div.stack.stack-3',
       sectionLabel(farm.farmName,
         h('span.t-sm.c-soft', `${done}/${rows.length}`)),
-      h('div.stack.stack-3', farm.locations.map(locationCard)));
+      h('div.stack.stack-3.tile-grid', farm.locations.map(locationCard)));
   }
 
   /**

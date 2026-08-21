@@ -41,7 +41,7 @@ export function renderSettings() {
       subtitle: session.displayName,
       tab: 'settings',
       sunken: true,
-      body: h('div.page__inner.stack.stack-4',
+      body: h('div.page__inner.page__inner--flow.stack.stack-4',
         pricesCard(),
         profileCard(),
         teamCard(),
