@@ -212,6 +212,10 @@ export function renderClientDetail(context) {
             ? `Venció ${humanDelta(billing.daysToDue)} (${formatDay(billing.dueDate)}).`
             : `Vence ${humanDelta(billing.daysToDue)} (${formatDay(billing.dueDate)}).`) : null,
 
+        !owes && model.paidThrough && model.paidThrough >= today()
+          ? h('div.t-sm.c-soft', `Pagado hasta el ${formatDay(model.paidThrough)}.`)
+          : null,
+
         h('div.divider'),
 
         h('div.stack.stack-2',

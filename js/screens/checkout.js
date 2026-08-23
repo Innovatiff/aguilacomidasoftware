@@ -44,8 +44,8 @@ export function renderCheckout() {
     screen({
       title: 'Cobrar',
       subtitle: formatDayLong(today()),
-      tab: 'billing',
-      backTo: '/billing',
+      tab: 'clients',
+      backTo: '/clients',
       actions: [topbarButton('receipt', { label: 'Cobranza', onClick: () => go('/billing') })],
       sunken: true,
       sticky: h('div.searchbar',

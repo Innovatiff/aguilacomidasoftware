@@ -41,7 +41,8 @@ export function renderBilling(context) {
     screen({
       title: 'Cobranza',
       subtitle: `${money(moneyStats().outstanding, { round: true })} por cobrar`,
-      tab: 'billing',
+      backTo: '/clients',
+      tab: 'clients',
       actions: [topbarButton('receipt', { label: 'Cerrar quincena', onClick: closeCycle })],
       sunken: true,
       sticky: h('div.searchbar.searchbar--sunken',

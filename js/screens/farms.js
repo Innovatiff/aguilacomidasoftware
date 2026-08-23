@@ -30,7 +30,7 @@ export function renderFarms() {
     screen({
       title: 'Ranchos',
       subtitle: `${store.farms.length} ${store.farms.length === 1 ? 'rancho' : 'ranchos'} · ${plural(store.clients.length, 'cliente', 'clientes')}`,
-      tab: 'clients',
+      tab: 'farms',
       actions: [topbarButton('users', {
         label: 'Todos los clientes', onClick: () => go('/clients'),
       })],

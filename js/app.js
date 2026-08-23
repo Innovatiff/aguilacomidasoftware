@@ -34,8 +34,8 @@ import { emptyState, button } from './ui/kit.js';
 const TABS = [
   { id: 'home',     path: '/',         label: 'Inicio',   icon: 'home' },
   { id: 'route',    path: '/route',    label: 'Ruta',     icon: 'route' },
-  { id: 'clients',  path: '/farms',    label: 'Ranchos',  icon: 'farm' },
-  { id: 'billing',  path: '/billing',  label: 'Cobros',   icon: 'wallet' },
+  { id: 'farms',    path: '/farms',    label: 'Ranchos',  icon: 'farm' },
+  { id: 'clients',  path: '/clients',  label: 'Clientes', icon: 'users' },
   { id: 'messages', path: '/messages', label: 'Mensajes', icon: 'chat' },
 ];
 

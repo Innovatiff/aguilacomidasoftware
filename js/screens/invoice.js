@@ -56,7 +56,7 @@ export function renderInvoice(context) {
       title: invoice.clientName || 'Factura',
       subtitle: formatRange(invoice.periodStart, invoice.periodEnd),
       backTo: '/billing',
-      tab: 'billing',
+      tab: 'clients',
       sunken: true,
       body: body(status),
     });

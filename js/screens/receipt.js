@@ -34,13 +34,13 @@ export function renderReceipt(context) {
   function draw() {
     if (missing) {
       screen({
-        title: 'Recibo', backTo: '/cobrar', tab: 'billing',
+        title: 'Recibo', backTo: '/cobrar', tab: 'clients',
         body: h('div.page__inner', alert('Este recibo ya no existe.', 'bad')),
       });
       return;
     }
     if (!receipt) {
-      screen({ title: 'Recibo', backTo: '/cobrar', tab: 'billing', body: loading() });
+      screen({ title: 'Recibo', backTo: '/cobrar', tab: 'clients', body: loading() });
       return;
     }
 
@@ -48,7 +48,7 @@ export function renderReceipt(context) {
       title: receipt.folio || 'Recibo',
       subtitle: receipt.clientName,
       backTo: '/cobrar',
-      tab: 'billing',
+      tab: 'clients',
       sunken: true,
       body: body(),
     });

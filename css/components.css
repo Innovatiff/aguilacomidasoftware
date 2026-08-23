@@ -155,7 +155,12 @@
 /* --- Stat tile ------------------------------------------------------------ */
 
 .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--s3); }
-.stats--3 { grid-template-columns: repeat(3, 1fr); }
+/* Three across needs room for three labels; on a narrow phone it wraps to two
+   and the third sits underneath rather than shrinking all of them. */
+.stats--3 { grid-template-columns: repeat(2, 1fr); }
+@media (min-width: 560px) {
+  .stats--3 { grid-template-columns: repeat(3, 1fr); }
+}
 
 .stat {
   padding: var(--s3) var(--s4);

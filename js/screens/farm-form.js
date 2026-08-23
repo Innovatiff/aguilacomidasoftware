@@ -38,7 +38,7 @@ export async function renderFarmForm(context) {
 
   if (!model) {
     screen({
-      title: 'Rancho', backTo: '/farms', tab: 'clients',
+      title: 'Rancho', backTo: '/farms', tab: 'farms',
       body: h('div.page__inner', alert('Este rancho ya no existe.', 'bad')),
     });
     return;
@@ -55,7 +55,7 @@ export async function renderFarmForm(context) {
     title: isNew ? 'Nuevo rancho' : 'Editar rancho',
     subtitle: isNew ? null : model.name,
     backTo: isNew ? '/farms' : `/farms/${farmId}`,
-    tab: 'clients',
+    tab: 'farms',
     body: saving ? loading() : form(),
   });
 

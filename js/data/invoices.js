@@ -23,7 +23,7 @@ import {
   invoiceId, draftInvoice, balanceOf, invoiceStatus, round2, periodFor, periodByIndex,
 } from '../lib/billing.js';
 import { priceFor } from '../lib/pricing.js';
-import { today } from '../lib/dates.js';
+import { today, addDays } from '../lib/dates.js';
 
 /** How far ahead a single payment may buy: three months, then it is refused. */
 const MAX_PREPAID_PERIODS = 6;
@@ -184,6 +184,7 @@ export async function takePayment({ client, tiers, amount, method, reference, no
   targets.sort((a, b) => a.id.localeCompare(b.id));
 
   const receiptRef = doc(collection(db, 'receipts'));
+  const clientRef = doc(db, 'clients', client.id);
 
   return runTransaction(db, async (tx) => {
     // Every read first — Firestore refuses a read after a write in the same
@@ -198,6 +199,10 @@ export async function takePayment({ client, tiers, amount, method, reference, no
     let left = total;
     const applied = [];
     let balanceAfter = 0;
+    // The last fortnight this payment leaves fully settled. Stamped on the
+    // client so the roster can answer "is this one paid up?" by reading one
+    // field, instead of every screen re-deriving it from the invoice history.
+    let paidThrough = client.paidThrough || null;
 
     for (const row of rows) {
       const draft = row.data
@@ -248,6 +253,9 @@ export async function takePayment({ client, tiers, amount, method, reference, no
           periodEnd: record.periodEnd,
           amount: take,
         });
+        if (settled && (!paidThrough || record.periodEnd > paidThrough)) {
+          paidThrough = record.periodEnd;
+        }
         balanceAfter = round2(balanceAfter + Math.max(0, round2(record.amount - paid)));
       } else {
         balanceAfter = round2(balanceAfter + Math.max(0, owed));
@@ -279,6 +287,10 @@ export async function takePayment({ client, tiers, amount, method, reference, no
     };
     tx.set(receiptRef, receipt);
 
+    if (paidThrough && paidThrough !== (client.paidThrough || null)) {
+      tx.update(clientRef, { paidThrough, updatedAt: serverTimestamp() });
+    }
+
     return { id: receiptRef.id, ...receipt, at: new Date() };
   });
 }
@@ -300,6 +312,8 @@ export async function reversePayment(id, index, author) {
     if (!snap.exists()) throw new Error('La factura ya no existe.');
 
     const data = snap.data();
+    const clientRef = data.clientId ? doc(db, 'clients', data.clientId) : null;
+    const clientSnap = clientRef ? await tx.get(clientRef) : null;
     const payments = [...(data.payments || [])];
     const [removed] = payments.splice(index, 1);
     if (!removed) throw new Error('Ese pago ya no existe.');
@@ -313,6 +327,18 @@ export async function reversePayment(id, index, author) {
       paidAt: settled ? data.paidAt || serverTimestamp() : null,
       updatedAt: serverTimestamp(),
     });
+
+    // If this fortnight is no longer settled, the client is no longer paid up
+    // through it — walk the marker back to the day before it started.
+    if (clientSnap?.exists() && !settled) {
+      const was = clientSnap.data().paidThrough || null;
+      if (was && was >= data.periodEnd) {
+        tx.update(clientRef, {
+          paidThrough: addDays(data.periodStart, -1),
+          updatedAt: serverTimestamp(),
+        });
+      }
+    }
 
     const day = today();
     tx.set(counterRef, {

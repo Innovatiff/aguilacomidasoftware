@@ -425,6 +425,41 @@
   padding-bottom: calc(var(--tabbar-h) + var(--safe-bottom) + var(--s2));
 }
 
+/* --- Roster row -------------------------------------------------------------
+   Three targets in one row: the name opens the file, the button takes money,
+   the dots manage the person. A single tappable row would make the two things
+   done most often cost a trip through the file and back. */
+
+.crow {
+  display: flex; align-items: center; gap: var(--s2);
+  padding-right: var(--s3);
+  background: var(--surface);
+}
+.crow__main {
+  flex: 1; min-width: 0;
+  display: flex; align-items: center; gap: var(--s3);
+  padding: var(--s3) var(--s2) var(--s3) var(--s4);
+  min-height: 66px;
+  text-align: left; color: inherit;
+  transition: background var(--dur) var(--ease);
+}
+.crow__main:active { background: var(--ink-50); }
+
+.crow__state {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 3px;
+  flex: none; max-width: 42%;
+}
+.crow__state .badge { white-space: nowrap; }
+
+.crow__acts { display: flex; align-items: center; gap: 2px; flex: none; }
+.crow__acts .btn { width: 40px; padding: 0; }
+
+/* On a narrow phone the standing line under the badge is the first thing to
+   go: the badge and the amount already carry the state. */
+@media (max-width: 400px) {
+  .crow__state .t-xs { display: none; }
+}
+
 /* --- Receipt ---------------------------------------------------------------- */
 
 /* A slip, not a card: the shape says "this is your proof" at a glance. */

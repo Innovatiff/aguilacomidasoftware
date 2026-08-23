@@ -39,7 +39,7 @@ export function renderFarmDetail(context) {
       screen({
         title: 'Rancho',
         backTo: '/farms',
-        tab: 'clients',
+        tab: 'farms',
         body: store.loaded.farms
           ? h('div.page__inner', alert('Este rancho ya no existe.', 'bad'))
           : loading(),
@@ -51,7 +51,7 @@ export function renderFarmDetail(context) {
       title: farm.name,
       subtitle: clientStatusMeta(farm.status).label,
       backTo: '/farms',
-      tab: 'clients',
+      tab: 'farms',
       actions: [topbarButton('edit', {
         label: 'Editar rancho', onClick: () => go(`/farms/${farmId}/edit`),
       })],

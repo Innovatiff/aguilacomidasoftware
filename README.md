@@ -20,6 +20,7 @@ cada dos semanas. Antes no se llevaba registro de nada. Este panel registra:
 | **Clientes** | cada persona que come, con su rancho y su **ubicación obligatoria**. Hereda el servicio del rancho; lo suyo es su **plan**: cuántas comidas lleva al día |
 | **Precios** | una lista para todo el negocio: lo que cuesta una **quincena completa** en cada plan — 1 comida/día $75, 2 comidas/día $140. Se cambia en Ajustes |
 | **Ruta** | agrupada por rancho → ubicación: un toque mueve una ubicación completa, con estado en vivo que cada quien ve en su app |
+| **Clientes** | el tablero de trabajo: quién debe, quién va atrasado, quién está activo y quién tiene algo mal. Cobrar, pausar, reactivar y mandar mensaje sin salir de la lista |
 | **Cobro** | ciclos de 14 días, **una factura por persona**, pagos y saldos, agrupados por rancho |
 | **Caja** | cobrar en la tienda: buscar a la persona, cobrar, y su **recibo con folio** le aparece en su app al momento |
 | **Mensajes** | un hilo por cliente, con avisos automáticos de pagos y problemas |
@@ -129,7 +130,48 @@ Para eliminar una ubicación primero hay que mover a quien esté ahí, y para
 eliminar un rancho primero hay que vaciarlo. Es a propósito: borrar en cascada
 se llevaría entregas, facturas e historial de gente que sigue trabajando.
 
-### 6. Cobrar en la tienda
+### 6. El día a día: la pestaña Clientes
+
+Es la pantalla donde se trabaja. Responde en orden las cuatro preguntas que
+realmente se hacen: **quién me debe · quién va atrasado · quién está activo ·
+quién tiene algo mal**.
+
+Los filtros de arriba son esas preguntas, con su cuenta al lado: *Vencidos*,
+*Deben*, *Falta esta quincena*, *Pagados*, *Activos*, *En pausa*, *Inactivos*,
+*Revisar*. Al lado del buscador hay un selector de rancho.
+
+Cada renglón trae sus propias acciones, sin entrar a la ficha:
+
+- El **botón de cobrar** abre la misma hoja de la caja.
+- Los **tres puntos** abren: cobrar, ver ficha, mandar mensaje, editar,
+  **poner en pausa**, **marcar inactivo** o **reactivar**.
+
+Poner en pausa no pregunta nada — es reversible y pasa seguido, alguien se va
+tres semanas. Marcar inactivo sí pregunta: termina la relación, aunque lo que
+deba sigue registrado y su historial se conserva.
+
+**Dos cosas pasan solas.** La pantalla no espera a que alguien se acuerde:
+
+1. **Quincenas cerradas sin facturar.** Al abrir Clientes, el panel busca los
+   periodos que ya terminaron y nunca se facturaron —hasta cuatro atrás— y los
+   ofrece en un aviso: *«3 facturas por emitir»*. Un toque muestra el desglose
+   por rancho y otro las emite. Es el dinero que más fácil se pierde: comida ya
+   cocinada que nadie cobró porque nadie se acordó de cerrar la quincena.
+2. **Recordatorios en bloque.** Si hay gente con pago vencido, aparece
+   *«Recordar a todos»*: manda a cada uno un mensaje en su propio chat con su
+   saldo y su fecha vencida. Abrir veinte chats para escribir la misma frase es
+   la razón por la que los recordatorios dejan de mandarse.
+
+> Como no hay servidor, «solo» quiere decir **en cuanto alguien abre el panel**,
+> en un toque — no de madrugada. Es la versión honesta de automático para una
+> app sin backend, y aun así convierte una tarea que nadie recuerda en una que
+> nadie puede pasar por alto.
+
+**«Pagado hasta».** Cuando alguien paga, el panel le marca hasta qué quincena
+quedó cubierto. Por eso la lista puede distinguir entre *«todavía no se le
+factura»* y *«ya pagó por adelantado»*, que se ven igual si sólo miras el saldo.
+
+### 7. Cobrar en la tienda
 
 **Cobros → Cobrar** (o el botón *Cobrar* en Inicio). Escribe el nombre, tócalo,
 confirma el monto. El panel ya trae puesto lo que debe; si está al corriente,
@@ -151,7 +193,7 @@ del día: es lo que se necesita para cerrar la caja en la noche.
 **Un cobro mal hecho no se borra.** Se cancela desde la factura, y eso escribe un
 segundo recibo en negativo. Los dos quedan visibles, para los dos lados.
 
-### 7. Correr en local
+### 8. Correr en local
 
 No hay dependencias ni build. Cualquier servidor estático sirve:
 
@@ -166,7 +208,7 @@ Abre `http://localhost:5173`. Agrega `localhost` en
 > Los módulos ES no funcionan abriendo `index.html` con `file://`. Usa un
 > servidor.
 
-### 8. Publicar en Netlify
+### 9. Publicar en Netlify
 
 El sitio se publica solo: Netlify vigila la rama del repositorio y sube cada
 push. No hay build — la raíz del repositorio *es* el sitio, y `netlify.toml` ya
@@ -185,7 +227,7 @@ Al conectar el repositorio en Netlify:
 Authorized domains → Add domain**, y agrega el dominio de Netlify
 (`tu-sitio.netlify.app` y tu dominio propio si lo tienes).
 
-### 9. Publicar las reglas
+### 10. Publicar las reglas
 
 **Publicar el sitio no publica las reglas.** Son dos cosas distintas y es la
 causa más común de «ya lo arreglé pero sigue igual». Netlify sube la app;
@@ -237,6 +279,7 @@ js/
   data/               una capa por colección de Firestore
     session.js  staff.js  pricing.js  farms.js  clients.js
     deliveries.js  invoices.js  receipts.js  chat.js
+    cycles.js         qué quincenas cerraron sin facturar
     store.js          escuchas compartidas del panel
   ui/                 shell, kit de componentes, hojas, chat
   screens/            una pantalla por archivo
@@ -275,6 +318,17 @@ cobro equivocado se cancela desde la factura y eso escribe un segundo recibo en
 negativo, como se corrige un libro de caja. Los dos quedan a la vista de las dos
 partes; hacer desaparecer el primero sería la única versión imposible de
 verificar después.
+
+**El estado de cada cliente se deriva una sola vez.** Antes cada pantalla
+volvía a calcularlo — una preguntaba «¿debe?», otra «¿está vencido?», una
+tercera contaba a la misma gente para un filtro. `clientState()` lo resuelve
+una vez, así que el renglón, su etiqueta, el filtro y la cuenta de ese filtro
+no pueden contradecirse.
+
+**`paidThrough` se guarda porque el saldo no alcanza.** Un saldo en cero
+significa dos cosas distintas: «todavía no se le factura la quincena» y «ya la
+pagó por adelantado». Distinguirlas leyendo el historial de facturas costaría
+una consulta por cliente; un campo lo resuelve en cero.
 
 **El estado de la factura se calcula al leer.** «Vencido» depende de la fecha de
 hoy, así que se deriva en cada render. Lo único que se guarda es `settled`, un
@@ -321,6 +375,7 @@ clients/{clientId}               -- una persona que come
   locationId, locationName       -- obligatorio
   mealsPerDay                    -- su plan; de ahí sale su precio
   status       'active' | 'paused' | 'inactive'
+  paidThrough  'YYYY-MM-DD'      -- última quincena que dejó saldada
   deliveryDays, deliveryWindow, cycleAnchor, graceDays
                                  -- copiados del rancho al escribir
 
@@ -425,11 +480,11 @@ ni borrar, y que la primera cuenta se pueda reclamar exactamente una vez. Ver
    botón del encabezado de una ubicación mueve a toda su gente de un toque, y
    deja en paz lo que ya se entregó o se reportó con problema. Las excepciones se
    avanzan una por una desde su renglón.
-3. **Cobrar** — en la tienda, todo el día: Cobros → Cobrar, busca, cobra. El
-   recibo le llega a la persona en su app.
-4. **Cerrar la quincena** — en Cobranza. Emite **una factura por persona** al
-   precio de su plan, para quien haya recibido comida en el periodo, con vista
-   previa —resumida por rancho— antes de escribir nada. Lo ya cobrado por
+3. **Cobrar** — en la tienda, todo el día: Clientes → Cobrar, busca, cobra. O
+   directamente desde el renglón de la persona. El recibo le llega en su app.
+4. **Emitir lo que cerró** — el aviso en Clientes te lo dice solo. Emite **una
+   factura por persona** al precio de su plan, para quien haya recibido comida
+   en el periodo, con vista previa antes de escribir nada. Lo ya cobrado por
    adelantado no se vuelve a facturar: esa quincena ya tiene su factura saldada.
 5. **Cerrar la caja** — al final del día, en Cobrar: lo cobrado hoy y todos sus
    recibos.

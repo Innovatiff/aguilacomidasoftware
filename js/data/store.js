@@ -199,6 +199,69 @@ export const invoicesFor = (clientId) =>
 export const billingFor = (client) =>
   (client ? summarize(client, invoicesFor(client.id)) : null);
 
+/**
+ * Everything the roster needs to say about one person, in one object.
+ *
+ * The screens used to each work this out again — one asking "does this client
+ * owe money", another "is this one overdue", a third counting the same people
+ * for a filter chip. Deriving it once means a row, its badge, its filter and
+ * the count on that filter's chip can never disagree.
+ *
+ *   state   what to show and what to filter on, in one word
+ *   owed    money outstanding right now
+ *   behind  fortnights with an unpaid bill
+ *   covered whether the fortnight in progress is already paid for
+ *   gaps    the things that stop this person being served or billed at all
+ */
+export function clientState(client) {
+  const billing = billingFor(client);
+  const period = periodFor(client.cycleAnchor || today(), today());
+  const paidThrough = client.paidThrough || null;
+  const covered = !!paidThrough && paidThrough >= period.end;
+
+  // A gap is something that stops this person being served or billed. Not
+  // having an email is neither — most workers do not have one the day they are
+  // registered, and flagging every one of them would make the flag meaningless.
+  const gaps = {
+    noPlan: !tierFor(state.pricing, client.mealsPerDay),
+    noPlace: !client.locationId,
+    noAccess: !client.email,
+  };
+
+  return {
+    client,
+    billing,
+    period,
+    paidThrough,
+    covered,
+    owed: billing?.balance || 0,
+    behind: billing?.outstanding?.length || 0,
+    overdue: billing?.overdueCount || 0,
+    gaps,
+    hasGap: gaps.noPlan || gaps.noPlace,
+    state: nameState(client, billing, covered),
+  };
+}
+
+/**
+ * One word for where this client stands, in the order the kitchen cares.
+ *
+ * Money first: somebody who left the service still owes what they owe, and a
+ * roster that hides that behind "Inactivo" is how debts get written off by
+ * accident.
+ */
+function nameState(client, billing, covered) {
+  if ((billing?.overdueCount || 0) > 0) return 'overdue';
+  if ((billing?.balance || 0) > 0) return 'due';
+  if (client.status === 'inactive') return 'inactive';
+  if (client.status === 'paused') return 'paused';
+  if (covered) return 'covered';
+  return 'clear';
+}
+
+/** The whole roster, each with its derived state. Computed once per render. */
+export const roster = () => state.clients.map(clientState);
+
 /** What one fortnight costs this person under the current price list. */
 export const fortnightPrice = (client) => priceFor(state.pricing, client?.mealsPerDay);
 
