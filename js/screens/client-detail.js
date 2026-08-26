@@ -18,7 +18,7 @@ import { session } from '../data/session.js';
 import { store, subscribe, billingFor, deliveryFor, farmById, fortnightPrice } from '../data/store.js';
 import { watchClient, updateClient, moveClient } from '../data/clients.js';
 import { watchClientInvoices, issueInvoice } from '../data/invoices.js';
-import { watchClientReceipts, totalOf } from '../data/receipts.js';
+import { watchClientReceipts, totalOf, cancelledIds } from '../data/receipts.js';
 import { openOpeningSheet } from '../ui/opening-sheet.js';
 import { watchClientDeliveries, billableMeals, createDelivery } from '../data/deliveries.js';
 import { ensureConversation } from '../data/chat.js';
@@ -266,7 +266,9 @@ export function renderClientDetail(context) {
    */
   function paymentsCard() {
     const paid = totalOf(receipts);
-    const last = receipts.find((row) => Number(row.amount) > 0);
+    const voided = cancelledIds(receipts);
+    // "Last paid" must skip a payment that was taken back.
+    const last = receipts.find((row) => Number(row.amount) > 0 && !voided.has(row.id));
 
     return h('div.stack.stack-3',
       sectionLabel('Historial de pagos', receipts.length
@@ -278,7 +280,7 @@ export function renderClientDetail(context) {
             last
               ? h('p.t-xs.c-faint', `Última vez que pagó: ${formatDayLong(last.date)}.`)
               : null,
-            list(receipts.slice(0, 12).map(receiptRow), { card: true }))
+            list(receipts.slice(0, 12).map((row) => receiptRow(row, voided.has(row.id))), { card: true }))
         : card(h('div.stack.stack-3',
             h('p.t-sm.c-soft.center', 'Todavía no se le ha registrado ningún pago.'),
             !invoices.length
@@ -289,21 +291,26 @@ export function renderClientDetail(context) {
               : null)));
   }
 
-  function receiptRow(receipt) {
+  function receiptRow(receipt, wasCancelled = false) {
     const reversal = Number(receipt.amount) < 0;
+    const dead = reversal || wasCancelled;
     const covers = (receipt.applied || [])
       .map((row) => formatRange(row.periodStart, row.periodEnd)).join(', ');
 
     return itemRow({
       lead: h('div.avatar.avatar--sm', {
-        style: reversal
+        style: dead
           ? { background: 'var(--bad-50)', color: 'var(--bad-600)' }
           : { background: 'var(--ok-50)', color: 'var(--ok-600)' },
-      }, icon(reversal ? 'refresh' : paymentMethodMeta(receipt.method).icon)),
-      title: money(receipt.amount),
+      }, icon(dead ? 'refresh' : paymentMethodMeta(receipt.method).icon)),
+      title: h(`span${wasCancelled ? '.is-void' : ''}`, money(receipt.amount)),
       meta: [formatDay(receipt.date), paymentMethodMeta(receipt.method).label, covers]
         .filter(Boolean).join(' · '),
-      end: reversal ? badge('Cancelado', 'bad') : h('span.t-xs.c-faint', receipt.folio || ''),
+      end: reversal
+        ? badge('Cancelación', 'bad')
+        : wasCancelled
+          ? badge('Cancelado', 'bad')
+          : h('span.t-xs.c-faint', receipt.folio || ''),
       onClick: () => go(`/receipts/${receipt.id}`),
     });
   }

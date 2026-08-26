@@ -425,6 +425,14 @@
   padding-bottom: calc(var(--tabbar-h) + var(--safe-bottom) + var(--s2));
 }
 
+/* A cancelled payment stays on the record, struck through — removing it would
+   be the one edit that makes the account unverifiable afterwards. */
+.is-void { text-decoration: line-through; opacity: .65; }
+.receipt.is-void { border-color: var(--bad-500); }
+.receipt.is-void .receipt__mark { background: var(--bad-50); color: var(--bad-600); }
+.receipt.is-void .receipt__amount { text-decoration: line-through; opacity: .7; }
+.receipt.is-void .receipt__folio { background: var(--bad-600); }
+
 /* --- Roster row -------------------------------------------------------------
    Three targets in one row: the name opens the file, the button takes money,
    the dots manage the person. A single tappable row would make the two things

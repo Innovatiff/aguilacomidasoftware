@@ -248,8 +248,27 @@ aparece en la app de la persona en segundos, junto con un aviso en su chat.
 En la pantalla de Cobrar, abajo, está lo **cobrado hoy** con todos los recibos
 del día: es lo que se necesita para cerrar la caja en la noche.
 
-**Un cobro mal hecho no se borra.** Se cancela desde la factura, y eso escribe un
-segundo recibo en negativo. Los dos quedan visibles, para los dos lados.
+### Cancelar un pago hecho por error
+
+Abre el recibo y toca **Cancelar este pago**. Llegas a él por cualquiera de
+estos caminos:
+
+- **Cobrar → Recibos de hoy** — lo más rápido si acabas de cobrarlo.
+- **Ficha del cliente → Historial de pagos** — toca el pago.
+- **Desde la factura** — toca el pago en «Pagos recibidos».
+
+Antes de hacer nada te dice exactamente qué va a pasar: cuánto se le quita de la
+cuenta, **qué quincenas vuelven a quedar pendientes** y que el cliente lo verá.
+
+**Se cancela el pago completo, no una parte.** Un cobro de $280 puede haber
+saldado dos quincenas; deshacerlo factura por factura dejaría la cuenta a medias
+y dos correcciones distintas en la app del cliente. Se cancela el recibo y todo
+lo que pagó se reabre junto.
+
+**El recibo no se borra.** Queda tachado, marcado como cancelado, y se escribe
+un segundo recibo en negativo que lo referencia — como se corrige un libro de
+caja. Los dos quedan visibles para los dos lados, que es la única forma de que
+la cuenta se pueda verificar después.
 
 ### 9. Correr en local
 

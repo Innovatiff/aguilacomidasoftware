@@ -46,6 +46,25 @@ export function watchReceiptsOn(day, onData, onError) {
   );
 }
 
+/**
+ * The cancellation written against a receipt, if there is one.
+ *
+ * A receipt cannot be edited — the rules forbid it — so "was this cancelled?"
+ * is answered by looking for the negative receipt that points back at it,
+ * rather than by a flag on the receipt itself.
+ */
+export function watchReversal(receiptId, onData, onError) {
+  return onSnapshot(
+    query(receiptsRef(), where('reversalOf', '==', receiptId)),
+    (snap) => onData(listData(snap)[0] || null),
+    onError,
+  );
+}
+
+/** Ids of the receipts that some other receipt cancels. */
+export const cancelledIds = (receipts) =>
+  new Set((receipts || []).map((row) => row.reversalOf).filter(Boolean));
+
 export function watchReceipt(id, onData, onError) {
   return onSnapshot(doc(db, 'receipts', id), (snap) => onData(docData(snap)), onError);
 }

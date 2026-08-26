@@ -15,7 +15,8 @@ import { toastOk, toastBad, confirm, sheet } from '../ui/overlay.js';
 import { openChargeSheet } from '../ui/charge-sheet.js';
 import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
-import { watchInvoice, reversePayment } from '../data/invoices.js';
+import { watchInvoice, reversePayment, voidReceipt } from '../data/invoices.js';
+import { getReceipt } from '../data/receipts.js';
 import { store, clientById, invoicesFor } from '../data/store.js';
 import { postSystemMessage } from '../data/chat.js';
 import { balanceOf, invoiceStatus, STATUS_LABEL, STATUS_TONE } from '../lib/billing.js';
@@ -165,22 +166,44 @@ export function renderInvoice(context) {
           : null,
         button('Cancelar este pago', {
           variant: 'danger-soft', block: true, icon: 'ban',
-          onClick: async () => {
-            close();
-            if (!await confirm({
-              title: 'Cancelar pago',
-              message: `Se restará ${money(payment.amount)} de lo cobrado y la factura volverá a quedar `
-                + 'pendiente. Se registra un recibo de cancelación, visible también para el cliente; '
-                + 'el recibo original no se borra.',
-              confirmLabel: 'Cancelar el pago', tone: 'danger', icon: 'alert',
-            })) return;
-            try {
-              await reversePayment(id, index, author());
-              toastOk('Pago cancelado');
-            } catch (error) { toastBad(error?.message || dbMessage(error)); }
-          },
+          onClick: async () => { close(); await cancelPayment(payment, index); },
         })),
     });
+  }
+
+  /**
+   * Cancelling from the bill.
+   *
+   * The payment may have covered more than this fortnight — one $280 handed
+   * over can settle two — and undoing half of it would leave the client's
+   * account wrong and two separate corrections on their app. So this cancels
+   * the whole receipt, and says so plainly before doing it.
+   */
+  async function cancelPayment(payment, index) {
+    const receipt = payment.receiptId ? await getReceipt(payment.receiptId) : null;
+    const spread = (receipt?.applied || []).length > 1;
+
+    const ok = await confirm({
+      title: 'Cancelar pago',
+      message: receipt
+        ? `Se cancela el recibo ${receipt.folio} completo, de ${money(receipt.amount)}`
+          + `${spread ? `, que cubría ${receipt.applied.length} quincenas` : ''}. `
+          + 'Todo lo que pagó vuelve a quedar pendiente. El recibo no se borra: queda junto '
+          + 'con su cancelación, y el cliente ve las dos cosas.'
+        : `Se restará ${money(payment.amount)} de lo cobrado y la factura volverá a quedar `
+          + 'pendiente.',
+      confirmLabel: 'Sí, cancelar el pago',
+      cancelLabel: 'No, dejarlo así',
+      tone: 'danger',
+      icon: 'ban',
+    });
+    if (!ok) return;
+
+    try {
+      if (receipt) await voidReceipt(receipt, author());
+      else await reversePayment(id, index, author());
+      toastOk('Pago cancelado');
+    } catch (error) { toastBad(error?.message || dbMessage(error)); }
   }
 
   /**

@@ -296,7 +296,117 @@ export async function takePayment({ client, tiers, amount, method, reference, no
 }
 
 /**
- * Removes a payment recorded by mistake and restores the balance.
+ * Cancels a whole payment — every fortnight it touched, in one go.
+ *
+ * This is the unit a mistake is actually made in. A cashier takes $280, and
+ * that one act may settle two fortnights; undoing it invoice by invoice means
+ * finding both, remembering there were two, and leaving two separate negative
+ * receipts for what was one error. So the receipt is what gets cancelled, and
+ * everything it paid for reopens together.
+ *
+ * The receipt handed over is not edited or deleted — a record of what happened
+ * has to keep saying what happened, and it is the only copy the client holds.
+ * Instead a second, negative receipt is written against it, the way a cash book
+ * is corrected. Both stay visible to both sides, and the two cancel out.
+ */
+export async function voidReceipt(receipt, author) {
+  if (!receipt?.id) throw new Error('Ese recibo ya no existe.');
+  if (Number(receipt.amount) < 0) throw new Error('Un recibo de cancelación no se puede cancelar.');
+
+  const counterRef = doc(collection(db, 'receipts'));
+  const clientRef = receipt.clientId ? doc(db, 'clients', receipt.clientId) : null;
+  const targets = [...new Set((receipt.applied || []).map((row) => row.invoiceId))];
+
+  return runTransaction(db, async (tx) => {
+    // Every read before any write — Firestore refuses the other order.
+    const clientSnap = clientRef ? await tx.get(clientRef) : null;
+    const rows = [];
+    for (const invoiceId of targets) {
+      const ref = doc(db, 'invoices', invoiceId);
+      rows.push({ ref, snap: await tx.get(ref) });
+    }
+
+    let removed = 0;
+    const undone = [];
+    // The earliest fortnight that stops being settled: everything from there
+    // on is open again, so that is where "paid up to" has to fall back to.
+    let reopened = null;
+
+    for (const { ref, snap } of rows) {
+      if (!snap.exists()) continue;
+      const data = snap.data();
+
+      const kept = (data.payments || []).filter((payment) => payment.receiptId !== receipt.id);
+      const dropped = (data.payments || []).filter((payment) => payment.receiptId === receipt.id);
+      if (!dropped.length) continue;
+
+      const back = round2(dropped.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0));
+      removed = round2(removed + back);
+
+      const paid = round2(kept.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0));
+      const settled = paid >= (Number(data.amount) || 0) - 0.005;
+
+      tx.update(ref, {
+        paid,
+        payments: kept,
+        settled,
+        status: settled ? 'paid' : 'due',
+        paidAt: settled ? data.paidAt || serverTimestamp() : null,
+        updatedAt: serverTimestamp(),
+      });
+
+      undone.push({
+        invoiceId: snap.id,
+        periodStart: data.periodStart,
+        periodEnd: data.periodEnd,
+        amount: -back,
+      });
+
+      if (!settled && (!reopened || data.periodStart < reopened)) reopened = data.periodStart;
+    }
+
+    if (!removed) throw new Error('Este pago ya estaba cancelado.');
+
+    if (reopened && clientSnap?.exists()) {
+      const was = clientSnap.data().paidThrough || null;
+      const target = addDays(reopened, -1);
+      if (was && was > target) {
+        tx.update(clientRef, { paidThrough: target, updatedAt: serverTimestamp() });
+      }
+    }
+
+    const day = today();
+    const counter = {
+      clientId: receipt.clientId,
+      clientName: receipt.clientName || '',
+      farmId: receipt.farmId || '',
+      farmName: receipt.farmName || '',
+      locationName: receipt.locationName || '',
+      amount: -removed,
+      method: receipt.method || 'cash',
+      reference: '',
+      note: `Cancelación del recibo ${receipt.folio || receipt.id}.`,
+      date: day,
+      applied: undone,
+      balanceAfter: 0,
+      reversalOf: receipt.id,
+      reversalOfFolio: receipt.folio || '',
+      takenByName: author?.name || '',
+      takenByUid: author?.uid || null,
+      folio: folioFor(counterRef.id, day),
+      at: serverTimestamp(),
+    };
+    tx.set(counterRef, counter);
+
+    return { id: counterRef.id, ...counter, amount: -removed, undone };
+  });
+}
+
+/**
+ * Removes one payment entry from one invoice.
+ *
+ * Only for a payment with no receipt behind it. Everything the counter takes
+ * has one, and is cancelled whole through `voidReceipt`.
  *
  * The receipt that was handed over is not edited or deleted — a record of what
  * happened has to keep saying what happened. Instead a second, negative receipt

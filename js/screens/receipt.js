@@ -14,7 +14,11 @@ import {
   card, button, badge, defList, defRow, sectionLabel, list, itemRow, alert, loading,
 } from '../ui/kit.js';
 import { go } from '../lib/router.js';
-import { watchReceipt } from '../data/receipts.js';
+import { watchReceipt, watchReversal } from '../data/receipts.js';
+import { voidReceipt } from '../data/invoices.js';
+import { toastOk, toastBad, confirm } from '../ui/overlay.js';
+import { session } from '../data/session.js';
+import { dbMessage } from '../firebase.js';
 import { money } from '../lib/format.js';
 import { formatRange, formatStamp, formatDayLong } from '../lib/dates.js';
 import { paymentMethodMeta } from '../lib/model.js';
@@ -23,13 +27,18 @@ import { toDate } from '../firebase.js';
 export function renderReceipt(context) {
   const id = context.params.id;
   let receipt = null;
+  let cancelled = null;      // the negative receipt written against this one
   let missing = false;
 
-  const stop = watchReceipt(id, (row) => {
-    receipt = row;
-    missing = !row;
-    draw();
-  }, () => { missing = true; draw(); });
+  const stops = [
+    watchReceipt(id, (row) => {
+      receipt = row;
+      missing = !row;
+      draw();
+    }, () => { missing = true; draw(); }),
+
+    watchReversal(id, (row) => { cancelled = row; draw(); }, () => {}),
+  ];
 
   function draw() {
     if (missing) {
@@ -56,13 +65,28 @@ export function renderReceipt(context) {
 
   function body() {
     const reversal = Number(receipt.amount) < 0;
+    const isVoid = !!cancelled;
 
     return h('div.page__inner.page__inner--flow.stack.stack-4',
-      h('div.receipt.span-all',
-        h('div.receipt__mark', icon(reversal ? 'refresh' : 'check')),
+      h(`div.receipt.span-all${isVoid ? '.is-void' : ''}`,
+        h('div.receipt__mark', icon(reversal || isVoid ? 'refresh' : 'check')),
         h('div.receipt__amount', money(Math.abs(receipt.amount))),
-        h('div.receipt__what', reversal ? 'Pago cancelado' : 'Pago recibido'),
+        h('div.receipt__what', reversal
+          ? 'Pago cancelado'
+          : isVoid ? 'Este pago fue cancelado' : 'Pago recibido'),
         h('div.receipt__folio', receipt.folio || '')),
+
+      isVoid
+        ? h('div.span-all',
+            alert(`Se canceló el ${formatDayLong(cancelled.date)}`
+              + `${cancelled.takenByName ? ` por ${cancelled.takenByName}` : ''}. `
+              + `El dinero volvió a quedar pendiente y quedó registrado en ${cancelled.folio}.`,
+            'bad'))
+        : null,
+
+      reversal && receipt.reversalOfFolio
+        ? h('div.span-all', alert(`Cancela el recibo ${receipt.reversalOfFolio}.`, 'info'))
+        : null,
 
       card(defList([
         defRow('Cliente', receipt.clientName),
@@ -84,13 +108,18 @@ export function renderReceipt(context) {
           onClick: () => go(`/invoices/${row.invoiceId}`),
         })), { card: true })),
 
+      // Once cancelled this is a historical figure, not the client's balance —
+      // saying "al corriente" about somebody who owes the money again would be
+      // the most misleading line on the page.
       card(h('div.row.row--between',
-        h('div.w-650', 'Saldo después de este pago'),
+        h('div.w-650', isVoid ? 'Saldo que quedó en su momento' : 'Saldo después de este pago'),
         h('div.row', { style: { gap: '8px' } },
           h('span.t-lg.w-700', money(receipt.balanceAfter || 0)),
-          (receipt.balanceAfter || 0) > 0.005
-            ? badge('Debe', 'warn')
-            : badge('Al corriente', 'ok')))),
+          isVoid
+            ? badge('Ya no aplica', 'muted')
+            : (receipt.balanceAfter || 0) > 0.005
+              ? badge('Debe', 'warn')
+              : badge('Al corriente', 'ok')))),
 
       receipt.note ? alert(receipt.note, 'info') : null,
 
@@ -102,12 +131,51 @@ export function renderReceipt(context) {
         button('Cobrar a alguien más', {
           variant: 'primary', block: true, icon: 'cash',
           onClick: () => go('/cobrar'),
-        })),
+        }),
+
+        // The mistake is made here, so the undo lives here too.
+        !reversal && !isVoid
+          ? button('Cancelar este pago', {
+              variant: 'danger-soft', block: true, icon: 'ban', onClick: cancel,
+            })
+          : null),
 
       h('p.t-xs.c-faint.center',
         `Este recibo también está en la app de ${receipt.clientName}. `
         + 'No se puede editar ni borrar; una corrección se registra como cancelación.'));
   }
 
-  return () => stop?.();
+  /**
+   * Undoing a payment taken by mistake.
+   *
+   * It says what will happen before it happens: how much goes back on the
+   * account, which fortnights reopen, and that the client sees the correction
+   * too. None of that is reversible-by-accident, so it asks first.
+   */
+  async function cancel() {
+    const covered = (receipt.applied || [])
+      .map((row) => formatRange(row.periodStart, row.periodEnd))
+      .join(', ');
+
+    const ok = await confirm({
+      title: `Cancelar ${receipt.folio}`,
+      message: `Se quitan ${money(receipt.amount)} de la cuenta de ${receipt.clientName} y `
+        + `${covered ? `${covered} vuelve${(receipt.applied || []).length > 1 ? 'n' : ''} a quedar pendiente` : 'su saldo vuelve a subir'}. `
+        + 'El recibo no se borra: queda registrado junto con su cancelación, y el cliente ve las dos cosas en su app.',
+      confirmLabel: 'Sí, cancelar el pago',
+      cancelLabel: 'No, dejarlo así',
+      tone: 'danger',
+      icon: 'ban',
+    });
+    if (!ok) return;
+
+    try {
+      const counter = await voidReceipt(receipt, { uid: session.uid, name: session.displayName });
+      toastOk(`Pago cancelado · ${counter.folio}`);
+    } catch (error) {
+      toastBad(error?.message || dbMessage(error));
+    }
+  }
+
+  return () => stops.forEach((stop) => stop?.());
 }
