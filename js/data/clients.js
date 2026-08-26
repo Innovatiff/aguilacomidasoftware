@@ -12,6 +12,11 @@
  * changes them. What belongs to the worker alone is how many meals they take —
  * which is also what decides their price, since a fortnight is sold by plan.
  *
+ * `tags` are what this person cannot eat — "sin pollo", "sin espagueti". They
+ * live on the client rather than in a notes field because the kitchen has to be
+ * able to count them before cooking and read them at a glance while packing,
+ * and prose cannot be counted.
+ *
  * The email address is optional — plenty of workers do not have one — but when
  * it is present it is not contact detail: it is how that person opens the app.
  * Registering it writes `clientEmails/{email} -> clientId`, and that document
@@ -26,7 +31,7 @@ import {
 } from '../firebase.js';
 import { today } from '../lib/dates.js';
 import { DEFAULT_DELIVERY_DAYS, DEFAULT_GRACE_DAYS } from '../lib/billing.js';
-import { matches } from '../lib/format.js';
+import { matches, fold } from '../lib/format.js';
 import { findLocation } from './farms.js';
 
 const clientsRef = () => collection(db, 'clients');
@@ -46,6 +51,7 @@ export const emptyClient = (farm) => ({
   phone: '',
   email: '',
   notes: '',
+  tags: [],
   mealsPerDay: Number(farm?.defaultMealsPerDay) || 1,
   status: 'active',
   ...termsOf(farm),
@@ -233,7 +239,55 @@ function place(data, farm) {
   };
 }
 
-/* --- Shaping --------------------------------------------------------------- */
+/* --- Restrictions ----------------------------------------------------------- */
+
+/**
+ * Tidies one tag: trimmed, single-spaced, never empty.
+ *
+ * Case is left alone. "Sin Pollo" and "sin pollo" are the same restriction and
+ * are deduplicated as such, but whichever spelling the kitchen typed first is
+ * the one everybody keeps seeing — correcting people's capitalisation is not
+ * this software's job.
+ */
+export const cleanTag = (tag) => String(tag || '').trim().replace(/\s+/g, ' ');
+
+/** A tag list with the blanks and the repeats gone, in the order given. */
+export function normalizeTags(tags) {
+  const seen = new Set();
+  const out = [];
+  for (const raw of tags || []) {
+    const tag = cleanTag(raw);
+    const key = fold(tag);
+    if (!tag || seen.has(key)) continue;
+    seen.add(key);
+    out.push(tag);
+  }
+  return out;
+}
+
+export const hasTag = (client, tag) =>
+  (client?.tags || []).some((one) => fold(one) === fold(tag));
+
+/**
+ * Every restriction in use, most common first.
+ *
+ * The form offers these before it offers an empty box: "sin pollo" is typed
+ * once and picked forever after, which is what keeps one restriction from
+ * becoming four spellings nobody can count.
+ */
+export function tagsInUse(clients) {
+  const counts = new Map();
+  for (const client of clients || []) {
+    for (const tag of client.tags || []) {
+      const key = fold(tag);
+      const entry = counts.get(key) || { tag, count: 0 };
+      entry.count += 1;
+      counts.set(key, entry);
+    }
+  }
+  return [...counts.values()]
+    .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag, 'es'));
+}
 
 const NUMERIC = new Set(['mealsPerDay', 'graceDays']);
 
@@ -247,6 +301,7 @@ function sanitize(data) {
     if (value === undefined || NOT_WRITABLE.has(key)) continue;
     if (NUMERIC.has(key)) out[key] = Number(value) || 0;
     else if (key === 'deliveryDays') out[key] = (value || []).map(Number).sort((a, b) => a - b);
+    else if (key === 'tags') out[key] = normalizeTags(value);
     else if (typeof value === 'string') out[key] = value.trim();
     else out[key] = value;
   }
@@ -255,4 +310,5 @@ function sanitize(data) {
 
 /** Case- and accent-insensitive search across the fields staff actually type. */
 export const matchesSearch = (client, term) => matches(
-  [client.name, client.phone, client.email, client.farmName, client.locationName], term);
+  [client.name, client.phone, client.email, client.farmName, client.locationName,
+    ...(client.tags || [])], term);

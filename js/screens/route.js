@@ -15,12 +15,13 @@ import { icon } from '../lib/icons.js';
 import { screen, topbarButton } from '../ui/shell.js';
 import {
   card, button, badge, meter, emptyState, sectionLabel, skeletonRows,
-  field, input, textarea, select, alert, searchInput, avatar,
+  field, input, textarea, select, alert, searchInput, avatar, tagList,
 } from '../ui/kit.js';
 import { toastOk, toastBad, confirm, sheet } from '../ui/overlay.js';
 import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
 import { store, subscribe, setDay, activeClients, dayStats, unscheduled, clientById } from '../data/store.js';
+import { tagsInUse } from '../data/clients.js';
 import {
   setStatus, advanceAll, advanceMany, scheduleDay, updateDelivery, createDelivery, groupByPlace,
 } from '../data/deliveries.js';
@@ -190,6 +191,7 @@ export function renderRoute(context) {
       meter(stats.percent, { tone: stats.percent === 100 ? 'ok' : null, large: true }),
       h('div.t-sm.c-soft',
         `${number(stats.meals)} comidas · ${number(stats.mealsDelivered)} ya entregadas`),
+      dietSummary(),
       bulk
         ? button(`${bulk.label} (${bulk.count})`, {
             variant: 'dark', block: true, icon: bulk.icon,
@@ -201,6 +203,29 @@ export function renderRoute(context) {
   }
 
   /** Who is missing from today's route, counted by farm rather than listed. */
+  /**
+   * What has to be left out of today's cooking, counted.
+   *
+   * The cook needs this before plating, not while handing boxes over — three
+   * portions without chicken is a decision made at the stove. Counting the
+   * stops rather than the roster means somebody paused or not served today
+   * does not inflate it.
+   */
+  function dietSummary() {
+    const served = store.deliveries
+      .filter((row) => row.status !== 'skipped')
+      .map((row) => clientById(row.clientId))
+      .filter(Boolean);
+
+    const counts = tagsInUse(served);
+    if (!counts.length) return null;
+
+    return h('div.row.row--wrap', { style: { gap: '6px' } },
+      h('span.t-xs.upper.c-faint.w-700', { style: { marginRight: '2px' } }, 'Hoy sin:'),
+      counts.map((entry) => h('span.tag',
+        icon('ban'), `${entry.tag} · ${entry.count}`)));
+  }
+
   function pendingNotice(pending) {
     const byFarm = new Map();
     for (const client of pending) {
@@ -247,6 +272,9 @@ export function renderRoute(context) {
         h('div.t-xs.c-soft.truncate',
           [plural(row.meals, 'comida', 'comidas'), meta.short, row.driver]
             .filter(Boolean).join(' · ')),
+        // Loud, and never truncated away: this is the one line on the screen
+        // that, missed, hands somebody a plate they cannot eat.
+        tagList(client?.tags, { className: 'tags--loud' }),
         row.notes ? h('div.t-xs.c-warn.truncate', row.notes) : null),
 
       next
@@ -349,6 +377,11 @@ export function renderRoute(context) {
         let notes = row.notes || '';
 
         return h('div.stack.stack-4',
+          (client?.tags || []).length
+            ? h('div.stack.stack-2',
+                h('div.t-xs.upper.c-faint.w-700', 'No puede comer'),
+                tagList(client.tags, { className: 'tags--loud' }))
+            : null,
           field({
             label: 'Comidas',
             control: input({

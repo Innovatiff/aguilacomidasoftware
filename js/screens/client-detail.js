@@ -9,7 +9,7 @@ import { icon } from '../lib/icons.js';
 import { screen, topbarButton } from '../ui/shell.js';
 import {
   card, button, badge, avatar, defList, defRow, itemRow, list, sectionLabel,
-  alert, meter, loading, field, input, select,
+  alert, meter, loading, field, input, select, tagList,
 } from '../ui/kit.js';
 import { toastOk, toastBad, sheet } from '../ui/overlay.js';
 import { openChargeSheet } from '../ui/charge-sheet.js';
@@ -113,6 +113,12 @@ export function renderClientDetail(context) {
           h('div', { style: { marginTop: '6px' } },
             badge(clientStatusMeta(model.status).label, clientStatusMeta(model.status).tone,
               clientStatusMeta(model.status).icon)))),
+
+      (model.tags || []).length
+        ? h('div.stack.stack-2',
+            h('div.t-xs.upper.c-faint.w-700', 'No puede comer'),
+            tagList(model.tags, { className: 'tags--loud' }))
+        : null,
 
       model.notes ? h('div.t-sm.c-soft', model.notes) : null,
 

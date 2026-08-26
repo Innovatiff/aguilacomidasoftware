@@ -15,17 +15,18 @@
  */
 
 import { h, mount } from '../lib/dom.js';
+import { icon } from '../lib/icons.js';
 import { screen } from '../ui/shell.js';
 import {
-  card, field, input, textarea, select, button, alert, sectionLabel, loading,
-  defList, defRow, emptyState,
+  card, field, fieldGroup, input, textarea, select, button, alert, sectionLabel,
+  loading, defList, defRow, emptyState,
 } from '../ui/kit.js';
 import { toastOk, toastBad, confirm } from '../ui/overlay.js';
 import { go, back } from '../lib/router.js';
 import { session } from '../data/session.js';
 import {
   createClient, updateClient, getClient, emptyClient, deleteClient, setClientStatus,
-  isValidEmail, termsOf,
+  isValidEmail, termsOf, cleanTag, normalizeTags, tagsInUse, hasTag,
 } from '../data/clients.js';
 import { ensureConversation } from '../data/chat.js';
 import { store, farmById, clientsOfFarm } from '../data/store.js';
@@ -207,10 +208,19 @@ export async function renderClientForm(context) {
             oninput: (e) => update({ email: e.target.value }),
           }),
         }),
+        // Not `field`: this control has buttons of its own, and a <label>
+        // would hand their clicks to the text box instead.
+        fieldGroup({
+          label: 'No puede comer',
+          hint: 'Lo que hay que dejar fuera de su comida. Aparece en la ruta y en la lista '
+            + 'de clientes, sin tener que abrir su ficha.',
+          control: tagEditor(),
+        }),
+
         field({
           label: 'Notas',
           control: textarea({
-            value: model.notes, rows: 2, placeholder: 'Alergias, horario distinto, quién recibe…',
+            value: model.notes, rows: 2, placeholder: 'Horario distinto, quién recibe, cómo llegar…',
             oninput: (e) => update({ notes: e.target.value }),
           }),
         }))),
@@ -295,6 +305,80 @@ export async function renderClientForm(context) {
         onchange: (e) => update({ locationId: e.target.value }),
       }),
     });
+  }
+
+  /**
+   * Restrictions: pick from what the kitchen already uses, or type a new one.
+   *
+   * The suggestions are the point. Left to a free-text box, "sin pollo" becomes
+   * "Sin Pollo", "no pollo" and "sin pollo." within a month, and then nobody
+   * can count how many portions to leave chicken out of. Offering the existing
+   * spellings first means the common ones stay one thing.
+   */
+  function tagEditor() {
+    const chosen = [...(model.tags || [])];
+    const wrap = h('div.stack.stack-2');
+
+    const commit = (next) => {
+      model.tags = normalizeTags(next);
+      chosen.length = 0;
+      chosen.push(...model.tags);
+      paint();
+    };
+
+    const box = input({
+      placeholder: 'sin pollo, sin espagueti…',
+      onkeydown: (event) => {
+        if (event.key !== 'Enter') return;
+        // Enter adds the restriction; it must not submit the whole form.
+        event.preventDefault();
+        const tag = cleanTag(event.target.value);
+        if (!tag) return;
+        event.target.value = '';
+        commit([...chosen, tag]);
+      },
+    });
+
+    function paint() {
+      // Only offer what this person does not already have.
+      const suggestions = tagsInUse(store.clients)
+        .filter((entry) => !hasTag({ tags: chosen }, entry.tag))
+        .slice(0, 8);
+
+      mount(wrap,
+        chosen.length
+          ? h('div.tags',
+              chosen.map((tag) => h('button.tag.tag--edit', {
+                type: 'button',
+                'aria-label': `Quitar ${tag}`,
+                onclick: () => commit(chosen.filter((one) => one !== tag)),
+              }, icon('ban'), tag, icon('x'))))
+          : null,
+
+        h('div.row', { style: { gap: '8px' } },
+          h('div.grow', box),
+          button('Agregar', {
+            variant: 'soft', size: 'sm',
+            onClick: () => {
+              const tag = cleanTag(box.value);
+              if (!tag) return;
+              box.value = '';
+              commit([...chosen, tag]);
+            },
+          })),
+
+        suggestions.length
+          ? h('div.stack.stack-1',
+              h('div.t-xs.c-faint', 'Ya se usan en la cocina:'),
+              h('div.tags', suggestions.map((entry) => h('button.tag.tag--pick', {
+                type: 'button',
+                onclick: () => commit([...chosen, entry.tag]),
+              }, '+ ', entry.tag))))
+          : null);
+    }
+
+    paint();
+    return wrap;
   }
 
   /**

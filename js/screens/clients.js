@@ -21,7 +21,7 @@ import { icon } from '../lib/icons.js';
 import { screen, topbarButton } from '../ui/shell.js';
 import {
   searchInput, chips, list, avatar, badge, emptyState, button, card, select,
-  sectionLabel, statGrid, stat, skeletonRows, alert, dataErrorCard,
+  sectionLabel, statGrid, stat, skeletonRows, alert, dataErrorCard, tagList,
 } from '../ui/kit.js';
 import { toastOk, toastBad, confirm, sheet } from '../ui/overlay.js';
 import { openChargeSheet } from '../ui/charge-sheet.js';
@@ -57,6 +57,8 @@ const FILTERS = [
   { value: 'active',   label: 'Activos',    match: (row) => row.client.status === 'active' },
   { value: 'paused',   label: 'En pausa',   match: (row) => row.client.status === 'paused' },
   { value: 'inactive', label: 'Inactivos',  match: (row) => row.client.status === 'inactive' },
+  { value: 'diet',     label: 'Con restricciones',
+    match: (row) => (row.client.tags || []).length > 0 },
   { value: 'gaps',     label: 'Revisar',    match: (row) => row.hasGap },
 ];
 
@@ -242,7 +244,10 @@ export function renderClients(context) {
       h('div.item__main',
         h('div.item__title.truncate', client.name),
         h('div.item__meta.truncate',
-          [client.farmName, client.locationName].filter(Boolean).join(' · ') || 'Sin ubicación')),
+          [client.farmName, client.locationName].filter(Boolean).join(' · ') || 'Sin ubicación'),
+        // What they cannot eat, on the row itself: the kitchen asks this far
+        // more often than it opens anybody's file.
+        tagList(client.tags, { max: 3 })),
       h('div.crow__state',
         owes
           ? h('span.w-700', money(row.owed, { round: true }))

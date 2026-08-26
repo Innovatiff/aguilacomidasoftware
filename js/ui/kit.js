@@ -181,6 +181,22 @@ export function field({ label, hint, error, control, id }) {
     error ? h('span.field__error', error) : hint ? h('span.field__hint', hint) : null);
 }
 
+/**
+ * The same field, without the `<label>`.
+ *
+ * A label re-dispatches a click anywhere inside it to its own control, so a
+ * control that contains buttons of its own — a tag editor, a picker — has its
+ * buttons swallowed: the click lands on the text input instead and the
+ * handler never runs. This is that case, and only that case; everything with a
+ * single input should keep the real label.
+ */
+export function fieldGroup({ label, hint, error, control }) {
+  return h('div.field',
+    label ? h('span.field__label', label) : null,
+    control,
+    error ? h('span.field__error', error) : hint ? h('span.field__hint', hint) : null);
+}
+
 export function input({ value = '', ...rest } = {}) {
   return h('input.input', { value, ...rest });
 }
@@ -245,6 +261,29 @@ export function chips(options, active, onPick) {
 }
 
 export { frag };
+
+/* --- Food restrictions ------------------------------------------------------ */
+
+/**
+ * What somebody cannot eat, as chips.
+ *
+ * Warm-toned on purpose and the same everywhere — the roster, the run sheet,
+ * the client's file — because this is the one thing on screen that, missed,
+ * sends the wrong plate to somebody who cannot eat it. `max` keeps a dense row
+ * from being taken over by a person with six restrictions; the rest are
+ * counted, never dropped silently.
+ */
+export function tagList(tags, { max = 0, className = '' } = {}) {
+  const all = tags || [];
+  if (!all.length) return null;
+
+  const shown = max > 0 ? all.slice(0, max) : all;
+  const rest = all.length - shown.length;
+
+  return h(`div.tags${className ? `.${className.split(' ').join('.')}` : ''}`,
+    shown.map((tag) => h('span.tag', icon('ban'), tag)),
+    rest > 0 ? h('span.tag.tag--more', `+${rest}`) : null);
+}
 
 /* --- Data failures ---------------------------------------------------------- */
 

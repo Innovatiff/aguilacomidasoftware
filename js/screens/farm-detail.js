@@ -12,7 +12,7 @@ import { icon } from '../lib/icons.js';
 import { screen, topbarButton } from '../ui/shell.js';
 import {
   card, button, badge, avatar, itemRow, list, sectionLabel, defList, defRow,
-  emptyState, alert, loading, field, input, statGrid, stat,
+  emptyState, alert, loading, field, input, statGrid, stat, tagList,
 } from '../ui/kit.js';
 import { toastOk, toastBad, sheet, confirm } from '../ui/overlay.js';
 import { go } from '../lib/router.js';
@@ -210,7 +210,9 @@ export function renderFarmDetail(context) {
     return itemRow({
       lead: avatar(client.name, { size: 'sm' }),
       title: client.name,
-      meta: plural(client.mealsPerDay, 'comida/día', 'comidas/día'),
+      meta: h('div.stack.stack-1',
+        h('span', plural(client.mealsPerDay, 'comida/día', 'comidas/día')),
+        tagList(client.tags, { max: 3 })),
       end: [
         owes ? badge(money(billing.balance, { round: true }), billing.status === 'overdue' ? 'bad' : 'warn') : null,
         client.status !== 'active'

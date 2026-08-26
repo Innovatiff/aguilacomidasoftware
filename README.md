@@ -21,6 +21,7 @@ cada dos semanas. Antes no se llevaba registro de nada. Este panel registra:
 | **Precios** | una lista para todo el negocio: lo que cuesta una **quincena completa** en cada plan — 1 comida/día $75, 2 comidas/día $140. Se cambia en Ajustes |
 | **Ruta** | agrupada por rancho → ubicación: un toque mueve una ubicación completa, con estado en vivo que cada quien ve en su app |
 | **Clientes** | el tablero de trabajo: quién debe, quién va atrasado, quién está activo y quién tiene algo mal. Cobrar, pausar, reactivar y mandar mensaje sin salir de la lista |
+| **Restricciones** | lo que cada quien no puede comer — *sin pollo*, *sin espagueti*. Se ven en la lista sin abrir a nadie, y en la ruta junto a su nombre |
 | **Cobro** | ciclos de 14 días, **una factura por persona**, pagos y saldos, agrupados por rancho |
 | **Caja** | cobrar en la tienda: buscar a la persona, cobrar, y su **recibo con folio** le aparece en su app al momento |
 | **Mensajes** | un hilo por cliente, con avisos automáticos de pagos y problemas |
@@ -170,6 +171,24 @@ deba sigue registrado y su historial se conserva.
 **«Pagado hasta».** Cuando alguien paga, el panel le marca hasta qué quincena
 quedó cubierto. Por eso la lista puede distinguir entre *«todavía no se le
 factura»* y *«ya pagó por adelantado»*, que se ven igual si sólo miras el saldo.
+
+### Lo que no puede comer
+
+En la ficha del cliente, **No puede comer**: escribes *sin pollo* y ya. El campo
+ofrece primero las restricciones que la cocina ya usa, así se escriben una vez y
+después se eligen — que es lo que evita que *sin pollo* se vuelva *Sin Pollo*,
+*no pollo* y *sin pollo.* en un mes, y entonces nadie pueda contarlas.
+
+Se ven en tres lugares, sin abrir a nadie:
+
+- **En la lista de Clientes**, en el renglón de cada quien, con un filtro *Con
+  restricciones* y búsqueda por restricción (*«espagueti»* encuentra a quien no
+  lo come).
+- **En la ruta**, en rojo junto al nombre en cada parada — es la línea que, si
+  se pasa por alto, manda un plato que alguien no puede comer.
+- **Arriba de la ruta**, contadas para cocinar: *«Hoy sin: sin pollo · 3,
+  sin cerdo · 1»*. El cocinero necesita el número **antes** de servir, no
+  mientras entrega cajas.
 
 ### 7. Cobrar en la tienda
 
@@ -371,6 +390,7 @@ farms/{farmId}                   -- el lugar y lo acordado con él
 
 clients/{clientId}               -- una persona que come
   name, phone, email, notes
+  tags        ['sin pollo', …]   -- lo que no puede comer
   farmId, farmName               -- obligatorio
   locationId, locationName       -- obligatorio
   mealsPerDay                    -- su plan; de ahí sale su precio
