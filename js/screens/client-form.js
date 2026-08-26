@@ -31,6 +31,7 @@ import {
 import { ensureConversation } from '../data/chat.js';
 import { store, farmById, clientsOfFarm } from '../data/store.js';
 import { openChargeSheet } from '../ui/charge-sheet.js';
+import { openOpeningSheet } from '../ui/opening-sheet.js';
 import { projectPeriod, periodFor } from '../lib/billing.js';
 import { priceFor, tierFor } from '../lib/pricing.js';
 import { today, formatRange, formatDayLong } from '../lib/dates.js';
@@ -113,14 +114,21 @@ export async function renderClientForm(context) {
         await ensureConversation({ id, name: model.name });
         toastOk('Cliente registrado');
 
-        // Most people are registered standing at the counter, and they pay
-        // then and there. Offering it here saves finding them again.
-        const receipt = priceFor(store.pricing, model.mealsPerDay)
-          ? await offerPayment({ ...model, id }, author)
-          : null;
-        if (receipt) {
-          go(`/receipts/${receipt.id}`, { replace: true });
-          return;
+        const fresh = { ...model, id };
+
+        // Most of these people were already customers, on paper. Asking now —
+        // while their file is open and the notebook is in hand — is the only
+        // moment the balance realistically gets carried over.
+        if (priceFor(store.pricing, model.mealsPerDay)) {
+          await offerOpeningBalance(fresh, author);
+
+          // And they are usually standing at the counter, so the other
+          // question worth asking once is whether they are paying today.
+          const receipt = await offerPayment(fresh, author);
+          if (receipt) {
+            go(`/receipts/${receipt.id}`, { replace: true });
+            return;
+          }
         }
 
         go(`/clients/${id}${email ? `?welcome=${encodeURIComponent(email)}` : ''}`, { replace: true });
@@ -133,6 +141,26 @@ export async function renderClientForm(context) {
       saving = false; draw();
       toastBad(error?.message || dbMessage(error));
     }
+  }
+
+  /**
+   * "Did they already owe you?" — asked once, right after registering.
+   *
+   * Skipping it is one tap. Saying yes opens the sheet that turns a date from
+   * the notebook into the fortnights it left open.
+   */
+  async function offerOpeningBalance(client, author) {
+    const wants = await confirm({
+      title: '¿Ya venía pagando?',
+      message: `Si ${client.name} ya era cliente antes del sistema, dinos cuándo pagó por última `
+        + 'vez y calculamos lo que quedó debiendo. Si empieza hoy, no hace falta.',
+      confirmLabel: 'Traer saldo del cuaderno',
+      cancelLabel: 'Empieza hoy',
+      icon: 'clipboard',
+    });
+    if (!wants) return 0;
+
+    return openOpeningSheet({ client, tiers: store.pricing, author });
   }
 
   /**

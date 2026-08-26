@@ -199,6 +199,17 @@ export async function moveClient(clientId, farm, locationId) {
   });
 }
 
+/**
+ * Sets how far a client is paid up.
+ *
+ * Written by the payment transaction as a rule; this is for the one case that
+ * happens outside it — a balance carried over from the notebook, where the
+ * date comes from paper rather than from a receipt this software issued.
+ */
+export async function setPaidThrough(clientId, paidThrough) {
+  await updateDoc(doc(db, 'clients', clientId), { paidThrough, updatedAt: serverTimestamp() });
+}
+
 export async function setClientStatus(clientId, status) {
   await updateDoc(doc(db, 'clients', clientId), { status, updatedAt: serverTimestamp() });
 }

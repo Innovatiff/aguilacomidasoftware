@@ -18,6 +18,8 @@ import { session } from '../data/session.js';
 import { store, subscribe, billingFor, deliveryFor, farmById, fortnightPrice } from '../data/store.js';
 import { watchClient, updateClient, moveClient } from '../data/clients.js';
 import { watchClientInvoices, issueInvoice } from '../data/invoices.js';
+import { watchClientReceipts, totalOf } from '../data/receipts.js';
+import { openOpeningSheet } from '../ui/opening-sheet.js';
 import { watchClientDeliveries, billableMeals, createDelivery } from '../data/deliveries.js';
 import { ensureConversation } from '../data/chat.js';
 import {
@@ -30,7 +32,7 @@ import {
   weekdayName, capitalize,
 } from '../lib/dates.js';
 import { money, moneyFull, plural, phone as fmtPhone, telHref, number } from '../lib/format.js';
-import { clientStatusMeta, deliveryMeta } from '../lib/model.js';
+import { clientStatusMeta, deliveryMeta, paymentMethodMeta } from '../lib/model.js';
 import { dbMessage } from '../firebase.js';
 
 export function renderClientDetail(context) {
@@ -39,12 +41,14 @@ export function renderClientDetail(context) {
 
   let client = store.clients.find((c) => c.id === clientId) || null;
   let invoices = [];
+  let receipts = [];
   let history = [];
   let loadedInvoices = false;
 
   const stops = [
     watchClient(clientId, (row) => { client = row; draw(); }, () => draw()),
     watchClientInvoices(clientId, (rows) => { invoices = rows; loadedInvoices = true; draw(); }, () => { loadedInvoices = true; draw(); }),
+    watchClientReceipts(clientId, (rows) => { receipts = rows; draw(); }, () => {}),
     watchClientDeliveries(clientId, 14, (rows) => { history = rows; draw(); }, () => {}),
     subscribe(() => draw()),
   ];
@@ -83,6 +87,7 @@ export function renderClientDetail(context) {
       placeCard(client),
       todayCard(client, stop),
       billingCard(client, billing, invoices, loadedInvoices),
+      paymentsCard(),
       accessCard(client),
       termsCard(client),
       historyCard(history));
@@ -251,12 +256,75 @@ export function renderClientDetail(context) {
         : loading());
   }
 
+  /**
+   * Everything this person has ever paid.
+   *
+   * Separate from the invoice list on purpose: a bill says what was owed, a
+   * receipt says what was handed over and when. "When did he last pay?" is
+   * asked far more often than "what was the July bill?", and until now it was
+   * only answerable by opening bills one by one.
+   */
+  function paymentsCard() {
+    const paid = totalOf(receipts);
+    const last = receipts.find((row) => Number(row.amount) > 0);
+
+    return h('div.stack.stack-3',
+      sectionLabel('Historial de pagos', receipts.length
+        ? h('span.t-sm.c-soft', `${money(paid, { round: true })} en total`)
+        : null),
+
+      receipts.length
+        ? h('div.stack.stack-2',
+            last
+              ? h('p.t-xs.c-faint', `Última vez que pagó: ${formatDayLong(last.date)}.`)
+              : null,
+            list(receipts.slice(0, 12).map(receiptRow), { card: true }))
+        : card(h('div.stack.stack-3',
+            h('p.t-sm.c-soft.center', 'Todavía no se le ha registrado ningún pago.'),
+            !invoices.length
+              ? button('Traer saldo del cuaderno', {
+                  variant: 'ghost', block: true, icon: 'clipboard',
+                  onClick: () => bringOverBalance(client),
+                })
+              : null)));
+  }
+
+  function receiptRow(receipt) {
+    const reversal = Number(receipt.amount) < 0;
+    const covers = (receipt.applied || [])
+      .map((row) => formatRange(row.periodStart, row.periodEnd)).join(', ');
+
+    return itemRow({
+      lead: h('div.avatar.avatar--sm', {
+        style: reversal
+          ? { background: 'var(--bad-50)', color: 'var(--bad-600)' }
+          : { background: 'var(--ok-50)', color: 'var(--ok-600)' },
+      }, icon(reversal ? 'refresh' : paymentMethodMeta(receipt.method).icon)),
+      title: money(receipt.amount),
+      meta: [formatDay(receipt.date), paymentMethodMeta(receipt.method).label, covers]
+        .filter(Boolean).join(' · '),
+      end: reversal ? badge('Cancelado', 'bad') : h('span.t-xs.c-faint', receipt.folio || ''),
+      onClick: () => go(`/receipts/${receipt.id}`),
+    });
+  }
+
+  /** Turns a date from the notebook into the fortnights it left open. */
+  async function bringOverBalance(model) {
+    await openOpeningSheet({
+      client: model,
+      tiers: store.pricing,
+      author: { uid: session.uid, name: session.displayName },
+    });
+  }
+
   function invoiceRow(invoice) {
     const status = invoiceStatus(invoice, today());
     const balance = balanceOf(invoice);
     return itemRow({
       title: formatRange(invoice.periodStart, invoice.periodEnd),
-      meta: `${moneyFull(invoice.amount)} · ${number(invoice.meals)} comidas entregadas`,
+      meta: invoice.fromNotebook
+        ? `${moneyFull(invoice.amount)} · del cuaderno`
+        : `${moneyFull(invoice.amount)} · ${number(invoice.meals)} comidas entregadas`,
       end: [
         badge(STATUS_LABEL[status], STATUS_TONE[status]),
         balance > 0 ? h('span.t-xs.c-soft', `Saldo ${money(balance)}`) : null,

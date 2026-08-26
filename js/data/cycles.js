@@ -1,5 +1,5 @@
 /**
- * Closing fortnights.
+ * Fortnights: the ones that closed unbilled, and the ones owed from before.
  *
  * A period that has ended and was never billed is money the kitchen has
  * already cooked and may never ask for. Nobody remembers to press a button
@@ -110,6 +110,78 @@ export function byFarm(rows) {
     farms.set(name, entry);
   }
   return [...farms.values()].sort((a, b) => b.amount - a.amount);
+}
+
+/* --- Opening balances ------------------------------------------------------- */
+
+/**
+ * What somebody owes since the last time they paid.
+ *
+ * These clients were on paper for years. All the kitchen knows about each of
+ * them is a name and a date — "last paid July 3" — so that is the only thing
+ * this asks for. From it and their billing anchor, the fortnights in between
+ * are arithmetic.
+ *
+ * Every candidate period is returned, closed or not, with `owed` marking the
+ * ones that would be billed by default: those that both started after the last
+ * payment and have already ended. The fortnight in progress is offered but not
+ * assumed, and the whole list is checkable, because a notebook is not a
+ * database and the person holding it knows things this does not — a month
+ * somebody was away, a fortnight already settled in cash.
+ */
+export function owedSince(client, lastPaidOn, tiers, day = today()) {
+  const anchor = client?.cycleAnchor || day;
+  const amount = priceFor(tiers, client?.mealsPerDay);
+  if (!lastPaidOn || lastPaidOn >= day) return { periods: [], amount, total: 0 };
+
+  const from = periodFor(anchor, lastPaidOn).index;
+  const current = periodFor(anchor, day).index;
+
+  const periods = [];
+  for (let index = from; index <= current; index += 1) {
+    const period = periodByIndex(anchor, index);
+    // A fortnight that was already running when they last paid is theirs to
+    // judge: the payment may or may not have covered it.
+    if (period.start <= lastPaidOn) continue;
+    periods.push({
+      ...period,
+      id: invoiceId(client.id, period.start),
+      closed: period.end < day,
+      owed: period.end < day,
+      amount,
+    });
+  }
+
+  return {
+    periods,
+    amount,
+    total: round2(periods.filter((p) => p.owed).length * amount),
+  };
+}
+
+/**
+ * Writes the opening balance: one bill per fortnight the kitchen ticked.
+ *
+ * They are marked `fromNotebook` so a year from now it is obvious these were
+ * carried over rather than produced by a delivery run — the meals behind them
+ * were served before this software existed and were never recorded.
+ */
+export async function openBalance(client, periods, author) {
+  const chosen = periods.filter((period) => period.owed);
+  let issued = 0;
+
+  for (const period of chosen) {
+    await issueInvoice(
+      client,
+      { index: period.index, start: period.start, end: period.end },
+      period.amount,
+      0,
+      author,
+      { fromNotebook: true },
+    );
+    issued += 1;
+  }
+  return issued;
 }
 
 /* --- Internals -------------------------------------------------------------- */

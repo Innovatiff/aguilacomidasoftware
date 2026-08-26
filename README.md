@@ -111,8 +111,37 @@ Son tres pasos y siempre en este orden:
 3. **Dentro de la ubicación → Registrar cliente aquí.** Nombre, su **plan** (de
    la lista de precios) y, si tiene, su correo.
 
-Al guardar, el panel pregunta **«¿Va a pagar ahora?»** — porque casi siempre la
-persona está parada ahí mismo. Un toque y queda cobrada, con su recibo.
+Al guardar, el panel hace dos preguntas, en este orden:
+
+1. **«¿Ya venía pagando?»** — para la gente que llevabas en el cuaderno. Ver
+   abajo.
+2. **«¿Va a pagar ahora?»** — porque casi siempre la persona está parada ahí
+   mismo. Un toque y queda cobrada, con su recibo.
+
+Las dos se saltan con un toque.
+
+### Traer a la gente del cuaderno
+
+Estos clientes llevan años en papel. Pasarlos al sistema no puede significar
+capturar una factura por quincena por persona — para doscientas personas es una
+semana de trabajo que nadie va a hacer, y los saldos simplemente nunca entrarían.
+
+Por eso el panel pregunta lo único que el cuaderno sí dice: **¿cuándo pagó por
+última vez?** De ahí y de su ancla de cobro salen solas las quincenas que
+quedaron abiertas y lo que cada una cuesta.
+
+Aparece la lista de esas quincenas, **cada una con su palomita**. Van marcadas
+las que ya cerraron; la que está en curso se ofrece pero no se asume. Puedes
+desmarcar la que sepas que sí se pagó — un cuaderno no es una base de datos, y
+quien lo tiene en la mano sabe cosas que el sistema no: un mes que alguien no
+estuvo, una quincena que se pagó en efectivo y nunca se anotó.
+
+Al confirmar se emite **una factura por quincena**, marcada como traída del
+cuaderno, y el cliente queda «pagado hasta» esa fecha. A partir de ahí se cobra
+como cualquier otro: aparece en la lista con su adeudo y se cobra en la caja.
+
+Para alguien ya registrado, el mismo botón está en su ficha
+(**Historial de pagos → Traer saldo del cuaderno**), mientras no tenga facturas.
 
 **El correo es opcional.** Es lo que abre su app; muchos trabajadores no tienen
 uno el día que los registras y eso no debe frenar el alta. Se agrega después
@@ -190,7 +219,17 @@ Se ven en tres lugares, sin abrir a nadie:
   sin cerdo · 1»*. El cocinero necesita el número **antes** de servir, no
   mientras entrega cajas.
 
-### 7. Cobrar en la tienda
+### 7. El historial de pagos
+
+En la ficha de cada cliente, **Historial de pagos**: todo lo que ha pagado, con
+folio, fecha, forma de pago y qué quincenas cubrió cada pago. Arriba, el total y
+**cuándo pagó por última vez** — que es la pregunta que más se hace y que antes
+sólo se podía contestar abriendo factura por factura.
+
+Es distinto de la lista de facturas de arriba a propósito: una factura dice lo
+que se debía, un recibo dice lo que se entregó y cuándo.
+
+### 8. Cobrar en la tienda
 
 **Cobros → Cobrar** (o el botón *Cobrar* en Inicio). Escribe el nombre, tócalo,
 confirma el monto. El panel ya trae puesto lo que debe; si está al corriente,
@@ -212,7 +251,7 @@ del día: es lo que se necesita para cerrar la caja en la noche.
 **Un cobro mal hecho no se borra.** Se cancela desde la factura, y eso escribe un
 segundo recibo en negativo. Los dos quedan visibles, para los dos lados.
 
-### 8. Correr en local
+### 9. Correr en local
 
 No hay dependencias ni build. Cualquier servidor estático sirve:
 
@@ -227,7 +266,7 @@ Abre `http://localhost:5173`. Agrega `localhost` en
 > Los módulos ES no funcionan abriendo `index.html` con `file://`. Usa un
 > servidor.
 
-### 9. Publicar en Netlify
+### 10. Publicar en Netlify
 
 El sitio se publica solo: Netlify vigila la rama del repositorio y sube cada
 push. No hay build — la raíz del repositorio *es* el sitio, y `netlify.toml` ya
@@ -246,7 +285,7 @@ Al conectar el repositorio en Netlify:
 Authorized domains → Add domain**, y agrega el dominio de Netlify
 (`tu-sitio.netlify.app` y tu dominio propio si lo tienes).
 
-### 10. Publicar las reglas
+### 11. Publicar las reglas
 
 **Publicar el sitio no publica las reglas.** Son dos cosas distintas y es la
 causa más común de «ya lo arreglé pero sigue igual». Netlify sube la app;
@@ -298,7 +337,7 @@ js/
   data/               una capa por colección de Firestore
     session.js  staff.js  pricing.js  farms.js  clients.js
     deliveries.js  invoices.js  receipts.js  chat.js
-    cycles.js         qué quincenas cerraron sin facturar
+    cycles.js         quincenas cerradas sin facturar y saldos del cuaderno
     store.js          escuchas compartidas del panel
   ui/                 shell, kit de componentes, hojas, chat
   screens/            una pantalla por archivo
@@ -411,6 +450,7 @@ invoices/{clientId_YYYY-MM-DD}
   mealsPerDay                    -- el plan con el que se emitió
   amount                         -- precio plano de la quincena, congelado
   meals                          -- comidas entregadas (informativo)
+  fromNotebook                   -- true si viene del cuaderno, no de una ruta
   paid, settled
   payments [{ amount, method, date, reference, note, byName, receiptId, at }]
 

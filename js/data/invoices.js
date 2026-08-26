@@ -94,10 +94,10 @@ export async function listClientInvoices(clientId) {
  * recorded against the cycle: the meals and amount are refreshed, the money
  * that came in is preserved, and `settled` is recomputed from both.
  */
-export async function issueInvoice(client, period, amount, meals, author) {
+export async function issueInvoice(client, period, amount, meals, author, extra = {}) {
   const id = invoiceId(client.id, period.start);
   const ref = doc(db, 'invoices', id);
-  const draft = draftInvoice(client, period, amount, meals);
+  const draft = { ...draftInvoice(client, period, amount, meals), ...extra };
 
   return runTransaction(db, async (tx) => {
     const snap = await tx.get(ref);
