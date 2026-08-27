@@ -6,6 +6,11 @@
  * every fourteen days, and the periods are staggered — each farm has its own
  * anchor — so there is no single date to remember even if somebody wanted to.
  *
+ * Every active client is billed for every fortnight that closed. They are on a
+ * plan and the plan ran; whether a particular plate was handed over is between
+ * the kitchen and the driver. Somebody who should not be charged is paused,
+ * which is one tap on their row.
+ *
  * So the panel looks for them instead of waiting: this module answers "what
  * has closed and is not billed?" and issues the lot. It is the same
  * calculation whether it is triggered from the roster's banner or from
@@ -18,7 +23,6 @@
  */
 
 import { getDocs, query, where, collection, db, listData } from '../firebase.js';
-import { billableMealsInRange } from './deliveries.js';
 import { issueInvoice } from './invoices.js';
 import { periodFor, periodByIndex, invoiceId } from '../lib/billing.js';
 import { fortnightCharge } from '../lib/pricing.js';
@@ -35,7 +39,9 @@ const LOOK_BACK = 4;
  * waiting to be issued. Rows are the input to `issueAll`.
  */
 export async function pendingBilling(clients, pricing, day = today()) {
-  const billable = clients.filter((client) => client.status !== 'inactive');
+  // Active only. A fortnight is sold as a plan, so somebody on the plan owes
+  // for it — and pausing them is how the kitchen says they are not on it.
+  const billable = clients.filter((client) => client.status === 'active');
   if (!billable.length) return empty();
 
   // Group by the period, not the client: everybody on the same anchor shares
@@ -56,24 +62,15 @@ export async function pendingBilling(clients, pricing, day = today()) {
   const unpriced = [];
 
   for (const { period, clients: group } of periods.values()) {
-    // Which of these already have a bill for the period, and who ate in it.
-    const [issued, meals] = await Promise.all([
-      issuedIn(period.start),
-      billableMealsInRange(period.start, period.end),
-    ]);
+    const issued = await issuedIn(period.start);
 
     for (const client of group) {
       if (issued.has(invoiceId(client.id, period.start))) continue;
 
-      // No deliveries at all means the fortnight was not served, and a flat
-      // price for nothing is not a bill anybody would defend at the gate.
-      const count = meals.get(client.id) || 0;
-      if (count <= 0) continue;
-
       const charge = fortnightCharge(client, pricing);
       if (!charge.priced) { unpriced.push(client); continue; }
 
-      rows.push({ client, period, meals: count, charge, amount: charge.amount });
+      rows.push({ client, period, meals: charge.meals, charge, amount: charge.amount });
     }
   }
 

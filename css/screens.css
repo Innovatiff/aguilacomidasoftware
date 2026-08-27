@@ -433,6 +433,160 @@
 .receipt.is-void .receipt__amount { text-decoration: line-through; opacity: .7; }
 .receipt.is-void .receipt__folio { background: var(--bad-600); }
 
+/* ==========================================================================
+   La libreta
+   ==========================================================================
+   Read across a counter by managers who kept this business in a paper book for
+   years, often without their glasses. So: large type, a lot of air, one column,
+   and hierarchy carried by size and rule rather than by colour alone.
+   ========================================================================== */
+
+.book { padding: var(--s5) var(--s4) var(--s8); display: flex; flex-direction: column; gap: var(--s8); }
+
+/* --- Farm: the biggest thing on the page ---------------------------------- */
+
+.book__farm { display: flex; flex-direction: column; gap: var(--s5); }
+
+.book__farmhead {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: var(--s4); flex-wrap: wrap;
+  padding-bottom: var(--s3);
+  border-bottom: 3px solid var(--ink-800);
+}
+.book__farmname {
+  font-size: clamp(1.75rem, 5vw, 2.5rem);
+  font-weight: 800;
+  letter-spacing: -.03em;
+  line-height: 1.05;
+  text-transform: uppercase;
+}
+.book__farmmeta {
+  font-size: var(--fs-base); font-weight: 650; color: var(--text-soft);
+  white-space: nowrap;
+}
+
+/* --- Location: clearly under the farm, clearly above the people ----------- */
+
+.book__place { display: flex; flex-direction: column; gap: var(--s3); }
+
+.book__placehead {
+  display: flex; align-items: center; gap: var(--s2);
+  padding: var(--s2) var(--s3);
+  background: var(--ink-100);
+  border-radius: var(--r-md);
+  border-left: 5px solid var(--brand-500);
+}
+.book__pin { display: flex; color: var(--brand-600); }
+.book__pin svg { width: 22px; height: 22px; }
+.book__placename {
+  font-size: var(--fs-xl); font-weight: 750; letter-spacing: -.02em;
+  flex: 1; min-width: 0;
+}
+.book__placecount { font-size: var(--fs-sm); font-weight: 600; color: var(--text-soft); }
+.book__warn {
+  font-size: var(--fs-xs); font-weight: 700; color: var(--bad-600);
+  background: var(--bad-50); padding: 2px 8px; border-radius: var(--r-full);
+}
+
+.book__people { display: flex; flex-direction: column; gap: var(--s3); }
+
+/* --- One person ------------------------------------------------------------ */
+
+.person {
+  display: flex; flex-direction: column; gap: var(--s3);
+  width: 100%; padding: var(--s4);
+  text-align: left; color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  transition: border-color var(--dur) var(--ease);
+}
+.person:active { border-color: var(--ink-300); }
+
+/* Restrictions sit above the name on purpose: it is what has to be known
+   before a plate is handed over, not a footnote to who they are. */
+.person__diet { display: flex; flex-wrap: wrap; gap: 6px; }
+.person__tag {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 12px 4px 9px;
+  border-radius: var(--r-full);
+  background: var(--bad-50); color: var(--bad-600);
+  border: 1.5px solid var(--bad-500);
+  font-size: var(--fs-base); font-weight: 750;
+}
+.person__tag svg { width: 17px; height: 17px; flex: none; }
+
+.person__top {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: var(--s4); flex-wrap: wrap;
+}
+.person__name {
+  font-size: var(--fs-2xl); font-weight: 750; letter-spacing: -.02em;
+  line-height: 1.15;
+  flex: 1; min-width: min(100%, 180px);
+}
+.person__week { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+
+.person__days { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; justify-content: flex-end; }
+.person__day {
+  padding: 3px 9px;
+  border-radius: var(--r-sm);
+  background: var(--ink-100);
+  font-size: var(--fs-sm); font-weight: 700;
+  text-transform: uppercase; letter-spacing: .03em;
+}
+.person__per {
+  font-size: var(--fs-base); font-weight: 650; color: var(--text-soft);
+  margin-left: 4px;
+}
+.person__extras { display: flex; flex-wrap: wrap; gap: 5px; justify-content: flex-end; }
+.person__extra {
+  padding: 3px 10px;
+  border-radius: var(--r-full);
+  background: var(--warn-50); color: var(--warn-600);
+  border: 1.5px solid var(--warn-500);
+  font-size: var(--fs-sm); font-weight: 750;
+  /* Same casing as the day chips beside it: the eye reads one line, not two. */
+  text-transform: uppercase; letter-spacing: .03em;
+}
+
+/* --- Money ----------------------------------------------------------------- */
+
+.person__money {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--s4); flex-wrap: wrap;
+  padding-top: var(--s3);
+  border-top: 2px solid var(--border);
+}
+.person__pays { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; flex: 1; min-width: 0; }
+.person__payslabel {
+  font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase;
+  letter-spacing: .07em; color: var(--text-faint);
+}
+.person__payslist { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.person__pay { font-size: var(--fs-base); color: var(--text-soft); white-space: nowrap; }
+.person__pay b { font-weight: 750; color: var(--text); font-variant-numeric: tabular-nums; }
+.person__none { font-size: var(--fs-base); color: var(--text-faint); font-style: italic; }
+
+/* The verdict. Big word, big number, and a colour that agrees with the word —
+   never colour on its own, which is exactly what fails older eyes. */
+.person__standing {
+  display: flex; align-items: baseline; gap: var(--s2);
+  padding: 7px 14px;
+  border-radius: var(--r-md);
+  border: 2px solid transparent;
+  flex: none;
+}
+.person__standing.is-bad { background: var(--bad-50); border-color: var(--bad-500); color: var(--bad-600); }
+.person__standing.is-ok  { background: var(--ok-50);  border-color: var(--ok-500);  color: var(--ok-600); }
+.person__word { font-size: var(--fs-base); font-weight: 800; letter-spacing: .04em; }
+.person__amount { font-size: var(--fs-lg); font-weight: 750; font-variant-numeric: tabular-nums; }
+
+@media (min-width: 900px) {
+  .book { padding: var(--s6) var(--s6) var(--s8); max-width: var(--content-max); margin-inline: auto; }
+  .person__name { font-size: var(--fs-3xl); }
+}
+
 /* --- Roster row -------------------------------------------------------------
    Three targets in one row: the name opens the file, the button takes money,
    the dots manage the person. A single tappable row would make the two things

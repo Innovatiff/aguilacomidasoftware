@@ -1,34 +1,6 @@
 {
   "indexes": [
     {
-      "collectionGroup": "deliveries",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "clientId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "date",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "deliveries",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "clientId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "date",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "invoices",
       "queryScope": "COLLECTION",
       "fields": [

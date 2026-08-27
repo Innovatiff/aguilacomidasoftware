@@ -17,10 +17,10 @@ import {
 import { toastOk, toastBad, sheet, confirm } from '../ui/overlay.js';
 import { go } from '../lib/router.js';
 import {
-  store, subscribe, farmById, clientsOfFarm, farmStats, billingFor, deliveryFor,
+  store, subscribe, farmById, clientsOfFarm, farmStats, billingFor,
 } from '../data/store.js';
 import { watchFarm, addLocation, renameLocation, removeLocation } from '../data/farms.js';
-import { clientStatusMeta, deliveryMeta } from '../lib/model.js';
+import { clientStatusMeta } from '../lib/model.js';
 import { money, number, plural, phone as fmtPhone, telHref } from '../lib/format.js';
 import { formatDayLong, today } from '../lib/dates.js';
 import { dbMessage } from '../firebase.js';
@@ -203,7 +203,6 @@ export function renderFarmDetail(context) {
 
   function clientRow(client) {
     const billing = billingFor(client);
-    const stop = deliveryFor(client.id);
     const owes = (billing?.balance || 0) > 0;
     const status = clientStatusMeta(client.status);
 
@@ -215,9 +214,7 @@ export function renderFarmDetail(context) {
         tagList(client.tags, { max: 3 })),
       end: [
         owes ? badge(money(billing.balance, { round: true }), billing.status === 'overdue' ? 'bad' : 'warn') : null,
-        client.status !== 'active'
-          ? badge(status.label, status.tone)
-          : (!owes && stop ? badge(deliveryMeta(stop.status).short, deliveryMeta(stop.status).tone) : null),
+        client.status !== 'active' ? badge(status.label, status.tone) : null,
       ].filter(Boolean),
       onClick: () => go(`/clients/${client.id}`),
     });

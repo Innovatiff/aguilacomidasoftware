@@ -21,12 +21,9 @@ import { toastOk, toastBad, sheet } from '../ui/overlay.js';
 import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
 import { store, subscribe, moneyStats, debtors, farmById } from '../data/store.js';
-import { watchSettled, issueInvoice } from '../data/invoices.js';
-import { billableMealsInRange } from '../data/deliveries.js';
-import { fortnightCharge } from '../lib/pricing.js';
-import {
-  balanceOf, invoiceStatus, STATUS_LABEL, STATUS_TONE, periodFor, periodByIndex,
-} from '../lib/billing.js';
+import { watchSettled } from '../data/invoices.js';
+import { pendingBilling, issueAll, byFarm as billingByFarm } from '../data/cycles.js';
+import { balanceOf, invoiceStatus, STATUS_LABEL, STATUS_TONE } from '../lib/billing.js';
 import { formatRange, today, humanDelta, daysBetween } from '../lib/dates.js';
 import { money, moneyFull, number, plural } from '../lib/format.js';
 import { dbMessage } from '../firebase.js';
@@ -208,104 +205,51 @@ export function renderBilling(context) {
   /* --- Closing a fortnight -------------------------------------------------- */
 
   /**
-   * Issues the just-closed cycle for everybody, billing the meals actually
-   * delivered. Shows the whole run for review before writing anything: a wrong
-   * bill costs far more than a second tap.
+   * Issues every fortnight that has closed without a bill.
    *
-   * Workers at the same farm share a billing anchor, so the closed periods
-   * collapse to a handful of distinct date ranges. Each one is read once and
-   * bucketed by client id in memory.
+   * The same calculation the roster's banner runs — one implementation, so the
+   * two can never disagree about who owes what. It skips periods that already
+   * have a bill, which is why the number it promises is the number it writes.
    */
   async function closeCycle() {
-    const clients = store.clients.filter((client) => client.status !== 'inactive');
-    if (!clients.length) { toastBad('No hay clientes registrados.'); return; }
-
-    let preview;
+    let pending;
     try {
-      preview = await previewClosedCycle(clients);
+      pending = await pendingBilling(store.clients, store.pricing);
     } catch (error) {
       toastBad(dbMessage(error));
       return;
     }
 
-    if (!preview.length) {
-      toastBad('No hay entregas del periodo anterior para facturar.');
+    if (!pending.rows.length) {
+      toastBad('No hay quincenas cerradas sin facturar.');
       return;
-    }
-
-    const total = preview.reduce((sum, row) => sum + row.amount, 0);
-    const farms = new Map();
-    for (const row of preview) {
-      const name = row.client.farmName || 'Sin rancho';
-      const entry = farms.get(name) || { count: 0, amount: 0 };
-      farms.set(name, { count: entry.count + 1, amount: entry.amount + row.amount });
     }
 
     const confirmed = await sheet({
       title: 'Cerrar quincena',
       build: (close) => h('div.stack.stack-4',
-        alert(`Se emitirán ${preview.length} facturas por ${moneyFull(total)}, al precio de cada plan.`,
-          'brand', 'receipt'),
-        preview.unpriced?.length
-          ? alert(`${plural(preview.unpriced.length, 'cliente queda', 'clientes quedan')} fuera por `
+        alert(`Se emitirán ${plural(pending.rows.length, 'factura', 'facturas')} por `
+          + `${moneyFull(pending.total)}, al precio de cada plan.`, 'brand', 'receipt'),
+        pending.unpriced.length
+          ? alert(`${plural(pending.unpriced.length, 'cliente queda', 'clientes quedan')} fuera por `
             + 'no tener precio en su plan. Revísalo en Ajustes → Precios.', 'warn')
           : null,
-        card(defList([...farms.entries()].map(([name, entry]) => defRow(
-          name,
-          `${plural(entry.count, 'factura', 'facturas')} · ${money(entry.amount)}`,
+        card(defList(billingByFarm(pending.rows).map((farm) => defRow(
+          farm.name,
+          `${plural(farm.count, 'factura', 'facturas')} · ${money(farm.amount)}`,
         )))),
-        h('p.t-xs.c-faint', 'Si un periodo ya tenía factura, se actualiza sin borrar los pagos registrados.'),
+        h('p.t-xs.c-faint', 'Sólo se factura a los clientes activos, y sólo las quincenas que '
+          + 'todavía no tienen factura.'),
         button('Emitir facturas', { variant: 'primary', block: true, onClick: () => close(true) })),
     });
     if (!confirmed) return;
 
     try {
-      const author = { uid: session.uid, name: session.displayName };
-      for (const row of preview) {
-        await issueInvoice(row.client, row.period, row.charge, row.meals, author);
-      }
-      toastOk(`${preview.length} ${preview.length === 1 ? 'factura emitida' : 'facturas emitidas'}`);
+      const issued = await issueAll(pending.rows, { uid: session.uid, name: session.displayName });
+      toastOk(`${plural(issued, 'factura emitida', 'facturas emitidas')}`);
     } catch (error) {
       toastBad(dbMessage(error));
     }
-  }
-
-  /** What closing the fortnight would bill, per client, with delivered meals. */
-  async function previewClosedCycle(clients) {
-    const day = today();
-    const periods = new Map();
-
-    for (const client of clients) {
-      const anchor = client.cycleAnchor || day;
-      const closed = periodByIndex(anchor, periodFor(anchor, day).index - 1);
-      const key = `${closed.start}_${closed.end}`;
-      if (!periods.has(key)) periods.set(key, { period: closed, clients: [] });
-      periods.get(key).clients.push(client);
-    }
-
-    const preview = [];
-    const unpriced = [];
-
-    for (const { period, clients: group } of periods.values()) {
-      const meals = await billableMealsInRange(period.start, period.end);
-      for (const client of group) {
-        const count = meals.get(client.id) || 0;
-        // No deliveries at all in the period means the fortnight was not
-        // served, and a flat price for nothing is not a bill anybody would
-        // defend at the gate.
-        if (count <= 0) continue;
-
-        const charge = fortnightCharge(client, store.pricing);
-        if (!charge.priced) { unpriced.push(client); continue; }
-        preview.push({ client, period, meals: count, charge, amount: charge.amount });
-      }
-    }
-
-    preview.sort((a, b) =>
-      String(a.client.farmName).localeCompare(String(b.client.farmName), 'es')
-      || String(a.client.name).localeCompare(String(b.client.name), 'es'));
-    preview.unpriced = unpriced;
-    return preview;
   }
 
   const unsubscribe = subscribe(draw);

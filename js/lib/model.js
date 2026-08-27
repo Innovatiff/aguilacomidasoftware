@@ -6,38 +6,6 @@
  * Firestore; the Spanish text is presentation only and safe to reword.
  */
 
-/* --- Delivery ------------------------------------------------------------- */
-
-/** The happy path, in order. `progress` drives the tracking timeline. */
-export const DELIVERY_FLOW = ['scheduled', 'preparing', 'en_route', 'delivered'];
-
-export const DELIVERY = {
-  scheduled:  { label: 'Programado',   short: 'Programado', tone: 'info',  icon: 'calendar', clientText: 'Tu comida está programada para hoy.' },
-  preparing:  { label: 'En cocina',    short: 'En cocina',  tone: 'warn',  icon: 'utensils', clientText: 'Estamos preparando tu comida.' },
-  en_route:   { label: 'En camino',    short: 'En camino',  tone: 'brand', icon: 'truck',    clientText: 'Tu comida va en camino.' },
-  delivered:  { label: 'Entregado',    short: 'Entregado',  tone: 'ok',    icon: 'check',    clientText: 'Tu comida fue entregada.' },
-  skipped:    { label: 'Sin servicio', short: 'Sin serv.',  tone: 'muted', icon: 'ban',      clientText: 'Hoy no hay servicio programado.' },
-  issue:      { label: 'Con problema', short: 'Problema',   tone: 'bad',   icon: 'alert',    clientText: 'Hubo un problema con la entrega de hoy.' },
-};
-
-export const deliveryMeta = (status) => DELIVERY[status] || DELIVERY.scheduled;
-
-/** How far along the flow a status sits; -1 for statuses outside it. */
-export const deliveryProgress = (status) => DELIVERY_FLOW.indexOf(status);
-
-/** The next step a driver would tap, or null at the end of the flow. */
-export function nextDeliveryStatus(status) {
-  const at = DELIVERY_FLOW.indexOf(status);
-  if (at < 0 || at === DELIVERY_FLOW.length - 1) return null;
-  return DELIVERY_FLOW[at + 1];
-}
-
-export const ADVANCE_LABEL = {
-  scheduled: 'Iniciar cocina',
-  preparing: 'Salir a ruta',
-  en_route: 'Marcar entregado',
-};
-
 /* --- Client --------------------------------------------------------------- */
 
 export const CLIENT_STATUS = {
@@ -75,18 +43,18 @@ export const MESSAGE_KIND = {
 /** Canned openers, so nobody has to compose a message from scratch. */
 export const CLIENT_QUICK_REPLIES = [
   '¿Me pueden enviar los datos para el pago?',
-  '¿A qué hora llega la comida hoy?',
+  '¿Cuánto debo?',
   'Necesito cambiar el número de comidas.',
-  'Hoy no voy a estar en la ubicación.',
-  'Tuve un problema con mi entrega.',
+  'Voy a pasar a pagar hoy.',
+  'Tuve un problema con mi comida.',
 ];
 
 export const ADMIN_QUICK_REPLIES = [
-  'Buen día, ya salió su pedido.',
+  'Buen día, le recordamos su pago pendiente.',
   'Los datos para el pago son:',
   'Confirmamos su pago, gracias.',
-  '¿Cuántas comidas necesita mañana?',
-  'Hoy vamos con retraso, disculpe la demora.',
+  '¿Cuántas comidas necesita la próxima quincena?',
+  'Puede pasar a la cocina cuando guste.',
 ];
 
 /* --- Tone -> CSS ---------------------------------------------------------- */

@@ -121,19 +121,6 @@ export async function issueInvoice(client, period, charge, meals, author, extra 
   });
 }
 
-/** Issues the cycle that just closed for a set of clients, at their plan price. */
-export async function issueClosedCycle(clients, mealsByClient, pricing, day = today(), author) {
-  const results = [];
-  for (const client of clients) {
-    const anchor = client.cycleAnchor || day;
-    const current = periodFor(anchor, day);
-    const closed = periodByIndex(anchor, current.index - 1);
-    const meals = mealsByClient[client.id] ?? 0;
-    if (!meals) continue;
-    results.push(await issueInvoice(client, closed, fortnightCharge(client, pricing), meals, author));
-  }
-  return results;
-}
 
 /* --- Payments -------------------------------------------------------------- */
 

@@ -1,9 +1,9 @@
 /**
  * The admin app's live data.
  *
- * Farms, clients, the selected day's route, outstanding invoices and the
- * message inbox are needed by several screens at once — the dashboard, the tab
- * badge, the client detail. Opening one listener per screen would mean five
+ * Farms, clients, outstanding invoices, recent receipts and the message inbox
+ * are needed by several screens at once — the roster, the notebook, the tab
+ * badge, a client's file. Opening one listener per screen would mean several
  * copies of the same query and a visible reload on every navigation, so the
  * store keeps a single subscription for each and screens just read from it.
  *
@@ -14,8 +14,8 @@
 import { watchClients } from './clients.js';
 import { watchFarms } from './farms.js';
 import { watchPricing } from './pricing.js';
-import { watchDay, summarizeDay, missingToday } from './deliveries.js';
 import { watchOutstanding, summarizeInvoices, groupByClient } from './invoices.js';
+import { watchRecentReceipts } from './receipts.js';
 import { watchConversations, totalUnread } from './chat.js';
 import { today } from '../lib/dates.js';
 import { summarize, periodFor } from '../lib/billing.js';
@@ -28,19 +28,18 @@ const state = {
   pricing: { ...DEFAULT_PRICING },
   farms: [],
   clients: [],
-  deliveries: [],
   outstanding: [],
+  receipts: [],
   conversations: [],
   loaded: {
-    pricing: false, farms: false, clients: false, deliveries: false,
-    outstanding: false, conversations: false,
+    pricing: false, farms: false, clients: false,
+    outstanding: false, receipts: false, conversations: false,
   },
   errors: {},
 };
 
 const subscribers = new Set();
 let stops = [];
-let dayStop = null;
 
 export const store = state;
 
@@ -103,53 +102,34 @@ export function startStore() {
       emit();
     }, failed('outstanding')),
 
+    // Enough of the till to answer "when did this one last pay?" for everybody
+    // on the notebook page, in one query instead of one per client.
+    watchRecentReceipts((rows) => {
+      state.receipts = rows;
+      state.loaded.receipts = true;
+      emit();
+    }, failed('receipts')),
+
     watchConversations((rows) => {
       state.conversations = rows;
       state.loaded.conversations = true;
       emit();
     }, failed('conversations')),
   ];
-
-  watchSelectedDay();
 }
 
 export function stopStore() {
   for (const stop of stops) { try { stop(); } catch { /* already detached */ } }
   stops = [];
-  dayStop?.();
-  dayStop = null;
   Object.assign(state, {
     pricing: { ...DEFAULT_PRICING },
-    farms: [], clients: [], deliveries: [], outstanding: [], conversations: [],
+    farms: [], clients: [], outstanding: [], receipts: [], conversations: [],
     loaded: {
-      pricing: false, farms: false, clients: false, deliveries: false,
-      outstanding: false, conversations: false,
+      pricing: false, farms: false, clients: false,
+      outstanding: false, receipts: false, conversations: false,
     },
     errors: {},
   });
-}
-
-/** Switches the day the route screen and dashboard are looking at. */
-export function setDay(day) {
-  if (state.day === day) return;
-  state.day = day;
-  state.deliveries = [];
-  state.loaded.deliveries = false;
-  emit();
-  watchSelectedDay();
-}
-
-function watchSelectedDay() {
-  dayStop?.();
-  const day = state.day;
-  dayStop = watchDay(day, (rows) => {
-    // A late response for a day we have already navigated away from must not
-    // overwrite the current one.
-    if (state.day !== day) return;
-    state.deliveries = rows;
-    state.loaded.deliveries = true;
-    emit();
-  }, failed('deliveries'));
 }
 
 /* --- Derived views --------------------------------------------------------- */
@@ -180,10 +160,6 @@ export function farmStats(farmId) {
     balance: Math.round(balance * 100) / 100,
   };
 }
-
-export const dayStats = () => summarizeDay(state.deliveries);
-
-export const unscheduled = () => missingToday(state.clients, state.deliveries, state.day);
 
 export const moneyStats = () => summarizeInvoices(state.outstanding);
 
@@ -277,13 +253,12 @@ export const unpriced = () =>
   state.clients.filter((client) => client.status !== 'inactive'
     && !tierFor(state.pricing, client.mealsPerDay));
 
-/** The stop for a farm on the selected day, if any. */
-export const deliveryFor = (clientId) =>
-  state.deliveries.find((row) => row.clientId === clientId) || null;
-
 export const conversationFor = (clientId) =>
   state.conversations.find((row) => row.id === clientId) || null;
 
+/** One client's payments, newest first, out of the recent till. */
+export const receiptsFor = (clientId) =>
+  state.receipts.filter((row) => row.clientId === clientId);
+
 /** True once the screens have enough to render without skeletons. */
-export const isReady = () =>
-  state.loaded.farms && state.loaded.clients && state.loaded.deliveries;
+export const isReady = () => state.loaded.farms && state.loaded.clients;

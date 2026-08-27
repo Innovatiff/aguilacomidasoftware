@@ -1,38 +1,31 @@
 /**
- * Dashboard — what the kitchen needs to know before 7am.
+ * Inicio — what the kitchen needs to know before it opens.
  *
- * The ordering is deliberate: anything that needs a decision today (people not
- * on the route, a stop with a problem, an overdue payment) is surfaced above
- * the numbers, because numbers are reassurance and alerts are work.
+ * The business runs on two questions now: who owes money, and who is waiting
+ * for an answer. So those are the only two things above the fold, and anything
+ * needing a decision today sits above the numbers — numbers are reassurance,
+ * alerts are work.
  */
 
 import { h } from '../lib/dom.js';
 import { icon } from '../lib/icons.js';
 import { screen, topbarButton } from '../ui/shell.js';
 import {
-  card, stat, statGrid, meter, button, itemRow, list, avatar,
+  card, stat, statGrid, button, itemRow, list, avatar,
   sectionLabel, skeletonRows, dataErrorCard,
 } from '../ui/kit.js';
-import { toastOk, toastBad, confirm } from '../ui/overlay.js';
 import { go } from '../lib/router.js';
 import {
-  store, subscribe, dayStats, moneyStats, debtors, unscheduled,
-  activeClients, unreadCount, isReady, setDay, firstError, startStore,
+  store, subscribe, moneyStats, debtors, roster,
+  unreadCount, isReady, firstError, startStore,
 } from '../data/store.js';
-import { plural } from '../lib/format.js';
-import { scheduleDay } from '../data/deliveries.js';
 import { greeting, formatDayLong, today, humanDelta, daysBetween } from '../lib/dates.js';
-import { money, number } from '../lib/format.js';
-import { session } from '../data/session.js';
+import { money, number, plural } from '../lib/format.js';
 
 export function renderDashboard() {
-  // The dashboard always speaks about today, even if the route screen was left
-  // on another date.
-  setDay(today());
-
   // A failed listener is worth the whole screen. Nothing below it would be
-  // showing real numbers anyway, and a half-empty dashboard reads as "no work
-  // today" rather than "this did not load".
+  // showing real numbers anyway, and a half-empty dashboard reads as "nothing
+  // to do today" rather than "this did not load".
   const failure = () => firstError();
 
   const draw = () => {
@@ -54,135 +47,88 @@ export function renderDashboard() {
 }
 
 function body() {
-  const stats = dayStats();
   const cash = moneyStats();
-  const pendingSchedule = unscheduled();
-  const problems = store.deliveries.filter((row) => row.status === 'issue');
-  const unread = unreadCount();
   const owing = debtors();
+  const unread = unreadCount();
+  const people = roster();
+  const active = people.filter((row) => row.client.status === 'active');
+  const gaps = people.filter((row) => row.hasGap && row.client.status !== 'inactive');
 
-  // Each section is one unit — its label and its content together — so that on
-  // a wide screen the sections can sit side by side without a heading drifting
-  // away from what it heads.
-  return h('div.page__inner.page__inner--cards.stack.stack-4',
-    h('div.span-all', routeHero(stats)),
-    h('div.span-all', alerts({ pendingSchedule, problems, unread, cash })),
-
-    h('div.stack.stack-3',
-    sectionLabel('Cobranza'),
-    statGrid([
-      stat({
-        label: 'Por cobrar',
-        value: money(cash.outstanding, { round: true }),
-        foot: cash.outstanding > 0 ? 'Toca para cobrar' : 'Todo al corriente',
-        tone: cash.outstanding > 0 ? 'accent' : null,
-        onClick: () => go(cash.outstanding > 0 ? '/cobrar' : '/billing'),
-      }),
-      stat({
-        label: 'Vencido',
-        value: money(cash.overdue, { round: true }),
-        foot: cash.overdueCount ? `${cash.overdueCount} ${cash.overdueCount === 1 ? 'factura' : 'facturas'}` : 'Ninguna',
-        tone: cash.overdue > 0 ? 'bad' : 'ok',
-        onClick: () => go('/billing?filter=overdue'),
-      }),
-    ])),
+  return h('div.page__inner.page__inner--flow.stack.stack-4',
+    h('div.span-all', moneyHero(cash)),
+    h('div.span-all', alerts({ cash, unread, gaps })),
 
     h('div.stack.stack-3',
-    sectionLabel('Hoy'),
-    statGrid([
-      stat({ label: 'Comidas', value: number(stats.meals), foot: `${stats.mealsDelivered} entregadas` }),
-      stat({
-        label: 'Clientes activos',
-        value: number(activeClients().length),
-        foot: `${plural(store.farms.length, 'rancho', 'ranchos')} · ${stats.total} en ruta hoy`,
-        onClick: () => go('/farms'),
-      }),
-    ])),
+      sectionLabel('El negocio'),
+      statGrid([
+        stat({
+          label: 'Clientes activos',
+          value: number(active.length),
+          foot: `${plural(store.farms.length, 'rancho', 'ranchos')} · ${people.length} en total`,
+          onClick: () => go('/clients?filter=active'),
+        }),
+        stat({
+          label: 'Al corriente',
+          value: number(active.filter((row) => row.owed <= 0).length),
+          foot: `${active.filter((row) => row.covered).length} con la quincena pagada`,
+          tone: 'ok',
+          onClick: () => go('/clients?filter=covered'),
+        }),
+      ])),
 
     owing.length
       ? h('div.stack.stack-3',
           sectionLabel('Quién debe', h('button.btn.btn--quiet.btn--sm', {
-            type: 'button', onclick: () => go('/billing'),
+            type: 'button', onclick: () => go('/clients?filter=debt'),
           }, 'Ver todo')),
-          debtorList(owing.slice(0, 4)))
+          debtorList(owing.slice(0, 5)))
       : null,
 
     h('div.stack.stack-3',
-    sectionLabel('Acciones'),
-    h('div.stack.stack-2',
-      button('Cobrar en la tienda', { variant: 'primary', block: true, icon: 'cash', onClick: () => go('/cobrar') }),
-      button('Ver la ruta de hoy', { variant: 'dark', block: true, icon: 'route', onClick: () => go('/route') }),
-      button('Registrar un cliente', { variant: 'ghost', block: true, icon: 'userPlus', onClick: () => go('/clients/new') }),
-      button('Registrar un rancho', { variant: 'ghost', block: true, icon: 'farm', onClick: () => go('/farms/new') }))));
+      sectionLabel('Acciones'),
+      h('div.stack.stack-2',
+        button('Cobrar en la tienda', { variant: 'primary', block: true, icon: 'cash', onClick: () => go('/cobrar') }),
+        button('Abrir la libreta', { variant: 'dark', block: true, icon: 'clipboard', onClick: () => go('/libreta') }),
+        button('Registrar un cliente', { variant: 'ghost', block: true, icon: 'userPlus', onClick: () => go('/clients/new') }))));
 }
 
-/* --- Hero: the day's progress ---------------------------------------------- */
+/* --- Hero: the money ------------------------------------------------------- */
 
-function routeHero(stats) {
-  const hasRoute = stats.total > 0;
+function moneyHero(cash) {
+  const owed = cash.outstanding > 0;
 
   return h('div.hero',
-    h('div.row.row--between',
-      h('div',
-        h('div.hero__eyebrow', 'Ruta de hoy'),
-        h('div.hero__title', hasRoute
-          ? `${stats.done} de ${stats.servable} entregas`
-          : 'Sin ruta programada')),
-      hasRoute ? h('div.t-2xl.w-700', { style: { color: 'var(--brand-400)' } }, `${stats.percent}%`) : null),
+    h('div.hero__eyebrow', 'Por cobrar'),
+    h('div.hero__title', money(cash.outstanding, { round: true })),
 
-    hasRoute ? h('div', { style: { marginTop: '14px' } },
-      meter(stats.percent, { tone: stats.percent === 100 ? 'ok' : null, large: true })) : null,
-
-    hasRoute
-      ? h('div.hero__stats',
-          heroStat(stats.counts.preparing, 'En cocina'),
-          heroStat(stats.counts.en_route, 'En camino'),
-          heroStat(stats.pending, 'Pendientes'))
-      : h('p.hero__note', 'Genera la ruta para que cada quien vea su entrega en la app.'),
+    h('div.hero__stats',
+      heroStat(money(cash.overdue, { round: true }), 'Vencido'),
+      heroStat(number(cash.overdueCount), cash.overdueCount === 1 ? 'Factura vencida' : 'Facturas vencidas'),
+      heroStat(money(cash.collected, { round: true }), 'Cobrado')),
 
     h('div', { style: { marginTop: '16px' } },
-      button(hasRoute ? 'Abrir la ruta' : 'Generar la ruta de hoy', {
-        variant: hasRoute ? 'soft' : 'primary',
+      button(owed ? 'Cobrar' : 'Abrir cobranza', {
+        variant: owed ? 'primary' : 'soft',
         block: true,
-        icon: hasRoute ? 'route' : 'plus',
-        onClick: hasRoute ? () => go('/route') : generateToday,
+        icon: owed ? 'cash' : 'receipt',
+        onClick: () => go(owed ? '/cobrar' : '/billing'),
       })));
 }
 
 const heroStat = (value, label) =>
-  h('div', h('div.hero__stat-v', number(value)), h('div.hero__stat-l', label));
+  h('div', h('div.hero__stat-v', value), h('div.hero__stat-l', label));
 
 /* --- Alerts ---------------------------------------------------------------- */
 
-function alerts({ pendingSchedule, problems, unread, cash }) {
+function alerts({ cash, unread, gaps }) {
   const rows = [];
-
-  if (pendingSchedule.length) {
-    rows.push(actionCard({
-      tone: 'warn', icon: 'calendar',
-      title: `${pendingSchedule.length} ${pendingSchedule.length === 1 ? 'cliente sin programar' : 'clientes sin programar'}`,
-      text: byFarm(pendingSchedule),
-      cta: 'Programar', onClick: generateToday,
-    }));
-  }
-
-  if (problems.length) {
-    rows.push(actionCard({
-      tone: 'bad', icon: 'alert',
-      title: `${problems.length} ${problems.length === 1 ? 'entrega con problema' : 'entregas con problema'}`,
-      text: problems.slice(0, 3).map((row) =>
-        [row.clientName, row.locationName].filter(Boolean).join(' · ')).join(' · ')
-        + (problems.length > 3 ? ` y ${problems.length - 3} más` : ''),
-      cta: 'Revisar', onClick: () => go('/route'),
-    }));
-  }
 
   if (cash.overdueCount) {
     rows.push(actionCard({
       tone: 'bad', icon: 'wallet',
       title: `${money(cash.overdue, { round: true })} vencidos`,
       text: `${cash.overdueCount} ${cash.overdueCount === 1 ? 'factura pasó' : 'facturas pasaron'} su fecha de pago.`,
-      cta: 'Cobrar', onClick: () => go('/billing?filter=overdue'),
+      cta: 'Cobrar', onClick: () => go('/clients?filter=overdue'),
     }));
   }
 
@@ -195,6 +141,15 @@ function alerts({ pendingSchedule, problems, unread, cash }) {
     }));
   }
 
+  if (gaps.length) {
+    rows.push(actionCard({
+      tone: 'warn', icon: 'alert',
+      title: `${plural(gaps.length, 'cliente por revisar', 'clientes por revisar')}`,
+      text: 'Les falta ubicación o precio en su plan, así que no se les puede cobrar.',
+      cta: 'Revisar', onClick: () => go('/clients?filter=gaps'),
+    }));
+  }
+
   if (!rows.length) {
     return card(h('div.row',
       h('span', { style: { color: 'var(--ok-500)' } }, icon('shield')),
@@ -204,16 +159,6 @@ function alerts({ pendingSchedule, problems, unread, cash }) {
   }
 
   return h('div.stack.stack-3', rows);
-}
-
-/** "Mucci Farms (12) · Valle Verde (3)" — where the gap actually is. */
-function byFarm(clients) {
-  const counts = new Map();
-  for (const client of clients) {
-    const name = client.farmName || 'Sin rancho';
-    counts.set(name, (counts.get(name) || 0) + 1);
-  }
-  return [...counts.entries()].map(([name, count]) => `${name} (${count})`).join(' · ');
 }
 
 function actionCard({ tone, icon: ico, title, text, cta, onClick }) {
@@ -245,37 +190,4 @@ function dueLabel(invoice, count) {
   const delta = daysBetween(today(), invoice.dueDate);
   const noun = count === 1 ? 'factura' : 'facturas';
   return `${count} ${noun} · ${delta < 0 ? 'venció' : 'vence'} ${humanDelta(delta)}`;
-}
-
-/* --- Actions ---------------------------------------------------------------- */
-
-async function generateToday() {
-  const day = today();
-  const clients = activeClients();
-  if (!clients.length) {
-    toastBad('Primero registra un rancho y a su gente.');
-    return;
-  }
-
-  const ok = await confirm({
-    title: 'Generar la ruta de hoy',
-    message: `Se crearán las entregas de ${formatDayLong(day)} para los clientes activos que reciben comida hoy. Las entregas que ya existen no se modifican.`,
-    confirmLabel: 'Generar ruta',
-    icon: 'calendar',
-  });
-  if (!ok) return;
-
-  try {
-    const { created, skipped } = await scheduleDay(clients, day, {
-      uid: session.uid, name: session.displayName,
-    });
-    if (created) {
-      toastOk(`${created} ${created === 1 ? 'entrega creada' : 'entregas creadas'}`);
-      go('/route');
-    } else {
-      toastOk(skipped ? 'La ruta ya estaba generada.' : 'Hoy no hay clientes programados.');
-    }
-  } catch {
-    toastBad('No se pudo generar la ruta.');
-  }
 }

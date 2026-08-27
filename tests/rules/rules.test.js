@@ -78,9 +78,6 @@ await env.withSecurityRulesDisabled(async (ctx) => {
   await setDoc(doc(db, `clientEmails/${SOFIA}`), { clientId: 'cS', clientName: 'Sofía Márquez' });
   await setDoc(doc(db, `clientEmails/${ANA}`), { clientId: 'cB', clientName: 'Ana Gutiérrez' });
 
-  await setDoc(doc(db, 'deliveries/cA_2026-08-19'), { clientId: 'cA', farmId: 'fA', date: '2026-08-19', status: 'delivered', meals: 2 });
-  await setDoc(doc(db, 'deliveries/cS_2026-08-19'), { clientId: 'cS', farmId: 'fA', date: '2026-08-19', status: 'delivered', meals: 1 });
-  await setDoc(doc(db, 'deliveries/cB_2026-08-19'), { clientId: 'cB', farmId: 'fB', date: '2026-08-19', status: 'delivered', meals: 1 });
   await setDoc(doc(db, 'invoices/cA_2026-08-05'), { clientId: 'cA', farmId: 'fA', amount: 266, paid: 0, settled: false, dueDate: '2026-08-22' });
   await setDoc(doc(db, 'invoices/cS_2026-08-05'), { clientId: 'cS', farmId: 'fA', amount: 133, paid: 0, settled: false, dueDate: '2026-08-22' });
   await setDoc(doc(db, 'invoices/cB_2026-08-05'), { clientId: 'cB', farmId: 'fB', amount: 122, paid: 0, settled: false, dueDate: '2026-08-22' });
@@ -150,8 +147,8 @@ console.log('\n--- A registered client ----------------------------------------'
 await check('client reads their own record', getDoc(doc(rafa, 'clients/cA')), true);
 await check('client reads the farm they eat at', getDoc(doc(rafa, 'farms/fA')), true);
 await check('client reads their own invoice', getDoc(doc(rafa, 'invoices/cA_2026-08-05')), true);
-await check('client queries their own deliveries',
-  getDocs(query(collection(rafa, 'deliveries'), where('clientId', '==', 'cA'))), true);
+await check('client queries their own invoices',
+  getDocs(query(collection(rafa, 'invoices'), where('clientId', '==', 'cA'))), true);
 await check('client reads the price list', getDoc(doc(rafa, 'config/pricing')), true);
 await check('client reads their own receipt', getDoc(doc(rafa, 'receipts/rA')), true);
 await check('client lists their own receipts',
@@ -168,12 +165,11 @@ console.log('\n--- A client reaching past their own data ----------------------'
 await check('client cannot read another client', getDoc(doc(rafa, 'clients/cB')), false);
 await check('client cannot read another client\'s invoice', getDoc(doc(rafa, 'invoices/cB_2026-08-05')), false);
 await check('client cannot read another client\'s thread', getDoc(doc(rafa, 'conversations/cB')), false);
-await check('client cannot list all deliveries', getDocs(collection(rafa, 'deliveries')), false);
 await check('client cannot list all invoices', getDocs(collection(rafa, 'invoices')), false);
+await check('client cannot query another client\'s invoices',
+  getDocs(query(collection(rafa, 'invoices'), where('clientId', '==', 'cB'))), false);
 await check('client cannot list all clients', getDocs(collection(rafa, 'clients')), false);
 await check('client cannot list all farms', getDocs(collection(rafa, 'farms')), false);
-await check('client cannot query another client\'s deliveries',
-  getDocs(query(collection(rafa, 'deliveries'), where('clientId', '==', 'cB'))), false);
 await check('client cannot edit their own price', updateDoc(doc(rafa, 'clients/cA'), { pricePerMeal: 1 }), false);
 await check('client cannot move themselves to another farm',
   updateDoc(doc(rafa, 'clients/cA'), { farmId: 'fB' }), false);
@@ -192,8 +188,6 @@ await check('client cannot list every receipt', getDocs(collection(rafa, 'receip
 await check('client cannot read somebody else\'s receipt', getDoc(doc(rafa, 'receipts/rB')), false);
 await check('client cannot write off their own invoice',
   updateDoc(doc(rafa, 'invoices/cA_2026-08-05'), { paid: 9999, settled: true }), false);
-await check('client cannot mark their own delivery delivered',
-  updateDoc(doc(rafa, 'deliveries/cA_2026-08-19'), { status: 'delivered' }), false);
 await check('client cannot post into another client\'s thread',
   setDoc(doc(rafa, 'conversations/cB/messages/x'),
     { text: 'x', senderUid: 'rafa', senderRole: 'client' }), false);
@@ -215,8 +209,6 @@ await check('a colleague reads the same farm', getDoc(doc(sofia, 'farms/fA')), t
 await check('a colleague cannot read your record', getDoc(doc(sofia, 'clients/cA')), false);
 await check('a colleague cannot read your invoice', getDoc(doc(sofia, 'invoices/cA_2026-08-05')), false);
 await check('a colleague cannot read your receipt', getDoc(doc(sofia, 'receipts/rA')), false);
-await check('a colleague cannot read your deliveries',
-  getDocs(query(collection(sofia, 'deliveries'), where('clientId', '==', 'cA'))), false);
 await check('a colleague cannot read your thread', getDoc(doc(sofia, 'conversations/cA')), false);
 await check('a colleague cannot post in your thread',
   setDoc(doc(sofia, 'conversations/cA/messages/y'),

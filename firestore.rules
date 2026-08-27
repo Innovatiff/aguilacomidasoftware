@@ -31,7 +31,7 @@ rules_version = '2';
  * the marker can never be updated or deleted.
  *
  * On list queries: Firestore evaluates these rules against every document a
- * query would return, so an unscoped `list` on deliveries or invoices simply
+ * query would return, so an unscoped `list` on invoices or receipts simply
  * fails. That is what confines a client to their own rows — the query has to
  * carry `where('clientId', '==', <their own id>)` to be allowed at all.
  */
@@ -201,18 +201,11 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    /* --- deliveries ----------------------------------------------------------- */
-
-    // Each stop names the person it is for. A query without
-    // `where('clientId', '==', <their own>)` fails per-document, which is what
-    // keeps one worker from reading the whole farm's route.
-
-    match /deliveries/{deliveryId} {
-      allow read: if isAdmin() || ownsClient(resource.data.clientId);
-      allow write: if isAdmin();
-    }
-
     /* --- invoices ------------------------------------------------------------- */
+
+    // Each bill names the person it is for. A query without
+    // `where('clientId', '==', <their own>)` fails per-document, which is what
+    // keeps one worker from reading the whole farm's accounts.
 
     match /invoices/{invoiceId} {
       allow read: if isAdmin() || ownsClient(resource.data.clientId);

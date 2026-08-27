@@ -15,7 +15,7 @@ import { startSession, watchSession, session, signOutNow } from './data/session.
 import { startStore, stopStore, subscribe, unreadCount } from './data/store.js';
 import { renderAuth, renderNoAccess } from './screens/login.js';
 import { renderDashboard } from './screens/dashboard.js';
-import { renderRoute } from './screens/route.js';
+import { renderNotebook } from './screens/notebook.js';
 import { renderFarms } from './screens/farms.js';
 import { renderFarmDetail } from './screens/farm-detail.js';
 import { renderFarmForm } from './screens/farm-form.js';
@@ -33,7 +33,7 @@ import { emptyState, button } from './ui/kit.js';
 
 const TABS = [
   { id: 'home',     path: '/',         label: 'Inicio',   icon: 'home' },
-  { id: 'route',    path: '/route',    label: 'Ruta',     icon: 'route' },
+  { id: 'notebook', path: '/libreta',  label: 'Libreta',  icon: 'clipboard' },
   { id: 'farms',    path: '/farms',    label: 'Ranchos',  icon: 'farm' },
   { id: 'clients',  path: '/clients',  label: 'Clientes', icon: 'users' },
   { id: 'messages', path: '/messages', label: 'Mensajes', icon: 'chat' },
@@ -113,7 +113,7 @@ function enter(next) {
 
 function registerRoutes() {
   register('/', renderDashboard);
-  register('/route', renderRoute);
+  register('/libreta', renderNotebook);
 
   // A farm holds the terms and the locations; its people are `clients`.
   register('/farms', renderFarms);

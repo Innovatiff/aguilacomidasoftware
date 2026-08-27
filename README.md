@@ -20,7 +20,7 @@ cada dos semanas. Antes no se llevaba registro de nada. Este panel registra:
 | **Clientes** | cada persona que come, con su rancho y su **ubicación obligatoria**. Hereda el servicio del rancho; lo suyo es su **plan**: cuántas comidas lleva al día |
 | **Precios** | una lista para todo el negocio: lo que cuesta una **quincena completa** en cada plan — 1 comida/día $75, 2 comidas/día $140. Se cambia en Ajustes |
 | **La semana de cada quien** | qué días recibe y cuántas comidas cada día. Quien come de lunes a viernes paga menos; quien lleva una comida extra el sábado paga más. El precio se ajusta solo |
-| **Ruta** | agrupada por rancho → ubicación: un toque mueve una ubicación completa, con estado en vivo que cada quien ve en su app |
+| **Libreta** | la libreta de papel, tal cual: rancho → ubicación → su gente, en orden. Sólo un buscador, sin filtros ni botones |
 | **Clientes** | el tablero de trabajo: quién debe, quién va atrasado, quién está activo y quién tiene algo mal. Cobrar, pausar, reactivar y mandar mensaje sin salir de la lista |
 | **Restricciones** | lo que cada quien no puede comer — *sin pollo*, *sin espagueti*. Se ven en la lista sin abrir a nadie, y en la ruta junto a su nombre |
 | **Cobro** | ciclos de 14 días, **una factura por persona**, pagos y saldos, agrupados por rancho |
@@ -194,7 +194,29 @@ Para eliminar una ubicación primero hay que mover a quien esté ahí, y para
 eliminar un rancho primero hay que vaciarlo. Es a propósito: borrar en cascada
 se llevaría entregas, facturas e historial de gente que sigue trabajando.
 
-### 6. El día a día: la pestaña Clientes
+### 6. La libreta
+
+La libreta de papel se leía en un orden y sólo uno: el rancho, luego un lugar de
+ese rancho, luego la gente que está ahí, luego el siguiente lugar, luego el
+siguiente rancho. La pestaña **Libreta** mantiene ese orden exacto y no le
+agrega nada — un buscador y el libro.
+
+Cada persona está puesta en el orden en que se pregunta en la puerta:
+
+1. **Lo que no puede comer**, arriba de su propio nombre.
+2. **Su nombre**, y al lado **su semana** y sus comidas extra.
+3. **Sus pagos**, y si **DEBE**, está **PAGADO** o **AL CORRIENTE**.
+
+Todo va en letra grande y con aire. Quien lee esto no está viendo un teléfono
+con buena luz: está buscando un nombre desde el otro lado del mostrador. El
+nombre del rancho es lo más grande de la página, y el veredicto de pago es una
+palabra grande con su color — nunca sólo el color, que es justo lo que le falla
+a la vista cansada.
+
+**Sólo aparecen los clientes activos.** Quien está en pausa o se fue no está en
+el libro; para eso está la lista de Clientes.
+
+### 7. El día a día: la pestaña Clientes
 
 Es la pantalla donde se trabaja. Responde en orden las cuatro preguntas que
 realmente se hacen: **quién me debe · quién va atrasado · quién está activo ·
@@ -253,7 +275,7 @@ Se ven en tres lugares, sin abrir a nadie:
   sin cerdo · 1»*. El cocinero necesita el número **antes** de servir, no
   mientras entrega cajas.
 
-### 7. El historial de pagos
+### 8. El historial de pagos
 
 En la ficha de cada cliente, **Historial de pagos**: todo lo que ha pagado, con
 folio, fecha, forma de pago y qué quincenas cubrió cada pago. Arriba, el total y
@@ -263,7 +285,7 @@ sólo se podía contestar abriendo factura por factura.
 Es distinto de la lista de facturas de arriba a propósito: una factura dice lo
 que se debía, un recibo dice lo que se entregó y cuándo.
 
-### 8. Cobrar en la tienda
+### 9. Cobrar en la tienda
 
 **Cobros → Cobrar** (o el botón *Cobrar* en Inicio). Escribe el nombre, tócalo,
 confirma el monto. El panel ya trae puesto lo que debe; si está al corriente,
@@ -304,7 +326,7 @@ un segundo recibo en negativo que lo referencia — como se corrige un libro de
 caja. Los dos quedan visibles para los dos lados, que es la única forma de que
 la cuenta se pueda verificar después.
 
-### 9. Correr en local
+### 10. Correr en local
 
 No hay dependencias ni build. Cualquier servidor estático sirve:
 
@@ -319,7 +341,7 @@ Abre `http://localhost:5173`. Agrega `localhost` en
 > Los módulos ES no funcionan abriendo `index.html` con `file://`. Usa un
 > servidor.
 
-### 10. Publicar en Netlify
+### 11. Publicar en Netlify
 
 El sitio se publica solo: Netlify vigila la rama del repositorio y sube cada
 push. No hay build — la raíz del repositorio *es* el sitio, y `netlify.toml` ya
@@ -338,7 +360,7 @@ Al conectar el repositorio en Netlify:
 Authorized domains → Add domain**, y agrega el dominio de Netlify
 (`tu-sitio.netlify.app` y tu dominio propio si lo tienes).
 
-### 11. Publicar las reglas
+### 12. Publicar las reglas
 
 **Publicar el sitio no publica las reglas.** Son dos cosas distintas y es la
 causa más común de «ya lo arreglé pero sigue igual». Netlify sube la app;
@@ -349,12 +371,12 @@ Las reglas se publican desde la consola, sin instalar nada:
 1. Consola de Firebase → **Firestore Database → Reglas**.
 2. Pega el contenido de `firestore.rules` y **Publicar**.
 
-**Los índices.** Hacen falta cuatro, y no se pegan: se crean con un clic. La
+**Los índices.** Hacen falta dos, y no se pegan: se crean con un clic. La
 primera vez que abras la ficha de un cliente o su lista de recibos, si falta
 alguno el panel te muestra **Crear el índice en Firebase** con el enlace ya
 armado. Tarda un minuto en quedar listo y no hay que volver a tocarlo.
 
-Los cuatro están en `firestore.indexes.json` por si prefieres subirlos de golpe
+Los dos están en `firestore.indexes.json` por si prefieres subirlos de golpe
 con `firebase deploy --only firestore:indexes`.
 
 > Sólo hace falta cuando cambian las reglas mismas. Agregar gente al equipo,
@@ -391,6 +413,7 @@ js/
     session.js  staff.js  pricing.js  farms.js  clients.js
     deliveries.js  invoices.js  receipts.js  chat.js
     cycles.js         quincenas cerradas sin facturar y saldos del cuaderno
+                    — una sola implementación para Clientes y Cobranza
     store.js          escuchas compartidas del panel
   ui/                 shell, kit de componentes, hojas, chat
   screens/            una pantalla por archivo
@@ -402,10 +425,14 @@ js/
 no a las 19:00 UTC. Guardar `2026-08-19` elimina los errores de zona horaria
 entre el teléfono de la cocina y el del rancho.
 
-**Los ids son deterministas.** Una entrega es `clientId_fecha` y una factura es
-`clientId_inicioDePeriodo`. Dos teléfonos marcando la misma parada convergen en
-el mismo documento, y volver a facturar un periodo actualiza la factura en vez
-de duplicarla.
+**Los ids son deterministas.** Una factura es `clientId_inicioDePeriodo`, así que
+volver a facturar un periodo actualiza la factura en vez de duplicarla — y por
+eso emitir dos veces nunca cobra dos veces.
+
+**Se factura a todos los clientes activos.** El plan es una suscripción: quien
+está en el plan debe la quincena. Quien no deba cobrarse se pone **en pausa**,
+que es un toque en su renglón. Antes se facturaba sólo a quien tenía entregas
+registradas; sin ruta esa compuerta no existe, y la pausa la sustituye.
 
 **El cobro es aritmética, no calendario.** Cada rancho tiene una fecha ancla y
 el periodo *i* va de `ancla + 14i` a `ancla + 14i + 13`. Cualquier fecha cae en
@@ -452,9 +479,9 @@ hoy, así que se deriva en cada render. Lo único que se guarda es `settled`, un
 booleano, porque Firestore no puede comparar dos campos en una consulta y es la
 única forma de preguntar «¿quién debe?» en una sola lectura.
 
-**Persistencia sin conexión activada.** El chofer marca «entregado» con una
-barra de señal en un camino de terracería; la escritura sobrevive hasta que
-vuelve la conexión.
+**Persistencia sin conexión activada.** La cocina abre el panel donde hay poca
+señal; la app abre y muestra lo último que sabe, y lo que se escriba sobrevive
+hasta que vuelve la conexión.
 
 ---
 
@@ -501,12 +528,6 @@ clients/{clientId}               -- una persona que come
   deliveryWindow, cycleAnchor, graceDays
                                  -- copiados del rancho, y se siguen heredando
 
-deliveries/{clientId_YYYY-MM-DD}
-  clientId, clientName, date, meals, window, driver, notes
-  farmId, farmName, locationId, locationName
-  status  'scheduled' | 'preparing' | 'en_route' | 'delivered' | 'skipped' | 'issue'
-  events  [{ status, at, byName }]
-
 invoices/{clientId_YYYY-MM-DD}
   clientId, clientName, farmId, farmName, locationName
   periodStart, periodEnd, dueDate
@@ -515,7 +536,7 @@ invoices/{clientId_YYYY-MM-DD}
   planPrice, adjustment          -- de qué se compone ese total
   plannedDays, plannedMeals      -- la semana con la que se calculó
   extras, extraMeals, mealPrice  -- las comidas extra y a qué precio
-  meals                          -- comidas entregadas (informativo)
+  meals                          -- comidas que cubre la quincena
   fromNotebook                   -- true si viene del cuaderno, no de una ruta
   paid, settled
   payments [{ amount, method, date, reference, note, byName, receiptId, at }]
@@ -589,7 +610,7 @@ npm install      # sólo la primera vez
 npm test
 ```
 
-84 pruebas cubren lo que cada quien puede y no puede hacer: que un cliente no
+81 pruebas cubren lo que cada quien puede y no puede hacer: que un cliente no
 alcance a otro —ni siquiera al de su misma ubicación—, que no pueda tocar sus
 facturas, la lista de precios ni las condiciones de su rancho, que nadie se
 agregue solo a `staff` ni reapunte su correo, que un recibo no se pueda editar
@@ -600,19 +621,15 @@ ni borrar, y que la primera cuenta se pueda reclamar exactamente una vez. Ver
 
 ## Operación diaria
 
-1. **Generar la ruta** — desde Inicio o Ruta. Crea una entrega por cliente activo
-   que reciba comida ese día. Volver a generarla no pisa el avance.
-2. **Avanzar las paradas** — la ruta viene agrupada por rancho y ubicación: el
-   botón del encabezado de una ubicación mueve a toda su gente de un toque, y
-   deja en paz lo que ya se entregó o se reportó con problema. Las excepciones se
-   avanzan una por una desde su renglón.
-3. **Cobrar** — en la tienda, todo el día: Clientes → Cobrar, busca, cobra. O
+1. **Consultar la libreta** — quién está en cada rancho y en cada ubicación, qué
+   no come, y si debe. Es la pantalla de todos los días.
+2. **Cobrar** — en la tienda, todo el día: Clientes → Cobrar, busca, cobra. O
    directamente desde el renglón de la persona. El recibo le llega en su app.
-4. **Emitir lo que cerró** — el aviso en Clientes te lo dice solo. Emite **una
-   factura por persona** al precio de su plan, para quien haya recibido comida
-   en el periodo, con vista previa antes de escribir nada. Lo ya cobrado por
-   adelantado no se vuelve a facturar: esa quincena ya tiene su factura saldada.
-5. **Cerrar la caja** — al final del día, en Cobrar: lo cobrado hoy y todos sus
+3. **Emitir lo que cerró** — el aviso en Clientes te lo dice solo. Emite **una
+   factura por cliente activo** al precio de su plan, con vista previa antes de
+   escribir nada. Lo ya cobrado por adelantado no se vuelve a facturar: esa
+   quincena ya tiene su factura saldada.
+4. **Cerrar la caja** — al final del día, en Cobrar: lo cobrado hoy y todos sus
    recibos.
 
 > Buscar a alguien: la lupa en Ranchos busca ranchos *y* personas, y el ícono de

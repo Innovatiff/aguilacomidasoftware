@@ -19,21 +19,20 @@ distinto de cero si alguna regla no se comporta como debe.
 
 ## Qué cubren
 
-84 comprobaciones, cada una escrita como «esto debe permitirse» o «esto debe
+81 comprobaciones, cada una escrita como «esto debe permitirse» o «esto debe
 negarse»:
 
 - **Anónimos** no leen nada.
 - **La cocina** lee y escribe todo: ranchos, ubicaciones, clientes, entregas,
   facturas y pagos.
-- **Un cliente** lee lo suyo y sólo lo suyo: su ficha, su rancho, sus entregas,
-  sus facturas y su chat. No puede listar ninguna colección completa.
+- **Un cliente** lee lo suyo y sólo lo suyo: su ficha, su rancho, sus facturas,
+  sus recibos y su chat. No puede listar ninguna colección completa.
 - **Dos personas del mismo rancho** comparten el documento del rancho y nada
-  más: trabajar en el mismo lugar no da acceso a la ficha, la factura, las
-  entregas ni el chat del compañero.
+  más: trabajar en el mismo lugar no da acceso a la ficha, la factura, los
+  recibos ni el chat del compañero.
 - **Un cliente no escribe dinero ni condiciones**: ni salda su factura, ni
-  cambia la lista de precios, ni marca su propia entrega como entregada, ni
-  toca las ubicaciones de su rancho, ni se cambia de rancho, ni se escribe un
-  recibo a sí mismo.
+  cambia la lista de precios, ni toca las ubicaciones de su rancho, ni se cambia
+  de rancho, ni se escribe un recibo a sí mismo.
 - **Los recibos son inmutables**: nadie los edita ni los borra —tampoco un
   administrador— y sólo los ve quien pagó y la cocina.
 - **La lista de precios** la lee cualquiera que haya entrado, porque las dos

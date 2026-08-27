@@ -37,6 +37,21 @@ export function watchClientReceipts(clientId, onData, onError, count = 30) {
   );
 }
 
+/**
+ * The most recent payments across the whole business.
+ *
+ * One query behind every client's payment line on the notebook page. Loading
+ * them per client would be one listener per person; this is one for everybody,
+ * and a notebook only ever showed the last few payments anyway.
+ */
+export function watchRecentReceipts(onData, onError, count = 300) {
+  return onSnapshot(
+    query(receiptsRef(), orderBy('at', 'desc'), qLimit(count)),
+    (snap) => onData(listData(snap)),
+    onError,
+  );
+}
+
 /** Everything taken at the counter today — the till, in the order it came in. */
 export function watchReceiptsOn(day, onData, onError) {
   return onSnapshot(

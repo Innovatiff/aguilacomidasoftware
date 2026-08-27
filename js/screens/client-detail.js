@@ -15,12 +15,11 @@ import { toastOk, toastBad, sheet } from '../ui/overlay.js';
 import { openChargeSheet } from '../ui/charge-sheet.js';
 import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
-import { store, subscribe, billingFor, deliveryFor, farmById, fortnightPrice } from '../data/store.js';
+import { store, subscribe, billingFor, farmById, fortnightPrice } from '../data/store.js';
 import { watchClient, updateClient, moveClient } from '../data/clients.js';
 import { watchClientInvoices, issueInvoice } from '../data/invoices.js';
 import { watchClientReceipts, totalOf, cancelledIds } from '../data/receipts.js';
 import { openOpeningSheet } from '../ui/opening-sheet.js';
-import { watchClientDeliveries, billableMeals, createDelivery } from '../data/deliveries.js';
 import { ensureConversation } from '../data/chat.js';
 import {
   periodFor, periodByIndex, projectPeriod, balanceOf, invoiceStatus,
@@ -28,11 +27,10 @@ import {
 } from '../lib/billing.js';
 import { tierFor, fortnightCharge, mealsOn } from '../lib/pricing.js';
 import {
-  formatRange, relativeDay, formatDayLong, today, humanDelta, formatDay,
-  weekdayName, capitalize, WEEKDAYS_SHORT,
+  formatRange, formatDayLong, today, humanDelta, formatDay, WEEKDAYS_SHORT,
 } from '../lib/dates.js';
 import { money, moneyFull, plural, phone as fmtPhone, telHref, number } from '../lib/format.js';
-import { clientStatusMeta, deliveryMeta, paymentMethodMeta } from '../lib/model.js';
+import { clientStatusMeta, paymentMethodMeta } from '../lib/model.js';
 import { dbMessage } from '../firebase.js';
 
 export function renderClientDetail(context) {
@@ -42,14 +40,12 @@ export function renderClientDetail(context) {
   let client = store.clients.find((c) => c.id === clientId) || null;
   let invoices = [];
   let receipts = [];
-  let history = [];
   let loadedInvoices = false;
 
   const stops = [
     watchClient(clientId, (row) => { client = row; draw(); }, () => draw()),
     watchClientInvoices(clientId, (rows) => { invoices = rows; loadedInvoices = true; draw(); }, () => { loadedInvoices = true; draw(); }),
     watchClientReceipts(clientId, (rows) => { receipts = rows; draw(); }, () => {}),
-    watchClientDeliveries(clientId, 14, (rows) => { history = rows; draw(); }, () => {}),
     subscribe(() => draw()),
   ];
 
@@ -79,18 +75,15 @@ export function renderClientDetail(context) {
 
   function body() {
     const billing = billingFor(client) || { balance: 0, status: 'paid', outstanding: [] };
-    const stop = deliveryFor(clientId);
 
     return h('div.page__inner.page__inner--flow.stack.stack-4',
       welcomeEmail ? h('div.span-all', welcomeBanner(welcomeEmail)) : null,
       identityCard(client, openChat),
       placeCard(client),
-      todayCard(client, stop),
       billingCard(client, billing, invoices, loadedInvoices),
       paymentsCard(),
       accessCard(client),
-      termsCard(client),
-      historyCard(history));
+      termsCard(client));
   }
 
   /* --- Cards ------------------------------------------------------------- */
@@ -168,37 +161,6 @@ export function renderClientDetail(context) {
       button('Cambiar de ubicación', {
         variant: 'ghost', size: 'sm', block: true, icon: 'pin', onClick: () => changePlace(model),
       })));
-  }
-
-  function todayCard(model, stop) {
-    const meta = stop ? deliveryMeta(stop.status) : null;
-
-    return card(h('div.stack.stack-3',
-      h('div.row.row--between',
-        h('div.card__title', 'Entrega de hoy'),
-        stop ? badge(meta.label, meta.tone, meta.icon) : null),
-
-      stop
-        ? h('div.stack.stack-2',
-            h('div.t-sm.c-soft',
-              `${plural(stop.meals, 'comida', 'comidas')}${stop.window ? ` · ${stop.window}` : ''}`),
-            button('Abrir en la ruta', {
-              variant: 'ghost', size: 'sm', block: true, icon: 'route',
-              onClick: () => go('/route'),
-            }))
-        : h('div.stack.stack-2',
-            h('div.t-sm.c-soft', servesToday(model)
-              ? 'Hoy le toca comida pero no tiene entrega generada.'
-              : 'Hoy no le toca servicio según los días de su rancho.'),
-            button('Agregar entrega de hoy', {
-              variant: servesToday(model) ? 'primary' : 'ghost', size: 'sm', block: true, icon: 'plus',
-              onClick: async () => {
-                try {
-                  await createDelivery(model, today(), { uid: session.uid, name: session.displayName });
-                  toastOk('Entrega agregada a la ruta');
-                } catch (error) { toastBad(dbMessage(error)); }
-              },
-            }))));
   }
 
   function billingCard(model, billing, rows, loaded) {
@@ -416,21 +378,6 @@ export function renderClientDetail(context) {
     }));
   }
 
-  function historyCard(rows) {
-    if (!rows.length) return null;
-    return h('div.stack.stack-3',
-      sectionLabel('Últimas entregas'),
-      list(rows.map((row) => {
-        const meta = deliveryMeta(row.status);
-        return itemRow({
-          title: relativeDay(row.date),
-          meta: `${plural(row.meals, 'comida', 'comidas')} · ${capitalize(weekdayName(row.date))}`,
-          end: badge(meta.short, meta.tone),
-          chevron: false,
-        });
-      }), { card: true }));
-  }
-
   /* --- Actions ----------------------------------------------------------- */
 
   /** Money in, from the person's own file — the same sheet the counter uses. */
@@ -450,8 +397,7 @@ export function renderClientDetail(context) {
     const choice = await sheet({
       title: 'Cerrar y facturar',
       build: (close) => h('div.stack.stack-3',
-        h('p.t-sm.c-soft', 'Se emite la factura de la quincena al precio de su plan. Las comidas '
-          + 'entregadas quedan registradas en ella.'),
+        h('p.t-sm.c-soft', 'Se emite la factura de la quincena al precio de su plan.'),
         h('div.stack.stack-2',
           periodOption(periodByIndex(anchor, current.index - 1), 'Periodo anterior (cerrado)', close),
           periodOption(current, 'Periodo en curso', close))),
@@ -465,8 +411,9 @@ export function renderClientDetail(context) {
     }
 
     try {
-      const meals = await billableMeals(model.id, choice);
-      await issueInvoice(model, choice, price, meals, { uid: session.uid, name: session.displayName });
+      const charge = fortnightCharge(model, store.pricing);
+      await issueInvoice(model, choice, charge, charge.meals,
+        { uid: session.uid, name: session.displayName });
       toastOk('Factura generada');
       go(`/invoices/${invoiceId(model.id, choice.start)}`);
     } catch (error) {
@@ -593,9 +540,6 @@ async function copy(text) {
     toastBad('No se pudo copiar. Anótalo manualmente.');
   }
 }
-
-const servesToday = (client) =>
-  client.status === 'active' && (client.deliveryDays || []).includes(new Date().getDay());
 
 /** How far through the current cycle we are, 0–100. */
 function periodProgress(period) {
