@@ -20,7 +20,8 @@ import { toastOk, toastBad, confirm } from '../ui/overlay.js';
 import { session } from '../data/session.js';
 import { dbMessage } from '../firebase.js';
 import { money } from '../lib/format.js';
-import { formatRange, formatStamp, formatDayLong } from '../lib/dates.js';
+import { formatStamp, formatDayLong } from '../lib/dates.js';
+import { appliedTitle } from '../lib/billing.js';
 import { paymentMethodMeta } from '../lib/model.js';
 import { toDate } from '../firebase.js';
 
@@ -102,8 +103,8 @@ export function renderReceipt(context) {
         sectionLabel('Qué cubre'),
         list((receipt.applied || []).map((row) => itemRow({
           lead: h('span.item__ico', icon('receipt')),
-          title: formatRange(row.periodStart, row.periodEnd),
-          meta: 'Quincena',
+          title: appliedTitle(row),
+          meta: row.kind === 'charge' ? 'Deuda agregada' : 'Quincena',
           end: h('span.w-700', money(row.amount)),
           onClick: () => go(`/invoices/${row.invoiceId}`),
         })), { card: true })),
@@ -153,9 +154,7 @@ export function renderReceipt(context) {
    * too. None of that is reversible-by-accident, so it asks first.
    */
   async function cancel() {
-    const covered = (receipt.applied || [])
-      .map((row) => formatRange(row.periodStart, row.periodEnd))
-      .join(', ');
+    const covered = (receipt.applied || []).map(appliedTitle).join(', ');
 
     const ok = await confirm({
       title: `Cancelar ${receipt.folio}`,

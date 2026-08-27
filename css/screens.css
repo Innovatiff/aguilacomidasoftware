@@ -598,6 +598,26 @@
 .person__standing.is-ok  { background: var(--ok-50);  border-color: var(--ok-500);  color: var(--ok-600); }
 .person__word { font-size: var(--fs-lg); font-weight: 800; letter-spacing: .04em; white-space: nowrap; }
 
+/* The margin note. Set apart from the money above it so the eye does not read
+   the two as one line, and left-ruled the way a note is written beside a name. */
+.person__notes {
+  margin-top: var(--s3);
+  padding: var(--s2) var(--s3);
+  border-left: 4px solid var(--brand-300);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  background: var(--bg-sunken);
+}
+.person__noteslabel {
+  display: block;
+  font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase;
+  letter-spacing: .07em; color: var(--text-faint);
+}
+.person__notestext {
+  margin: 2px 0 0;
+  font-size: var(--fs-base); line-height: 1.45; color: var(--text);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+
 @media (min-width: 900px) {
   .book { padding: var(--s6) var(--s6) var(--s8); max-width: var(--content-max); margin-inline: auto; }
   .person__name { font-size: var(--fs-3xl); }

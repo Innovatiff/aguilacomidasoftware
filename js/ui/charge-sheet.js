@@ -17,7 +17,9 @@ import { field, moneyInput, input, select, textarea, defList, defRow, button, al
 import { icon } from '../lib/icons.js';
 import { takePayment } from '../data/invoices.js';
 import { postSystemMessage } from '../data/chat.js';
-import { balanceOf, periodFor, periodByIndex } from '../lib/billing.js';
+import {
+  balanceOf, periodFor, periodByIndex, isCharge, invoiceTitle, appliedTitle,
+} from '../lib/billing.js';
 import { chargeFor } from '../lib/pricing.js';
 import { money, moneyFull, plural } from '../lib/format.js';
 import { formatRange, today } from '../lib/dates.js';
@@ -195,10 +197,13 @@ function explain(value, { owed, balance, fortnight, anchor, current }) {
     if (left <= 0.005) break;
     const take = Math.min(left, balanceOf(invoice));
     left = round2(left - take);
-    parts.push(`${formatRange(invoice.periodStart, invoice.periodEnd)} (${money(take)})`);
+    parts.push(`${invoiceTitle(invoice)} (${money(take)})`);
   }
 
-  const paidAhead = new Set(owed.map((invoice) => invoice.periodStart));
+  // Only real fortnights block paying ahead. A hand-written debt that happens
+  // to be dated on a period start is not that fortnight's bill.
+  const paidAhead = new Set(owed.filter((invoice) => !isCharge(invoice))
+    .map((invoice) => invoice.periodStart));
   if (fortnight > 0) {
     for (let ahead = 0; left > 0.005 && ahead < 6; ahead += 1) {
       const period = periodByIndex(anchor, current.index + ahead);
@@ -221,9 +226,7 @@ function explain(value, { owed, balance, fortnight, anchor, current }) {
 /** Tells the client, in their own thread, that the payment landed. */
 async function announce(receipt, client) {
   const label = PAYMENT_METHODS[receipt.method]?.label || 'pago';
-  const covered = receipt.applied
-    .map((row) => formatRange(row.periodStart, row.periodEnd))
-    .join(', ');
+  const covered = receipt.applied.map(appliedTitle).join(', ');
 
   const text = receipt.balanceAfter > 0.005
     ? `Recibimos su pago de ${moneyFull(receipt.amount)} (${label}). Cubre ${covered}. `

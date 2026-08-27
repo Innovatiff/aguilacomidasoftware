@@ -15,13 +15,15 @@ import { toastOk, toastBad, confirm, sheet } from '../ui/overlay.js';
 import { openChargeSheet } from '../ui/charge-sheet.js';
 import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
-import { watchInvoice, reversePayment, voidReceipt } from '../data/invoices.js';
+import { watchInvoice, reversePayment, voidReceipt, voidCharge } from '../data/invoices.js';
 import { getReceipt } from '../data/receipts.js';
 import { store, clientById, invoicesFor } from '../data/store.js';
 import { postSystemMessage } from '../data/chat.js';
-import { balanceOf, invoiceStatus, STATUS_LABEL, STATUS_TONE } from '../lib/billing.js';
 import {
-  formatRange, formatDayLong, formatDay, today, humanDelta, daysBetween, formatStamp, dayKey,
+  balanceOf, invoiceStatus, isCharge, invoiceTitle, STATUS_LABEL, STATUS_TONE,
+} from '../lib/billing.js';
+import {
+  formatDayLong, formatDay, today, humanDelta, daysBetween, formatStamp, dayKey,
 } from '../lib/dates.js';
 import { money, moneyFull, number, percent } from '../lib/format.js';
 import { paymentMethodMeta } from '../lib/model.js';
@@ -55,7 +57,7 @@ export function renderInvoice(context) {
     const status = invoiceStatus(invoice, today());
     screen({
       title: invoice.clientName || 'Factura',
-      subtitle: formatRange(invoice.periodStart, invoice.periodEnd),
+      subtitle: invoiceTitle(invoice),
       backTo: '/billing',
       tab: 'clients',
       sunken: true,
@@ -75,7 +77,9 @@ export function renderInvoice(context) {
       card(h('div.stack.stack-4',
         h('div.row.row--between',
           h('div',
-            h('div.t-xs.upper.c-faint.w-700', balance > 0 ? 'Saldo pendiente' : 'Total del periodo'),
+            h('div.t-xs.upper.c-faint.w-700', balance > 0
+              ? 'Saldo pendiente'
+              : isCharge(invoice) ? 'Total de la deuda' : 'Total del periodo'),
             h('div.t-3xl.w-700', { style: { color: balance > 0 ? (status === 'overdue' ? 'var(--bad-600)' : 'var(--ink-900)') : 'var(--ok-600)' } },
               money(balance > 0 ? balance : amount))),
           badge(STATUS_LABEL[status], STATUS_TONE[status])),
@@ -113,20 +117,49 @@ export function renderInvoice(context) {
         [invoice.farmName, invoice.locationName].filter(Boolean).length
           ? defRow('Dónde', [invoice.farmName, invoice.locationName].filter(Boolean).join(' · '))
           : null,
-        defRow('Periodo', `${formatDay(invoice.periodStart)} – ${formatDay(invoice.periodEnd)}`),
 
-        // Straight off the bill, not recalculated: these are the numbers it was
-        // issued with, and they must not move when the price list does.
-        ...(invoice.fromNotebook ? [] : chargeRows(invoice)),
+        // A hand-written debt has no fortnight behind it — no plan, no days, no
+        // meals — so it says what it is instead of showing an arithmetic that
+        // was never done.
+        ...(isCharge(invoice)
+          ? [
+              defRow('Motivo', invoice.reason || 'Cargo'),
+              defRow('Fecha', formatDayLong(invoice.periodStart)),
+              defRow('Fecha límite de pago', formatDayLong(invoice.dueDate)),
+              defRow('Deuda', moneyFull(amount), { total: true }),
+            ]
+          : [
+              defRow('Periodo', `${formatDay(invoice.periodStart)} – ${formatDay(invoice.periodEnd)}`),
 
-        defRow('Comidas entregadas', number(invoice.meals)),
-        defRow('Fecha límite de pago', formatDayLong(invoice.dueDate)),
-        defRow('Quincena', moneyFull(amount), { total: true }),
+              // Straight off the bill, not recalculated: these are the numbers
+              // it was issued with, and they must not move when the price list
+              // does.
+              ...(invoice.fromNotebook ? [] : chargeRows(invoice)),
+
+              defRow('Comidas entregadas', number(invoice.meals)),
+              defRow('Fecha límite de pago', formatDayLong(invoice.dueDate)),
+              defRow('Quincena', moneyFull(amount), { total: true }),
+            ]),
       ].filter(Boolean))),
 
-      invoice.fromNotebook
-        ? alert('Esta quincena viene del cuaderno: se registró al pasar al cliente al sistema, '
-          + 'no la generó una ruta.', 'info')
+      isCharge(invoice)
+        ? alert('Esta deuda se agregó a mano'
+          + (invoice.issuedByName ? ` (${invoice.issuedByName})` : '')
+          + ': no la generó una quincena. Se cobra igual que cualquier otra.', 'info')
+        : invoice.fromNotebook
+          ? alert('Esta quincena viene del cuaderno: se registró al pasar al cliente al sistema, '
+            + 'no la generó una ruta.', 'info')
+          : null,
+
+      // Only while nothing has been paid against it: after that the mistake is
+      // in the payment, and cancelling that is what puts this back.
+      isCharge(invoice)
+        ? (paid > 0.005
+            ? h('p.t-xs.c-faint.center', 'Para quitar esta deuda hay que cancelar primero el pago '
+              + 'que se le aplicó.')
+            : button('Quitar esta deuda', {
+                variant: 'danger-soft', block: true, icon: 'ban', onClick: removeCharge,
+              }))
         : null,
 
       /* Payments */
@@ -214,6 +247,36 @@ export function renderInvoice(context) {
   }
 
   /**
+   * Undoing a debt that should not have been written.
+   *
+   * Nothing was handed to anybody and no receipt exists, so unlike a payment
+   * there is nothing to preserve: it is removed outright rather than reversed.
+   */
+  async function removeCharge() {
+    // Held onto now: the moment the document is deleted the listener sets
+    // `invoice` to null, and the redirect below would have nowhere to go.
+    const doomed = { ...invoice, id };
+
+    const ok = await confirm({
+      title: 'Quitar esta deuda',
+      message: `Se quita el cargo de ${money(doomed.amount)} `
+        + `(${doomed.reason || 'sin motivo'}) de la cuenta de ${doomed.clientName}. `
+        + 'Su saldo baja por esa cantidad.',
+      confirmLabel: 'Sí, quitarla',
+      cancelLabel: 'No, dejarla',
+      tone: 'danger',
+      icon: 'ban',
+    });
+    if (!ok) return;
+
+    try {
+      await voidCharge(doomed);
+      toastOk('Deuda quitada');
+      go(`/clients/${doomed.clientId}`);
+    } catch (error) { toastBad(error?.message || dbMessage(error)); }
+  }
+
+  /**
    * Money in, from the bill. The sheet works from the *person*, so a payment
    * bigger than this fortnight rolls onto the next one instead of being
    * refused at the counter.
@@ -234,9 +297,12 @@ export function renderInvoice(context) {
   async function sendReminder() {
     const balance = balanceOf(invoice);
     const late = daysBetween(today(), invoice.dueDate);
+    const what = isCharge(invoice)
+      ? `el cargo “${invoiceTitle(invoice)}”`
+      : `el periodo ${invoiceTitle(invoice)}`;
     const text = late < 0
-      ? `Recordatorio: el periodo ${formatRange(invoice.periodStart, invoice.periodEnd)} tiene un saldo de ${money(balance)} que venció el ${formatDay(invoice.dueDate)}. Si ya realizaron el pago, avísennos por aquí.`
-      : `Recordatorio: el periodo ${formatRange(invoice.periodStart, invoice.periodEnd)} suma ${money(balance)} y vence el ${formatDay(invoice.dueDate)}. Cualquier duda sobre el pago, escríbannos por aquí.`;
+      ? `Recordatorio: ${what} tiene un saldo de ${money(balance)} que venció el ${formatDay(invoice.dueDate)}. Si ya realizaron el pago, avísennos por aquí.`
+      : `Recordatorio: ${what} suma ${money(balance)} y vence el ${formatDay(invoice.dueDate)}. Cualquier duda sobre el pago, escríbannos por aquí.`;
 
     if (!await confirm({
       title: 'Enviar recordatorio',

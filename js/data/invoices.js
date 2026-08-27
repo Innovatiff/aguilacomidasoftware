@@ -14,13 +14,14 @@
  */
 
 import {
-  db, doc, collection, getDoc, getDocs, updateDoc, deleteDoc, onSnapshot,
+  db, doc, collection, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot,
   query, where, orderBy, limit as qLimit, serverTimestamp, runTransaction,
   docData, listData,
 } from '../firebase.js';
 import { folioFor } from './receipts.js';
 import {
-  invoiceId, draftInvoice, balanceOf, invoiceStatus, round2, periodFor, periodByIndex,
+  invoiceId, draftInvoice, draftCharge, chargeIdFor, isCharge, invoiceTitle,
+  balanceOf, invoiceStatus, round2, periodFor, periodByIndex,
 } from '../lib/billing.js';
 import { fortnightCharge } from '../lib/pricing.js';
 import { today, addDays } from '../lib/dates.js';
@@ -121,6 +122,66 @@ export async function issueInvoice(client, period, charge, meals, author, extra 
   });
 }
 
+/* --- Hand-written debts ---------------------------------------------------- */
+
+/**
+ * Puts a debt on somebody's account that no fortnight produced.
+ *
+ * The kitchen sells more than the plan: a case of drinks, a plate for a
+ * visitor, something broken and replaced, a fortnight the notebook says is
+ * short. Before this, the only way to collect any of it was to overcharge the
+ * next bill, which leaves nothing on paper explaining why the number moved —
+ * and that is the argument that gets had at the counter two weeks later.
+ *
+ * So it is written as its own bill, with the reason on it. It joins the queue
+ * of what they owe like any other, is paid off like any other, and the reason
+ * follows it onto the receipt.
+ */
+export async function addCharge({ client, amount, reason, date }, author) {
+  const total = round2(amount);
+  if (!(total > 0)) throw new Error('El monto debe ser mayor a cero.');
+  if (!String(reason || '').trim()) throw new Error('Escribe de qué es la deuda.');
+
+  const day = date || today();
+  // An auto id borrowed only for its uniqueness: two debts on the same day for
+  // the same person must not land on the same document.
+  const unique = doc(collection(db, 'invoices')).id.slice(0, 10);
+  const id = chargeIdFor(client.id, day, unique);
+  const ref = doc(db, 'invoices', id);
+
+  const record = {
+    ...draftCharge(client, { amount: total, reason, date: day }),
+    issuedAt: serverTimestamp(),
+    issuedByName: author?.name || '',
+    issuedByUid: author?.uid || null,
+    updatedAt: serverTimestamp(),
+    paidAt: null,
+  };
+
+  await setDoc(ref, record);
+  return { id, ...record };
+}
+
+/**
+ * Removes a debt that should not have been written.
+ *
+ * Only while nothing has been paid against it. Once money has landed on it the
+ * mistake is in the payment, not the debt, and undoing it here would leave a
+ * receipt pointing at a bill that no longer exists — so the payment is
+ * cancelled first, which is a different action with its own record.
+ *
+ * A charge carries no receipt and nothing was handed to the client, so there is
+ * nothing to preserve: unlike a payment, it is deleted rather than reversed.
+ */
+export async function voidCharge(invoice) {
+  if (!invoice?.id) throw new Error('Ese cargo ya no existe.');
+  if (!isCharge(invoice)) throw new Error('Sólo se pueden quitar los cargos agregados a mano.');
+  if ((Number(invoice.paid) || 0) > 0.005) {
+    throw new Error('Este cargo ya tiene pagos aplicados. Cancela primero el pago.');
+  }
+  await deleteDoc(doc(db, 'invoices', invoice.id));
+}
+
 
 /* --- Payments -------------------------------------------------------------- */
 
@@ -158,18 +219,26 @@ export async function takePayment({ client, pricing, amount, method, reference, 
 
   const targets = [];
   const seen = new Set();
-  for (const id of open.sort()) {
+  for (const id of open) {
     seen.add(id);
-    targets.push({ id, period: null });
+    targets.push({ id, period: null, existing: true });
   }
   for (const period of ahead) {
     const id = invoiceId(client.id, period.start);
     if (seen.has(id)) continue;
     seen.add(id);
-    targets.push({ id, period });
+    targets.push({ id, period, existing: false });
   }
-  // Chronological: the id ends in the period start, so sorting by id is by date.
-  targets.sort((a, b) => a.id.localeCompare(b.id));
+
+  // Everything already on the account is settled before a single dollar goes
+  // towards a fortnight that has not started. Sorting the two groups together
+  // by date would let a debt written today sit behind next fortnight's
+  // prepayment — money going to food not yet cooked while a real debt stands.
+  // Within each group it is chronological: the id ends in the bill's date, so
+  // sorting by id is sorting by date.
+  targets.sort((a, b) => (a.existing === b.existing
+    ? a.id.localeCompare(b.id)
+    : (a.existing ? -1 : 1)));
 
   const receiptRef = doc(collection(db, 'receipts'));
   const clientRef = doc(db, 'clients', client.id);
@@ -239,9 +308,17 @@ export async function takePayment({ client, pricing, amount, method, reference, 
           invoiceId: row.id,
           periodStart: record.periodStart,
           periodEnd: record.periodEnd,
+          // Stamped now so the receipt keeps saying what it paid for even if
+          // the bill behind it is later removed.
+          title: invoiceTitle(record),
+          kind: record.kind || 'period',
           amount: take,
         });
-        if (settled && (!paidThrough || record.periodEnd > paidThrough)) {
+        // Only a fortnight of food moves "paid up to". Settling a hand-written
+        // debt says nothing about which fortnights are covered, and letting it
+        // move the marker would report somebody as paid up for food they have
+        // not paid for.
+        if (!isCharge(record) && settled && (!paidThrough || record.periodEnd > paidThrough)) {
           paidThrough = record.periodEnd;
         }
         balanceAfter = round2(balanceAfter + Math.max(0, round2(record.amount - paid)));
@@ -347,10 +424,16 @@ export async function voidReceipt(receipt, author) {
         invoiceId: snap.id,
         periodStart: data.periodStart,
         periodEnd: data.periodEnd,
+        title: invoiceTitle({ ...data, id: snap.id }),
+        kind: data.kind || 'period',
         amount: -back,
       });
 
-      if (!settled && (!reopened || data.periodStart < reopened)) reopened = data.periodStart;
+      // Same reasoning in reverse: reopening a hand-written debt does not
+      // un-pay any fortnight, so it must not walk "paid up to" backwards.
+      if (!isCharge(data) && !settled && (!reopened || data.periodStart < reopened)) {
+        reopened = data.periodStart;
+      }
     }
 
     if (!removed) throw new Error('Este pago ya estaba cancelado.');

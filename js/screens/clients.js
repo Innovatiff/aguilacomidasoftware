@@ -25,6 +25,7 @@ import {
 } from '../ui/kit.js';
 import { toastOk, toastBad, confirm, sheet } from '../ui/overlay.js';
 import { openChargeSheet } from '../ui/charge-sheet.js';
+import { openDebtSheet } from '../ui/debt-sheet.js';
 import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
 import {
@@ -33,6 +34,7 @@ import {
 import { matchesSearch, setClientStatus } from '../data/clients.js';
 import { pendingBilling, issueAll, byFarm } from '../data/cycles.js';
 import { postSystemMessage } from '../data/chat.js';
+import { owedBreakdown } from '../lib/billing.js';
 import { money, moneyFull, number, plural } from '../lib/format.js';
 import { formatRange, formatDay, today, humanDelta, daysBetween } from '../lib/dates.js';
 import { dbMessage } from '../firebase.js';
@@ -274,7 +276,7 @@ export function renderClients(context) {
     }
     if (row.owed > 0) {
       const due = row.billing?.dueDate;
-      return `${plural(row.behind, 'quincena', 'quincenas')} · ${row.state === 'overdue'
+      return `${owedBreakdown(row.billing?.outstanding)} · ${row.state === 'overdue'
         ? `venció ${humanDelta(daysBetween(today(), due))}`
         : `vence ${formatDay(due)}`}`;
     }
@@ -412,6 +414,15 @@ export function renderClients(context) {
     if (receipt) go(`/receipts/${receipt.id}`);
   }
 
+  /** Money they owe that no fortnight produced — a bag of something, a repair. */
+  async function addDebt(row) {
+    await openDebtSheet({
+      client: row.client,
+      invoices: invoicesFor(row.client.id),
+      author: author(),
+    });
+  }
+
   /** Everything you can do to somebody without leaving the list. */
   async function manage(row) {
     const { client } = row;
@@ -424,7 +435,7 @@ export function renderClients(context) {
           + ` · ${plural(client.mealsPerDay, 'comida', 'comidas')}/día`),
 
         row.owed > 0
-          ? alert(`Debe ${money(row.owed)} en ${plural(row.behind, 'quincena', 'quincenas')}.`,
+          ? alert(`Debe ${money(row.owed)} en ${owedBreakdown(row.billing?.outstanding)}.`,
               row.state === 'overdue' ? 'bad' : 'warn')
           : row.covered
             ? alert(`Pagado hasta el ${formatDay(row.paidThrough)}.`, 'ok')
@@ -433,6 +444,10 @@ export function renderClients(context) {
         button('Cobrar', {
           variant: 'primary', block: true, icon: 'cash',
           onClick: () => { close(); charge(row); },
+        }),
+        button('Agregar una deuda', {
+          variant: 'ghost', block: true, icon: 'plus',
+          onClick: () => { close(); addDebt(row); },
         }),
         button('Ver ficha completa', {
           variant: 'ghost', block: true, icon: 'users',

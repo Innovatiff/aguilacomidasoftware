@@ -190,7 +190,17 @@ export function renderNotebook() {
           : h('span.person__none', 'Sin pagos registrados')),
 
       h(`div.person__standing.is-${standing.tone}`,
-        h('span.person__word', standing.label))));
+        h('span.person__word', standing.label))),
+
+    // 4. The margin of the paper page: "deja en la puerta de atrás", "trabaja
+    //    de noche", "su hermano recoge". None of it fits a field, all of it is
+    //    what the person at the gate needs, and it goes last because it is read
+    //    after the name has been found.
+    String(client.notes || '').trim()
+      ? h('div.person__notes',
+          h('span.person__noteslabel', 'Notas'),
+          h('p.person__notestext', client.notes.trim()))
+      : null);
   }
 
   /** "Lun Mar Mié Jue Vie Sáb · 2 al día" — the week, spelled out. */

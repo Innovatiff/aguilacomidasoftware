@@ -23,8 +23,10 @@ import { session } from '../data/session.js';
 import { store, subscribe, moneyStats, debtors, farmById } from '../data/store.js';
 import { watchSettled } from '../data/invoices.js';
 import { pendingBilling, issueAll, byFarm as billingByFarm } from '../data/cycles.js';
-import { balanceOf, invoiceStatus, STATUS_LABEL, STATUS_TONE } from '../lib/billing.js';
-import { formatRange, today, humanDelta, daysBetween } from '../lib/dates.js';
+import {
+  balanceOf, invoiceStatus, isCharge, invoiceTitle, STATUS_LABEL, STATUS_TONE,
+} from '../lib/billing.js';
+import { today, humanDelta, daysBetween } from '../lib/dates.js';
 import { money, moneyFull, number, plural } from '../lib/format.js';
 import { dbMessage } from '../firebase.js';
 
@@ -176,7 +178,8 @@ export function renderBilling(context) {
       list(settled.map((invoice) => itemRow({
         lead: avatar(invoice.clientName, { size: 'sm' }),
         title: invoice.clientName,
-        meta: `${formatRange(invoice.periodStart, invoice.periodEnd)} · ${number(invoice.meals)} comidas`
+        meta: `${invoiceTitle(invoice)}`
+          + `${isCharge(invoice) ? ' · deuda' : ` · ${number(invoice.meals)} comidas`}`
           + `${invoice.farmName ? ` · ${invoice.farmName}` : ''}`,
         end: [
           h('span.w-700', money(invoice.amount, { round: true })),
@@ -192,8 +195,9 @@ export function renderBilling(context) {
     const days = humanDelta(daysBetween(today(), invoice.dueDate));
 
     return itemRow({
-      title: formatRange(invoice.periodStart, invoice.periodEnd),
-      meta: `${status === 'overdue' ? 'Venció' : 'Vence'} ${days} · ${moneyFull(invoice.amount)}`,
+      title: invoiceTitle(invoice),
+      meta: `${status === 'overdue' ? 'Venció' : 'Vence'} ${days} · ${moneyFull(invoice.amount)}`
+        + `${isCharge(invoice) ? ' · deuda agregada' : ''}`,
       end: [
         h('span.w-700', money(balance, { round: true })),
         badge(STATUS_LABEL[status], STATUS_TONE[status]),

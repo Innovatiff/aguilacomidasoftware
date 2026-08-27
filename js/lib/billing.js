@@ -16,7 +16,9 @@
  * Payment is due `graceDays` after the period closes.
  */
 
-import { addDays, daysBetween, today as todayKey, dayRange, weekdayOf } from './dates.js';
+import {
+  addDays, daysBetween, today as todayKey, dayRange, weekdayOf, formatRange,
+} from './dates.js';
 import { fortnightCharge } from './pricing.js';
 
 export const PERIOD_DAYS = 14;
@@ -50,6 +52,62 @@ export function dueDateFor(period, graceDays = DEFAULT_GRACE_DAYS) {
 
 /** Deterministic invoice id, so re-issuing a cycle can never duplicate it. */
 export const invoiceId = (clientId, periodStart) => `${clientId}_${periodStart}`;
+
+/**
+ * A debt the kitchen wrote by hand, rather than a fortnight of food.
+ *
+ * Somebody breaks a cooler, takes a case of drinks, is owed a refund, gets
+ * something the plan does not cover: it is money on their account and it has to
+ * be collectable like everything else, so it is stored as an invoice. The only
+ * difference is that its amount was typed rather than derived, and that it
+ * carries the reason it was typed. Everything downstream — the balance, the
+ * roster, the notebook, taking a payment — reads it as one more thing owed.
+ */
+export const CHARGE_KIND = 'charge';
+export const isCharge = (invoice) => invoice?.kind === CHARGE_KIND;
+
+/**
+ * A deterministic-ish id that still sorts by date.
+ *
+ * Payments are applied oldest first, and the code that does it orders bills by
+ * their id — which works because a period bill's id ends in its start date. A
+ * hand-written charge keeps the same shape so it falls in the right place in
+ * that queue, with a unique tail because a client can be charged twice on the
+ * same day.
+ */
+export const chargeIdFor = (clientId, day, unique) => `${clientId}_${day}_x${unique}`;
+
+/**
+ * "2 quincenas y 1 deuda" — what a balance is actually made of.
+ *
+ * Once a hand-written debt can sit in the same pile as the fortnights, saying
+ * "debe $220 en 3 quincenas" is simply false, and a manager reading it will go
+ * looking for a third fortnight that does not exist.
+ */
+export function owedBreakdown(invoices = []) {
+  const charges = invoices.filter(isCharge).length;
+  const periods = invoices.length - charges;
+  const parts = [];
+  if (periods) parts.push(`${periods} ${periods === 1 ? 'quincena' : 'quincenas'}`);
+  if (charges) parts.push(`${charges} ${charges === 1 ? 'deuda' : 'deudas'}`);
+  return parts.join(' y ') || 'nada';
+}
+
+/** What a bill is called in a list: the fortnight it covers, or its reason. */
+export function invoiceTitle(invoice) {
+  if (!invoice) return '';
+  if (isCharge(invoice)) return invoice.reason || 'Cargo';
+  return formatRange(invoice.periodStart, invoice.periodEnd);
+}
+
+/**
+ * The same, for one line of a receipt's `applied` list.
+ *
+ * Receipts written before charges existed carry no title, so the period is
+ * still the fallback — an old receipt has to keep reading the way it did.
+ */
+export const appliedTitle = (row) =>
+  row?.title || formatRange(row?.periodStart, row?.periodEnd);
 
 /** Deterministic delivery id, so two devices marking the same day converge. */
 export const deliveryId = (clientId, day) => `${clientId}_${day}`;
@@ -188,6 +246,51 @@ export function draftInvoice(client, period, charge, deliveredMeals, day = today
     paid: 0,
     payments: [],
     status: daysBetween(period.end, day) >= 0 ? 'due' : 'open',
+  };
+}
+
+/**
+ * Builds the document for a hand-written debt.
+ *
+ * It looks like an invoice because it is one: the balance, the roster, the
+ * notebook and the payment counter all work off unsettled invoices, and a debt
+ * that lived anywhere else would be a second thing to remember to look at. What
+ * it does not have is a fortnight behind it — no plan, no days, no meals — so
+ * those fields stay empty rather than being filled with numbers that would read
+ * as if food had been served.
+ *
+ * `periodStart` and `periodEnd` are both the day it was written. Nothing bills
+ * a range here; they exist so every query and sort that assumes a bill has a
+ * date keeps working.
+ */
+export function draftCharge(client, { amount, reason, date } = {}) {
+  const day = date || todayKey();
+  return {
+    kind: CHARGE_KIND,
+    clientId: client.id,
+    clientName: client.name || '',
+    farmId: client.farmId || '',
+    farmName: client.farmName || '',
+    locationName: client.locationName || '',
+    reason: String(reason || '').trim(),
+    periodStart: day,
+    periodEnd: day,
+    dueDate: dueDateFor({ start: day, end: day }, client.graceDays),
+    mealsPerDay: 0,
+    meals: 0,
+    amount: round2(amount),
+    planPrice: 0,
+    adjustment: 0,
+    plannedMeals: 0,
+    plannedDays: 0,
+    extraMeals: 0,
+    extras: [],
+    mealPrice: 0,
+    deliveryDays: [],
+    paid: 0,
+    payments: [],
+    settled: false,
+    status: 'due',
   };
 }
 

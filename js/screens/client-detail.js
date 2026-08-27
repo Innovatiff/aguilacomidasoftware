@@ -13,6 +13,7 @@ import {
 } from '../ui/kit.js';
 import { toastOk, toastBad, sheet } from '../ui/overlay.js';
 import { openChargeSheet } from '../ui/charge-sheet.js';
+import { openDebtSheet } from '../ui/debt-sheet.js';
 import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
 import { store, subscribe, billingFor, farmById, fortnightPrice } from '../data/store.js';
@@ -23,7 +24,7 @@ import { openOpeningSheet } from '../ui/opening-sheet.js';
 import { ensureConversation } from '../data/chat.js';
 import {
   periodFor, periodByIndex, projectPeriod, balanceOf, invoiceStatus,
-  STATUS_LABEL, STATUS_TONE, invoiceId,
+  STATUS_LABEL, STATUS_TONE, invoiceId, isCharge, invoiceTitle, appliedTitle,
 } from '../lib/billing.js';
 import { tierFor, fortnightCharge, mealsOn } from '../lib/pricing.js';
 import {
@@ -210,6 +211,9 @@ export function renderClientDetail(context) {
           button('Cobrar', {
             variant: 'primary', size: 'sm', icon: 'cash', onClick: () => charge(model),
           }),
+          button('Agregar deuda', {
+            variant: 'ghost', size: 'sm', icon: 'plus', onClick: () => addDebt(model),
+          }),
           button('Cerrar y facturar', {
             variant: 'ghost', size: 'sm', icon: 'receipt', onClick: () => issueCycle(model),
           })))),
@@ -259,8 +263,7 @@ export function renderClientDetail(context) {
   function receiptRow(receipt, wasCancelled = false) {
     const reversal = Number(receipt.amount) < 0;
     const dead = reversal || wasCancelled;
-    const covers = (receipt.applied || [])
-      .map((row) => formatRange(row.periodStart, row.periodEnd)).join(', ');
+    const covers = (receipt.applied || []).map(appliedTitle).join(', ');
 
     return itemRow({
       lead: h('div.avatar.avatar--sm', {
@@ -280,6 +283,15 @@ export function renderClientDetail(context) {
     });
   }
 
+  /** A debt the billing cycle did not produce: it goes on as its own bill. */
+  async function addDebt(model) {
+    await openDebtSheet({
+      client: model,
+      invoices,
+      author: { uid: session.uid, name: session.displayName },
+    });
+  }
+
   /** Turns a date from the notebook into the fortnights it left open. */
   async function bringOverBalance(model) {
     await openOpeningSheet({
@@ -293,10 +305,12 @@ export function renderClientDetail(context) {
     const status = invoiceStatus(invoice, today());
     const balance = balanceOf(invoice);
     return itemRow({
-      title: formatRange(invoice.periodStart, invoice.periodEnd),
-      meta: invoice.fromNotebook
-        ? `${moneyFull(invoice.amount)} · del cuaderno`
-        : `${moneyFull(invoice.amount)} · ${number(invoice.meals)} comidas entregadas`,
+      title: invoiceTitle(invoice),
+      meta: isCharge(invoice)
+        ? `${moneyFull(invoice.amount)} · deuda del ${formatDay(invoice.periodStart)}`
+        : invoice.fromNotebook
+          ? `${moneyFull(invoice.amount)} · del cuaderno`
+          : `${moneyFull(invoice.amount)} · ${number(invoice.meals)} comidas entregadas`,
       end: [
         badge(STATUS_LABEL[status], STATUS_TONE[status]),
         balance > 0 ? h('span.t-xs.c-soft', `Saldo ${money(balance)}`) : null,
