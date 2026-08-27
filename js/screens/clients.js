@@ -302,7 +302,7 @@ export function renderClients(context) {
       scanning = true;
       pendingBilling(store.clients, store.pricing)
         .then((found) => { pending = found; draw(); })
-        .catch(() => { pending = { rows: [], total: 0, periods: 0, unpriced: [] }; })
+        .catch(() => { pending = { rows: [], total: 0, periods: 0, unpriced: [], skipped: {} }; })
         .finally(() => { scanning = false; });
       return null;
     }
@@ -342,7 +342,8 @@ export function renderClients(context) {
 
   /** Shows the whole run before writing a single bill. */
   async function reviewPending() {
-    const { rows, total, unpriced } = pending;
+    const { rows, total, unpriced, skipped } = pending;
+    const left = (skipped?.paid || 0) + (skipped?.notYet || 0);
 
     const ok = await sheet({
       title: 'Quincenas sin facturar',
@@ -356,6 +357,22 @@ export function renderClients(context) {
         card(h('div.stack.stack-2', byFarm(rows).map((farm) => h('div.row.row--between',
           h('span.truncate', farm.name),
           h('span.w-600', `${plural(farm.count, 'factura', 'facturas')} · ${money(farm.amount)}`))))),
+
+        // What the scan chose not to bill, and why. A run that quietly drops
+        // half its work reads as if there was never anything there.
+        left
+          ? h('div.stack.stack-1',
+              h('div.t-xs.upper.c-faint.w-700', 'Se dejaron fuera'),
+              skipped.paid
+                ? h('p.t-sm.c-soft', `${plural(skipped.paid, 'quincena ya cubierta', 'quincenas ya cubiertas')} `
+                  + 'por lo que pagaron antes del sistema.')
+                : null,
+              skipped.notYet
+                ? h('p.t-sm.c-soft', `${plural(skipped.notYet, 'quincena anterior', 'quincenas anteriores')} `
+                  + 'a la fecha en que esas personas empezaron a comer aquí.')
+                : null)
+          : null,
+
         h('p.t-xs.c-faint', 'Sólo se factura a quien recibió comida en el periodo. Una quincena que '
           + 'ya tenía factura no se toca.'),
         button('Emitir las facturas', {

@@ -26,7 +26,7 @@ import { go, back } from '../lib/router.js';
 import { session } from '../data/session.js';
 import {
   createClient, updateClient, getClient, emptyClient, deleteClient, setClientStatus,
-  isValidEmail, termsOf, cleanTag, normalizeTags, tagsInUse, hasTag,
+  isValidEmail, termsOf, cleanTag, normalizeTags, tagsInUse, hasTag, servingSince,
 } from '../data/clients.js';
 import { ensureConversation } from '../data/chat.js';
 import { store, farmById, clientsOfFarm } from '../data/store.js';
@@ -58,7 +58,12 @@ export async function renderClientForm(context) {
     // Arriving from a location's menu pre-selects that location.
     if (context.query.location) model.locationId = context.query.location;
   } else {
+    // Read before the merge: `emptyClient` defaults this to today, and letting
+    // that default win would quietly re-date somebody who has been eating here
+    // for a year to this morning — and with it, which fortnights they owe.
+    const since = servingSince(model);
     model = { ...emptyClient(farmById(model.farmId)), ...model };
+    if (since) model.startedOn = since;
   }
 
   // Remembered before editing: moving the email has to retire the previous
@@ -269,6 +274,17 @@ export async function renderClientForm(context) {
           error: errors.deliveryDays,
           hint: 'Los días que recibe y cuántas comidas cada día. El precio se ajusta solo.',
           control: weekEditor(),
+        }),
+        field({
+          label: '¿Desde cuándo come aquí?',
+          hint: 'Decide desde qué quincena se le cobra. El panel nunca le factura una '
+            + 'quincena que cerró antes de esta fecha.',
+          control: input({
+            type: 'date',
+            value: model.startedOn || today(),
+            max: today(),
+            onchange: (e) => update({ startedOn: e.target.value || today() }),
+          }),
         }),
         field({
           label: 'Estado',

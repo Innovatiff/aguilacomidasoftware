@@ -24,6 +24,7 @@
 
 import { getDocs, query, where, collection, db, listData } from '../firebase.js';
 import { issueInvoice } from './invoices.js';
+import { servingSince } from './clients.js';
 import { periodFor, periodByIndex, invoiceId } from '../lib/billing.js';
 import { fortnightCharge } from '../lib/pricing.js';
 import { today } from '../lib/dates.js';
@@ -35,8 +36,26 @@ const LOOK_BACK = 4;
  * Every fortnight that has closed without a bill, for clients who were served
  * in it.
  *
- * Returns `{ rows, total, periods, unpriced }` where a row is one invoice
- * waiting to be issued. Rows are the input to `issueAll`.
+ * "Not billed" is not the same as "owed", and the difference is money taken
+ * from somebody twice. Two fortnights have no bill for a perfectly good
+ * reason and must never be swept up here:
+ *
+ *   - one already settled in cash before this software existed. The cuaderno
+ *     said "pagó el 3 de julio", that date is on the client as `paidThrough`,
+ *     and no invoice was ever written for what it covered — which reads
+ *     exactly like an unbilled fortnight and is the opposite of one.
+ *   - one that closed before the person started eating here. Their billing
+ *     anchor belongs to the rancho, not to them, so it runs back through
+ *     fortnights in which they were not yet a client.
+ *
+ * A fortnight already running on the day they started is left alone too: the
+ * plan is sold whole and there is no half price, so charging the full amount
+ * for a few days of it would be wrong. If the kitchen is owed for those days,
+ * that is a deuda a mano with the real number on it.
+ *
+ * Returns `{ rows, total, periods, unpriced, skipped }` where a row is one
+ * invoice waiting to be issued and `skipped` counts what was left out and why
+ * — a scan that silently drops half its work reads as if it found nothing.
  */
 export async function pendingBilling(clients, pricing, day = today()) {
   // Active only. A fortnight is sold as a plan, so somebody on the plan owes
@@ -60,12 +79,29 @@ export async function pendingBilling(clients, pricing, day = today()) {
 
   const rows = [];
   const unpriced = [];
+  const skipped = { paid: 0, notYet: 0 };
 
   for (const { period, clients: group } of periods.values()) {
     const issued = await issuedIn(period.start);
 
     for (const client of group) {
       if (issued.has(invoiceId(client.id, period.start))) continue;
+
+      // Covered by what they paid in cash before the system. The same test
+      // `owedSince` uses, so the cuaderno and this scan can never disagree
+      // about which fortnight a notebook payment reached.
+      if (client.paidThrough && period.start <= client.paidThrough) {
+        skipped.paid += 1;
+        continue;
+      }
+
+      // Closed before they were a client, or already running when they
+      // started. Not theirs either way.
+      const since = servingSince(client);
+      if (since && period.start < since) {
+        skipped.notYet += 1;
+        continue;
+      }
 
       const charge = fortnightCharge(client, pricing);
       if (!charge.priced) { unpriced.push(client); continue; }
@@ -83,6 +119,7 @@ export async function pendingBilling(clients, pricing, day = today()) {
     total: round2(rows.reduce((sum, row) => sum + row.amount, 0)),
     periods: new Set(rows.map((row) => row.period.start)).size,
     unpriced: dedupe(unpriced),
+    skipped,
   };
 }
 
@@ -194,7 +231,7 @@ async function issuedIn(periodStart) {
   return new Set(listData(snap).map((invoice) => invoice.id));
 }
 
-const empty = () => ({ rows: [], total: 0, periods: 0, unpriced: [] });
+const empty = () => ({ rows: [], total: 0, periods: 0, unpriced: [], skipped: { paid: 0, notYet: 0 } });
 
 const dedupe = (clients) => [...new Map(clients.map((c) => [c.id, c])).values()];
 

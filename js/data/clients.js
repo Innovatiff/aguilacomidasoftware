@@ -27,9 +27,9 @@
 import {
   db, doc, collection, getDoc, updateDoc,
   onSnapshot, query, orderBy, serverTimestamp,
-  writeBatch, docData, listData,
+  writeBatch, docData, listData, toDate,
 } from '../firebase.js';
-import { today } from '../lib/dates.js';
+import { today, dayKey } from '../lib/dates.js';
 import { DEFAULT_DELIVERY_DAYS, DEFAULT_GRACE_DAYS } from '../lib/billing.js';
 import { matches, fold } from '../lib/format.js';
 import { normalizeExtras } from '../lib/pricing.js';
@@ -58,8 +58,27 @@ export const emptyClient = (farm) => ({
   // more every Saturday.
   extras: {},
   status: 'active',
+  // The day they actually started eating here, which is not the same as the
+  // farm's billing anchor: the anchor says when the fortnights fall, this says
+  // which of those fortnights are theirs to pay for.
+  startedOn: today(),
   ...termsOf(farm),
 });
+
+/**
+ * The day this person started eating here.
+ *
+ * Everybody registered from now on carries it. For the ones who were already
+ * in the system before the field existed, the day their record was created is
+ * the closest true thing the database knows — they were registered because
+ * they started, usually the same week. Returns '' when even that is missing,
+ * and callers read that as "no date, do not gate on it".
+ */
+export function servingSince(client) {
+  if (client?.startedOn) return client.startedOn;
+  const created = toDate(client?.createdAt);
+  return created ? dayKey(created) : '';
+}
 
 /** The farm's terms, in the shape they are stored on a worker. */
 export function termsOf(farm) {

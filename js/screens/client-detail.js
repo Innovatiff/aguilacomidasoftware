@@ -17,7 +17,7 @@ import { openDebtSheet } from '../ui/debt-sheet.js';
 import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
 import { store, subscribe, billingFor, farmById, fortnightPrice } from '../data/store.js';
-import { watchClient, updateClient, moveClient } from '../data/clients.js';
+import { watchClient, updateClient, moveClient, servingSince } from '../data/clients.js';
 import { watchClientInvoices, issueInvoice } from '../data/invoices.js';
 import { watchClientReceipts, totalOf, cancelledIds } from '../data/receipts.js';
 import { openOpeningSheet } from '../ui/opening-sheet.js';
@@ -366,6 +366,12 @@ export function renderClientDetail(context) {
           ...chargeRows(fortnightCharge(model, store.pricing), !!price),
           defRow('Precio por quincena', price ? moneyFull(price) : 'Sin precio', { total: true }),
           defRow('Horario', model.deliveryWindow || '—'),
+          // Two dates that are easy to confuse and mean different things: the
+          // anchor is the rancho's calendar, this one is the day this person
+          // started owing for it.
+          defRow('Come aquí desde', servingSince(model)
+            ? formatDayLong(servingSince(model))
+            : 'Sin fecha'),
           defRow('Inicio del ciclo', formatDayLong(model.cycleAnchor || today())),
           defRow('Días de gracia', model.graceDays === 0 ? 'Mismo día' : `${model.graceDays} días`),
         ]),
