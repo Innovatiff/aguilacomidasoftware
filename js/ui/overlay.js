@@ -1,6 +1,7 @@
 /** Transient UI: toasts, bottom sheets, confirmation dialogs. */
 
 import { h, mount } from '../lib/dom.js';
+import { dbMessage } from '../firebase.js';
 import { icon } from '../lib/icons.js';
 import { button } from './kit.js';
 
@@ -128,7 +129,7 @@ export function formSheet({ title, fields, submitLabel = 'Guardar', onSubmit }) 
             const result = await onSubmit(values);
             if (result !== false) close(result ?? values);
           } catch (error) {
-            toastBad(error?.uiMessage || 'No se pudo guardar.');
+            toastBad(error?.message || dbMessage(error));
           } finally {
             if (submit.isConnected) { submit.disabled = false; mount(submit, label); }
           }

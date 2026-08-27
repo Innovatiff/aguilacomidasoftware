@@ -80,6 +80,22 @@ export function watchInvoice(id, onData, onError) {
 
 export const getInvoice = async (id) => docData(await getDoc(doc(db, 'invoices', id)));
 
+/**
+ * Whether any bill has ever been issued for a farm.
+ *
+ * One read, asked before letting anybody move that farm's billing anchor. The
+ * anchor is what cuts the fortnights: every invoice id ends in the start date
+ * of the period it belongs to, and `paidThrough` is the end date of one. Move
+ * the anchor after bills exist and none of those dates line up with a period
+ * any more — the panel then sees fortnights it has "never billed" that overlap
+ * ones it already did, and offers to bill the same food twice.
+ */
+export async function farmHasInvoices(farmId) {
+  if (!farmId) return false;
+  const snap = await getDocs(query(invoicesRef(), where('farmId', '==', farmId), qLimit(1)));
+  return !snap.empty;
+}
+
 export async function listClientInvoices(clientId) {
   const snap = await getDocs(query(invoicesRef(), where('clientId', '==', clientId),
     orderBy('periodStart', 'desc')));

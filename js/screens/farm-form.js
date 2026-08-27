@@ -25,6 +25,7 @@ import {
   createFarm, updateFarm, getFarm, emptyFarm, deleteFarm, setFarmStatus, TERM_FIELDS,
 } from '../data/farms.js';
 import { farmById, clientsOfFarm } from '../data/store.js';
+import { farmHasInvoices } from '../data/invoices.js';
 import { periodFor, PERIOD_DAYS, servingDays } from '../lib/billing.js';
 import { WEEKDAYS_SHORT, today, formatRange } from '../lib/dates.js';
 import { plural } from '../lib/format.js';
@@ -47,6 +48,20 @@ export async function renderFarmForm(context) {
   // What the terms were before this edit — the fan-out compares against it.
   const previous = { ...model };
   model = { ...emptyFarm(), ...model };
+
+  /*
+   * Once this farm has been billed, its billing anchor is settled.
+   *
+   * Every invoice id ends in the start date of the fortnight it belongs to,
+   * and "pagado hasta" is the end date of one. Moving the anchor re-cuts every
+   * period, so none of those dates land on a period boundary any more: the
+   * panel then finds fortnights it has "never billed" that overlap ones it
+   * already did, and offers to charge the same food a second time. There is no
+   * version of that edit somebody means to make, so it is closed rather than
+   * warned about. Asked before the first paint so the field never appears
+   * editable and then locks under the cursor.
+   */
+  const anchorLocked = isNew ? false : await farmHasInvoices(farmId).catch(() => true);
 
   let saving = false;
   let errors = {};
@@ -186,14 +201,25 @@ export async function renderFarmForm(context) {
 
       sectionLabel('Cobro'),
       card(h('div.stack.stack-4',
-        field({
-          label: 'Inicio del ciclo de cobro',
-          hint: `Los periodos de ${PERIOD_DAYS} días se cuentan desde esta fecha, igual para todos.`,
-          control: input({
-            value: model.cycleAnchor, type: 'date',
-            oninput: (e) => update({ cycleAnchor: e.target.value || today() }),
-          }),
-        }),
+        anchorLocked
+          ? field({
+              label: 'Inicio del ciclo de cobro',
+              hint: 'Ya hay facturas emitidas con este ciclo, así que la fecha queda fija. '
+                + 'Moverla ahora recortaría las quincenas de otra forma y el panel volvería '
+                + 'a cobrar comida ya facturada.',
+              control: input({
+                value: model.cycleAnchor, type: 'date', disabled: true, readonly: true,
+              }),
+            })
+          : field({
+              label: 'Inicio del ciclo de cobro',
+              hint: `Los periodos de ${PERIOD_DAYS} días se cuentan desde esta fecha, igual para `
+                + 'todos. Se puede cambiar hasta que se emita la primera factura del rancho.',
+              control: input({
+                value: model.cycleAnchor, type: 'date',
+                oninput: (e) => update({ cycleAnchor: e.target.value || today() }),
+              }),
+            }),
         field({
           label: 'Días de gracia para pagar',
           hint: 'Días después de cerrar el periodo antes de marcarlo como vencido.',

@@ -186,7 +186,11 @@ export function fortnightCharge(client, pricing) {
     mealPrice: list.extraMealPrice,
     difference,
     adjustment,
-    amount: plan ? round2(base + adjustment) : 0,
+    // Never below zero. The adjustment is subtractive for a short week, and a
+    // week short enough — one serving day on a two-meal plan — drives the plan
+    // price negative. A bill for less than nothing is the kitchen owing the
+    // client money for food it cooked, which is not a thing that can be true.
+    amount: plan ? Math.max(0, round2(base + adjustment)) : 0,
   };
 }
 

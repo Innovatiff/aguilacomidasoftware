@@ -27,7 +27,9 @@ import { icon } from '../lib/icons.js';
 import { screen } from '../ui/shell.js';
 import { searchInput, emptyState, skeletonRows, dataErrorCard } from '../ui/kit.js';
 import { go } from '../lib/router.js';
-import { store, subscribe, clientState, receiptsFor, firstError, startStore } from '../data/store.js';
+import {
+  store, subscribe, clientState, paymentsFor, tillIsWindowed, firstError, startStore,
+} from '../data/store.js';
 import { matchesSearch } from '../data/clients.js';
 import { matchesFarm } from '../data/farms.js';
 import { mealsOn, extrasOf } from '../lib/pricing.js';
@@ -156,7 +158,10 @@ export function renderNotebook() {
   function personCard(client) {
     const row = clientState(client);
     const standing = STANDING[row.state] || STANDING.clear;
-    const payments = receiptsFor(client.id).filter((one) => Number(one.amount) > 0);
+    // Payments that still stand. A cancelled one is not struck through here —
+    // it is simply gone. In a 76px box beside a name, a struck-out number is
+    // read as a number, and the whole page exists to be read at a glance.
+    const payments = paymentsFor(client.id);
 
     return h('button.person', {
       type: 'button',
@@ -187,7 +192,12 @@ export function renderNotebook() {
               payments.slice(0, 3).map((one) => h('div.paybox',
                 h('span.paybox__amount', money(one.amount, { round: true })),
                 h('span.paybox__date', formatDayShort(one.date)))))
-          : h('span.person__none', 'Sin pagos registrados')),
+          // The till is one window over the whole business, so an empty list
+          // may only mean "not lately". Saying "nunca ha pagado" from that
+          // would be stating something this screen does not know.
+          : h('span.person__none', tillIsWindowed()
+            ? 'Sin pagos recientes'
+            : 'Sin pagos registrados')),
 
       h(`div.person__standing.is-${standing.tone}`,
         h('span.person__word', standing.label))),

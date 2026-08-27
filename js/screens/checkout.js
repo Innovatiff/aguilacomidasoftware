@@ -25,7 +25,7 @@ import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
 import { store, subscribe, billingFor, invoicesFor } from '../data/store.js';
 import { matchesSearch } from '../data/clients.js';
-import { watchReceiptsOn, totalOf } from '../data/receipts.js';
+import { watchReceiptsOn, totalOf, cancelledIds } from '../data/receipts.js';
 import { chargeFor } from '../lib/pricing.js';
 import { money, plural } from '../lib/format.js';
 import { today, formatDayLong, formatTime } from '../lib/dates.js';
@@ -166,15 +166,23 @@ export function renderCheckout() {
       receipts.length
         ? h('div.stack.stack-3',
             sectionLabel('Recibos de hoy'),
-            list(receipts.map(receiptRow), { card: true }))
+            list(receipts.map(
+              (row) => receiptRow(row, cancelledIds(receipts).has(row.id))), { card: true }))
         : alert('Todavía no se ha cobrado nada hoy.', 'info'));
   }
 
-  function receiptRow(receipt) {
+  /**
+   * `wasCancelled` is a payment taken today and cancelled today.
+   *
+   * The till has to show both halves — the money did come in and did go back —
+   * but the one that was undone cannot keep reading as cash in the drawer, or
+   * the row-by-row list stops agreeing with the total above it.
+   */
+  function receiptRow(receipt, wasCancelled = false) {
     const reversal = Number(receipt.amount) < 0;
     return itemRow({
       lead: avatar(receipt.clientName, { size: 'sm' }),
-      title: receipt.clientName,
+      title: h(`span${wasCancelled ? '.is-void' : ''}`, receipt.clientName),
       meta: [
         receipt.folio,
         paymentMethodMeta(receipt.method).label,
@@ -182,8 +190,9 @@ export function renderCheckout() {
         receipt.takenByName,
       ].filter(Boolean).join(' · '),
       end: [
-        h(`span.w-700${reversal ? '.c-bad' : ''}`, money(receipt.amount)),
-        reversal ? badge('Cancelación', 'bad') : null,
+        h(`span.w-700${reversal || wasCancelled ? '.c-bad' : ''}${wasCancelled ? '.is-void' : ''}`,
+          money(receipt.amount)),
+        reversal ? badge('Cancelación', 'bad') : wasCancelled ? badge('Cancelado', 'bad') : null,
       ].filter(Boolean),
       onClick: () => go(`/receipts/${receipt.id}`),
     });

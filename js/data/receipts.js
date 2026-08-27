@@ -38,13 +38,25 @@ export function watchClientReceipts(clientId, onData, onError, count = 30) {
 }
 
 /**
+ * How far back the shared till reaches.
+ *
+ * One query stands behind every payment line in the panel; loading them per
+ * client would be one listener per person. The size is a trade: it has to
+ * cover more than a full billing cycle for a business of a few hundred people
+ * — otherwise the notebook goes blank for anybody who paid three weeks ago —
+ * without turning every panel load into a thousand reads on the free tier.
+ * `tillIsWindowed` in the store is how screens know they are looking at a
+ * window rather than at everything.
+ */
+export const RECENT_RECEIPTS = 600;
+
+/**
  * The most recent payments across the whole business.
  *
  * One query behind every client's payment line on the notebook page. Loading
- * them per client would be one listener per person; this is one for everybody,
- * and a notebook only ever showed the last few payments anyway.
+ * them per client would be one listener per person; this is one for everybody.
  */
-export function watchRecentReceipts(onData, onError, count = 300) {
+export function watchRecentReceipts(onData, onError, count = RECENT_RECEIPTS) {
   return onSnapshot(
     query(receiptsRef(), orderBy('at', 'desc'), qLimit(count)),
     (snap) => onData(listData(snap)),

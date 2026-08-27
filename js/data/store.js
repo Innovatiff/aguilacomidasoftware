@@ -15,7 +15,7 @@ import { watchClients } from './clients.js';
 import { watchFarms } from './farms.js';
 import { watchPricing } from './pricing.js';
 import { watchOutstanding, summarizeInvoices, groupByClient } from './invoices.js';
-import { watchRecentReceipts } from './receipts.js';
+import { watchRecentReceipts, cancelledIds, RECENT_RECEIPTS } from './receipts.js';
 import { watchConversations, totalUnread } from './chat.js';
 import { today } from '../lib/dates.js';
 import { summarize, periodFor } from '../lib/billing.js';
@@ -256,9 +256,34 @@ export const unpriced = () =>
 export const conversationFor = (clientId) =>
   state.conversations.find((row) => row.id === clientId) || null;
 
-/** One client's payments, newest first, out of the recent till. */
+/**
+ * One client's payments, newest first, out of the recent till.
+ *
+ * Cancellations are resolved here rather than by each screen, because the two
+ * screens that forgot to do it both ended up showing money the kitchen had
+ * already taken back as if it were still paid. `standing` is what a payment
+ * line should show: the ones that still count.
+ */
 export const receiptsFor = (clientId) =>
   state.receipts.filter((row) => row.clientId === clientId);
+
+export function paymentsFor(clientId) {
+  const voided = cancelledIds(state.receipts);
+  return state.receipts.filter((row) => row.clientId === clientId
+    && Number(row.amount) > 0
+    && !voided.has(row.id));
+}
+
+/**
+ * True when the till window is full, so "no payments here" might only mean
+ * "none recently".
+ *
+ * The window is one query for the whole business. At a couple of hundred
+ * clients paying every fortnight it does not reach back forever, and a screen
+ * that prints "Sin pagos registrados" from an exhausted window is stating
+ * something it does not know.
+ */
+export const tillIsWindowed = () => state.receipts.length >= RECENT_RECEIPTS;
 
 /** True once the screens have enough to render without skeletons. */
 export const isReady = () => state.loaded.farms && state.loaded.clients;

@@ -113,9 +113,14 @@ export async function sendMessage(clientId, { text, kind = 'text', meta = null }
     at: serverTimestamp(),
   });
 
+  // Written only when we actually have one. A merge-write carrying '' would
+  // blank the name on a thread somebody opened without the client loaded, and
+  // the inbox would show a row with no name on it.
+  const named = client?.name || sender.clientName || '';
+
   batch.set(doc(db, 'conversations', clientId), {
     clientId,
-    clientName: client?.name || sender.clientName || '',
+    ...(named ? { clientName: named } : {}),
     lastMessage: preview(body),
     lastAt: serverTimestamp(),
     lastSenderRole: role,
