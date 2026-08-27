@@ -32,13 +32,22 @@ import { matchesSearch } from '../data/clients.js';
 import { matchesFarm } from '../data/farms.js';
 import { mealsOn, extrasOf } from '../lib/pricing.js';
 import { money, plural } from '../lib/format.js';
-import { formatDay, WEEKDAYS_SHORT } from '../lib/dates.js';
+import { formatDayShort, WEEKDAYS_SHORT } from '../lib/dates.js';
 
-/** What the payment line says, and how loudly. */
+/**
+ * Two words, and only two.
+ *
+ * The book answers one question at the gate: is this person square with the
+ * kitchen, or not. A figure or a paid-through date here invites arguing over a
+ * number that came out of a hand-written register — and a date typed in wrong
+ * is exactly the kind of mistake that gets made at the end of a long day. The
+ * amount, the dates and the way to undo a payment all live on the client's own
+ * page, which is one tap away and is where a correction can actually be made.
+ */
 const STANDING = {
-  overdue: { label: 'DEBE', tone: 'bad' },
-  due: { label: 'DEBE', tone: 'bad' },
-  covered: { label: 'PAGADO', tone: 'ok' },
+  overdue: { label: 'ATRASADO', tone: 'bad' },
+  due: { label: 'ATRASADO', tone: 'bad' },
+  covered: { label: 'AL CORRIENTE', tone: 'ok' },
   clear: { label: 'AL CORRIENTE', tone: 'ok' },
 };
 
@@ -172,19 +181,16 @@ export function renderNotebook() {
       h('div.person__pays',
         h('span.person__payslabel', 'Pagos'),
         payments.length
-          ? h('span.person__payslist',
-              payments.slice(0, 3).map((one) => h('span.person__pay',
-                h('b', money(one.amount, { round: true })),
-                ' ', formatDay(one.date))))
+          ? h('div.person__payslist',
+              // One box per payment: the amount on top, the day under it. A
+              // row of little slips, the way they were written in the book.
+              payments.slice(0, 3).map((one) => h('div.paybox',
+                h('span.paybox__amount', money(one.amount, { round: true })),
+                h('span.paybox__date', formatDayShort(one.date)))))
           : h('span.person__none', 'Sin pagos registrados')),
 
       h(`div.person__standing.is-${standing.tone}`,
-        h('span.person__word', standing.label),
-        h('span.person__amount', row.owed > 0
-          ? money(row.owed)
-          : row.paidThrough
-            ? `hasta ${formatDay(row.paidThrough)}`
-            : ''))));
+        h('span.person__word', standing.label))));
   }
 
   /** "Lun Mar Mié Jue Vie Sáb · 2 al día" — the week, spelled out. */

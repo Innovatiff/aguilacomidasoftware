@@ -558,29 +558,45 @@
   padding-top: var(--s3);
   border-top: 2px solid var(--border);
 }
-.person__pays { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; flex: 1; min-width: 0; }
+.person__pays { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; flex: 1; min-width: 0; }
 .person__payslabel {
   font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase;
   letter-spacing: .07em; color: var(--text-faint);
 }
-.person__payslist { display: flex; flex-wrap: wrap; gap: 4px 10px; }
-.person__pay { font-size: var(--fs-base); color: var(--text-soft); white-space: nowrap; }
-.person__pay b { font-weight: 750; color: var(--text); font-variant-numeric: tabular-nums; }
+.person__payslist { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Each payment as its own slip: amount above, day and month below. */
+.paybox {
+  display: flex; flex-direction: column; align-items: center;
+  min-width: 76px;
+  padding: 6px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-sunken);
+}
+.paybox__amount {
+  font-size: var(--fs-lg); font-weight: 750; line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+.paybox__date {
+  font-size: var(--fs-xs); font-weight: 650; color: var(--text-soft);
+  text-transform: uppercase; letter-spacing: .04em;
+  margin-top: 1px;
+}
 .person__none { font-size: var(--fs-base); color: var(--text-faint); font-style: italic; }
 
-/* The verdict. Big word, big number, and a colour that agrees with the word —
+/* The verdict. One word, set large, in a colour that agrees with the word —
    never colour on its own, which is exactly what fails older eyes. */
 .person__standing {
-  display: flex; align-items: baseline; gap: var(--s2);
-  padding: 7px 14px;
+  display: flex; align-items: center;
+  padding: 8px 16px;
   border-radius: var(--r-md);
   border: 2px solid transparent;
   flex: none;
 }
 .person__standing.is-bad { background: var(--bad-50); border-color: var(--bad-500); color: var(--bad-600); }
 .person__standing.is-ok  { background: var(--ok-50);  border-color: var(--ok-500);  color: var(--ok-600); }
-.person__word { font-size: var(--fs-base); font-weight: 800; letter-spacing: .04em; }
-.person__amount { font-size: var(--fs-lg); font-weight: 750; font-variant-numeric: tabular-nums; }
+.person__word { font-size: var(--fs-lg); font-weight: 800; letter-spacing: .04em; white-space: nowrap; }
 
 @media (min-width: 900px) {
   .book { padding: var(--s6) var(--s6) var(--s8); max-width: var(--content-max); margin-inline: auto; }
