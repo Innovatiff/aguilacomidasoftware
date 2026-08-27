@@ -9,7 +9,7 @@ import { icon } from '../lib/icons.js';
 import { screen, topbarButton } from '../ui/shell.js';
 import {
   card, button, badge, avatar, defList, defRow, itemRow, list, sectionLabel,
-  alert, meter, loading, field, input, select, tagList,
+  alert, meter, loading, field, input, select, tagList, chargeRows,
 } from '../ui/kit.js';
 import { toastOk, toastBad, sheet } from '../ui/overlay.js';
 import { openChargeSheet } from '../ui/charge-sheet.js';
@@ -26,10 +26,10 @@ import {
   periodFor, periodByIndex, projectPeriod, balanceOf, invoiceStatus,
   STATUS_LABEL, STATUS_TONE, invoiceId,
 } from '../lib/billing.js';
-import { tierFor } from '../lib/pricing.js';
+import { tierFor, fortnightCharge, mealsOn } from '../lib/pricing.js';
 import {
   formatRange, relativeDay, formatDayLong, today, humanDelta, formatDay,
-  weekdayName, capitalize,
+  weekdayName, capitalize, WEEKDAYS_SHORT,
 } from '../lib/dates.js';
 import { money, moneyFull, plural, phone as fmtPhone, telHref, number } from '../lib/format.js';
 import { clientStatusMeta, deliveryMeta, paymentMethodMeta } from '../lib/model.js';
@@ -235,7 +235,10 @@ export function renderClientDetail(context) {
             h('span.w-600', priced ? money(projection.amount) : 'Sin precio')),
           meter(periodProgress(period), { tone: 'ok' }),
           h('div.t-xs.c-faint',
-            `${plural(model.mealsPerDay, 'comida', 'comidas')}/día · ${projection.days} días de servicio`)),
+            [`${plural(model.mealsPerDay, 'comida', 'comidas')}/día`,
+              `${projection.days} días`,
+              projection.extraMeals ? `+${projection.extraMeals} extra` : null,
+            ].filter(Boolean).join(' · '))),
 
         priced
           ? null
@@ -319,7 +322,7 @@ export function renderClientDetail(context) {
   async function bringOverBalance(model) {
     await openOpeningSheet({
       client: model,
-      tiers: store.pricing,
+      pricing: store.pricing,
       author: { uid: session.uid, name: session.displayName },
     });
   }
@@ -379,19 +382,38 @@ export function renderClientDetail(context) {
           }, icon('edit'), 'Editar en el rancho')
         : null),
       card(h('div.stack.stack-3',
+        h('div.stack.stack-2',
+          h('div.t-xs.upper.c-faint.w-700', 'Su semana'),
+          weekStrip(model)),
+
         defList([
-          defRow('Plan', `${plural(model.mealsPerDay, 'comida', 'comidas')} al día`),
-          defRow('Precio por quincena', price ? moneyFull(price) : 'Sin precio'),
-          defRow('Días de servicio', serviceDays(model.deliveryDays)),
+          ...chargeRows(fortnightCharge(model, store.pricing), !!price),
+          defRow('Precio por quincena', price ? moneyFull(price) : 'Sin precio', { total: true }),
           defRow('Horario', model.deliveryWindow || '—'),
           defRow('Inicio del ciclo', formatDayLong(model.cycleAnchor || today())),
           defRow('Días de gracia', model.graceDays === 0 ? 'Mismo día' : `${model.graceDays} días`),
         ]),
         h('p.t-xs.c-faint',
-          `El precio sale del plan y se cambia en Ajustes → Precios. `
-          + (model.farmName
-            ? `Los días y el horario vienen de ${model.farmName}.`
-            : 'Los días y el horario vienen del rancho.')))));
+          'El precio del plan se cambia en Ajustes → Precios; los días y las comidas extra, '
+          + 'aquí en su ficha. '
+          + (model.farmName ? `El horario y el ciclo vienen de ${model.farmName}.` : '')))));
+  }
+
+  /**
+   * The week at a glance: seven boxes, the number of plates in each.
+   *
+   * Faster to read than a sentence, and it makes an odd week — five days, or
+   * three plates on Saturday — visible without counting words.
+   */
+  function weekStrip(model) {
+    const order = [1, 2, 3, 4, 5, 6, 0];
+    return h('div.weekstrip', order.map((weekday) => {
+      const meals = mealsOn(model, weekday);
+      const extra = Number(model.extras?.[String(weekday)]) || 0;
+      return h(`div.weekstrip__day${meals ? '' : '.is-off'}${extra ? '.has-extra' : ''}`,
+        h('div.weekstrip__n', meals || '—'),
+        h('div.weekstrip__w', WEEKDAYS_SHORT[weekday]));
+    }));
   }
 
   function historyCard(rows) {
@@ -416,7 +438,7 @@ export function renderClientDetail(context) {
     const receipt = await openChargeSheet({
       client: model,
       invoices,
-      tiers: store.pricing,
+      pricing: store.pricing,
       author: { uid: session.uid, name: session.displayName },
     });
     if (receipt) go(`/receipts/${receipt.id}`);
@@ -574,13 +596,6 @@ async function copy(text) {
 
 const servesToday = (client) =>
   client.status === 'active' && (client.deliveryDays || []).includes(new Date().getDay());
-
-function serviceDays(days) {
-  if (!days?.length) return '—';
-  const names = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-  const order = [1, 2, 3, 4, 5, 6, 0];
-  return order.filter((day) => days.includes(day)).map((day) => names[day]).join(', ');
-}
 
 /** How far through the current cycle we are, 0–100. */
 function periodProgress(period) {

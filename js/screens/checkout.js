@@ -26,7 +26,7 @@ import { session } from '../data/session.js';
 import { store, subscribe, billingFor, invoicesFor } from '../data/store.js';
 import { matchesSearch } from '../data/clients.js';
 import { watchReceiptsOn, totalOf } from '../data/receipts.js';
-import { priceFor } from '../lib/pricing.js';
+import { chargeFor } from '../lib/pricing.js';
 import { money, plural } from '../lib/format.js';
 import { today, formatDayLong, formatTime } from '../lib/dates.js';
 import { paymentMethodMeta } from '../lib/model.js';
@@ -99,7 +99,7 @@ export function renderCheckout() {
   function clientRow(client) {
     const billing = billingFor(client);
     const owes = (billing?.balance || 0) > 0;
-    const fortnight = priceFor(store.pricing, client.mealsPerDay);
+    const fortnight = chargeFor(client, store.pricing);
 
     return itemRow({
       lead: avatar(client.name),
@@ -195,7 +195,7 @@ export function renderCheckout() {
     const receipt = await openChargeSheet({
       client,
       invoices: invoicesFor(client.id),
-      tiers: store.pricing,
+      pricing: store.pricing,
       author: { uid: session.uid, name: session.displayName },
     });
     if (!receipt) return;

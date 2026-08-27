@@ -17,6 +17,7 @@ import {
   writeBatch, docData, listData,
 } from '../firebase.js';
 import { deliveryId, servingDays } from '../lib/billing.js';
+import { mealsOn } from '../lib/pricing.js';
 import { weekdayOf, today } from '../lib/dates.js';
 import { DELIVERY_FLOW } from '../lib/model.js';
 
@@ -127,7 +128,10 @@ export async function scheduleDay(clients, day, author) {
       clientName: client.name,
       date: day,
       status: 'scheduled',
-      meals: Number(client.mealsPerDay) || 0,
+      // What this weekday calls for, not the plan: somebody on two meals a day
+      // with a Saturday extra gets three on Saturdays, and the driver has to
+      // see three.
+      meals: mealsOn(client, weekday),
       window: client.deliveryWindow || '',
       driver: '',
       notes: '',
@@ -221,7 +225,7 @@ export async function createDelivery(client, day, author, meals) {
     clientName: client.name,
     date: day,
     status: 'scheduled',
-    meals: Number(meals ?? client.mealsPerDay) || 0,
+    meals: Number(meals ?? mealsOn(client, weekdayOf(day))) || 0,
     window: client.deliveryWindow || '',
     driver: '',
     notes: '',

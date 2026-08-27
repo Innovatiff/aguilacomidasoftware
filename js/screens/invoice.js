@@ -9,7 +9,7 @@ import { icon } from '../lib/icons.js';
 import { screen } from '../ui/shell.js';
 import {
   card, button, badge, defList, defRow, sectionLabel, list, itemRow,
-  alert, loading, meter,
+  alert, loading, meter, chargeRows,
 } from '../ui/kit.js';
 import { toastOk, toastBad, confirm, sheet } from '../ui/overlay.js';
 import { openChargeSheet } from '../ui/charge-sheet.js';
@@ -114,13 +114,20 @@ export function renderInvoice(context) {
           ? defRow('Dónde', [invoice.farmName, invoice.locationName].filter(Boolean).join(' · '))
           : null,
         defRow('Periodo', `${formatDay(invoice.periodStart)} – ${formatDay(invoice.periodEnd)}`),
-        defRow('Plan', invoice.mealsPerDay
-          ? `${number(invoice.mealsPerDay)} ${invoice.mealsPerDay === 1 ? 'comida' : 'comidas'} al día`
-          : '—'),
+
+        // Straight off the bill, not recalculated: these are the numbers it was
+        // issued with, and they must not move when the price list does.
+        ...(invoice.fromNotebook ? [] : chargeRows(invoice)),
+
         defRow('Comidas entregadas', number(invoice.meals)),
         defRow('Fecha límite de pago', formatDayLong(invoice.dueDate)),
         defRow('Quincena', moneyFull(amount), { total: true }),
       ].filter(Boolean))),
+
+      invoice.fromNotebook
+        ? alert('Esta quincena viene del cuaderno: se registró al pasar al cliente al sistema, '
+          + 'no la generó una ruta.', 'info')
+        : null,
 
       /* Payments */
       sectionLabel('Pagos recibidos'),
@@ -217,7 +224,7 @@ export function renderInvoice(context) {
     const receipt = await openChargeSheet({
       client,
       invoices: invoicesFor(client.id),
-      tiers: store.pricing,
+      pricing: store.pricing,
       author: author(),
     });
     if (receipt) go(`/receipts/${receipt.id}`);

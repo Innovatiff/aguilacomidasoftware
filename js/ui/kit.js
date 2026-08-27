@@ -2,7 +2,7 @@
 
 import { h, frag, autosize } from '../lib/dom.js';
 import { icon } from '../lib/icons.js';
-import { initials } from '../lib/format.js';
+import { initials, money } from '../lib/format.js';
 import { badgeClass, dotClass } from '../lib/model.js';
 
 /* --- Badges & dots -------------------------------------------------------- */
@@ -261,6 +261,56 @@ export function chips(options, active, onPick) {
 }
 
 export { frag };
+
+/* --- The fortnight's arithmetic --------------------------------------------- */
+
+/**
+ * The rows that explain a fortnight's price.
+ *
+ * The same breakdown wherever the number appears — the form, the client's file,
+ * the bill — because "why is mine $152.50 and his is $140?" is asked at the
+ * counter, and an answer that changes depending on which screen you are looking
+ * at is not an answer.
+ *
+ * Accepts either a live charge from `fortnightCharge` or an issued invoice,
+ * which carries the same fields frozen at the moment it was written.
+ */
+export function chargeRows(charge, priced = true) {
+  const days = Number(charge?.days ?? charge?.plannedDays) || 0;
+  const meals = Number(charge?.meals ?? charge?.plannedMeals) || 0;
+  const perDay = Number(charge?.perDay ?? charge?.mealsPerDay) || 0;
+  const base = Number(charge?.base ?? charge?.planPrice) || 0;
+  const adjustment = Number(charge?.adjustment) || 0;
+  const extras = charge?.extras || [];
+  const rate = Number(charge?.mealPrice) || 0;
+
+  const rows = [
+    defRow('Plan', `${perDay} ${perDay === 1 ? 'comida' : 'comidas'} al día`),
+    defRow('Días de servicio', `${days} en la quincena`),
+    defRow('Comidas de la quincena', String(meals)),
+  ];
+
+  if (extras.length) {
+    rows.push(defRow('Comidas extra',
+      extras.map((entry) => `${WEEKDAY_SHORT[entry.weekday]} +${entry.count}`).join(' · ')));
+  }
+
+  if (priced) {
+    rows.push(defRow('Precio del plan', money(base)));
+    if (Math.abs(adjustment) > 0.005) {
+      const sign = adjustment > 0 ? '+' : '−';
+      const count = Math.abs(Number(charge?.difference) || 0);
+      rows.push(defRow(
+        adjustment > 0 ? 'Comidas de más' : 'Comidas de menos',
+        `${sign}${money(Math.abs(adjustment))}`
+        + (rate ? `  (${count} × ${money(rate)})` : '')));
+    }
+  }
+
+  return rows;
+}
+
+const WEEKDAY_SHORT = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
 /* --- Food restrictions ------------------------------------------------------ */
 

@@ -48,6 +48,7 @@ export function sheet({ title, build, foot, dismissible = true }) {
       if (settled) return;
       settled = true;
       document.removeEventListener('keydown', onKey);
+      window.removeEventListener('hashchange', onLeave);
       scrim.style.animation = 'fade 160ms var(--ease) reverse';
       panel.style.animation = 'rise 180ms var(--ease) reverse';
       setTimeout(() => scrim.remove(), 160);
@@ -55,6 +56,14 @@ export function sheet({ title, build, foot, dismissible = true }) {
     };
 
     const onKey = (e) => { if (e.key === 'Escape' && dismissible) close(undefined); };
+
+    /*
+     * A sheet is appended to the document, not to the page, so it survives a
+     * route change: leaving by the browser's back button — or by a button
+     * inside the sheet that navigates — would otherwise leave it floating over
+     * whatever came next.
+     */
+    const onLeave = () => close(undefined);
 
     const panel = h('div.sheet', { role: 'dialog', 'aria-modal': 'true', 'aria-label': title || 'Diálogo' },
       h('div.sheet__grip'),
@@ -71,6 +80,7 @@ export function sheet({ title, build, foot, dismissible = true }) {
     }, panel);
 
     document.addEventListener('keydown', onKey);
+    window.addEventListener('hashchange', onLeave);
     document.body.append(scrim);
 
     // Focus the first real control so keyboards and screen readers land inside.

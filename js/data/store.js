@@ -19,13 +19,13 @@ import { watchOutstanding, summarizeInvoices, groupByClient } from './invoices.j
 import { watchConversations, totalUnread } from './chat.js';
 import { today } from '../lib/dates.js';
 import { summarize, periodFor } from '../lib/billing.js';
-import { DEFAULT_TIERS, priceFor, tierFor } from '../lib/pricing.js';
+import { DEFAULT_PRICING, chargeFor, tierFor } from '../lib/pricing.js';
 
 const state = {
   day: today(),
   // The price list starts at the defaults so the first render already quotes a
   // real number instead of $0 while the document loads.
-  pricing: [...DEFAULT_TIERS],
+  pricing: { ...DEFAULT_PRICING },
   farms: [],
   clients: [],
   deliveries: [],
@@ -79,8 +79,8 @@ export function startStore() {
   state.errors = {};
 
   stops = [
-    watchPricing((tiers) => {
-      state.pricing = tiers;
+    watchPricing((pricing) => {
+      state.pricing = pricing;
       state.loaded.pricing = true;
       emit();
     }, failed('pricing')),
@@ -119,7 +119,7 @@ export function stopStore() {
   dayStop?.();
   dayStop = null;
   Object.assign(state, {
-    pricing: [...DEFAULT_TIERS],
+    pricing: { ...DEFAULT_PRICING },
     farms: [], clients: [], deliveries: [], outstanding: [], conversations: [],
     loaded: {
       pricing: false, farms: false, clients: false, deliveries: false,
@@ -262,8 +262,11 @@ function nameState(client, billing, covered) {
 /** The whole roster, each with its derived state. Computed once per render. */
 export const roster = () => state.clients.map(clientState);
 
-/** What one fortnight costs this person under the current price list. */
-export const fortnightPrice = (client) => priceFor(state.pricing, client?.mealsPerDay);
+/**
+ * What one fortnight costs this person: their plan, adjusted for the week they
+ * actually eat and the extra plates they take.
+ */
+export const fortnightPrice = (client) => chargeFor(client, state.pricing);
 
 /** The fortnight they are in right now. */
 export const currentPeriodFor = (client) =>

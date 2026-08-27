@@ -17,7 +17,7 @@
  */
 
 import { addDays, daysBetween, today as todayKey, dayRange, weekdayOf } from './dates.js';
-import { priceFor } from './pricing.js';
+import { fortnightCharge } from './pricing.js';
 
 export const PERIOD_DAYS = 14;
 export const DEFAULT_GRACE_DAYS = 3;
@@ -63,18 +63,16 @@ export function servingDays(period, deliveryDays = DEFAULT_DELIVERY_DAYS) {
 /**
  * What a period costs this person, and what they get for it.
  *
- * The amount is the plan's flat price; the day and meal counts are what the
- * kitchen has committed to serving for it, shown so the number can be checked
- * against reality rather than taken on faith.
+ * Every 14-day period holds exactly two of each weekday, so the charge is the
+ * same in every period and the day count from the calendar always matches the
+ * one the price was built from. Returned together so a screen can show the
+ * number and the reason for it in the same breath.
  */
-export function projectPeriod(client, period, tiers) {
-  const days = servingDays(period, client.deliveryDays);
-  const perDay = Number(client.mealsPerDay) || 0;
+export function projectPeriod(client, period, pricing) {
+  const charge = fortnightCharge(client, pricing);
   return {
-    days: days.length,
-    meals: days.length * perDay,
-    mealsPerDay: perDay,
-    amount: priceFor(tiers, perDay),
+    ...charge,
+    days: servingDays(period, client.deliveryDays).length,
   };
 }
 
@@ -147,12 +145,21 @@ export function summarize(client, invoices = [], day = todayKey()) {
 /**
  * Builds the invoice document for a client's period.
  *
- * `amount` is the plan price, stamped onto the bill so a later change to the
- * price list cannot rewrite what somebody was charged. `meals` records what was
- * actually delivered in the period — information, not the basis of the total.
+ * The whole charge is stamped onto the bill, not just the total: the plan
+ * price, the adjustment, the days and meals it was built from, the rate used.
+ * A later change to the price list cannot rewrite any of it, and a year from
+ * now the bill can still answer "why this number?" without the price list it
+ * was issued under.
+ *
+ * `charge` is what `fortnightCharge` returns; a bare number is accepted for the
+ * one case with no breakdown behind it — a balance carried in from paper.
+ *
+ * `meals` is what was actually delivered in the period. Information, not the
+ * basis of the total: the fortnight is sold whole.
  */
-export function draftInvoice(client, period, amount, deliveredMeals, day = todayKey()) {
+export function draftInvoice(client, period, charge, deliveredMeals, day = todayKey()) {
   const meals = Number(deliveredMeals) || 0;
+  const priced = typeof charge === 'number' ? { amount: charge } : (charge || {});
   return {
     clientId: client.id,
     clientName: client.name,
@@ -166,7 +173,18 @@ export function draftInvoice(client, period, amount, deliveredMeals, day = today
     dueDate: dueDateFor(period, client.graceDays),
     mealsPerDay: Number(client.mealsPerDay) || 0,
     meals,
-    amount: round2(amount),
+    amount: round2(priced.amount),
+
+    // The arithmetic, frozen. Everything a bill needs to explain itself.
+    planPrice: round2(priced.base ?? priced.amount),
+    adjustment: round2(priced.adjustment || 0),
+    plannedMeals: Number(priced.meals) || 0,
+    plannedDays: Number(priced.days) || 0,
+    extraMeals: Number(priced.extraMeals) || 0,
+    extras: priced.extras || [],
+    mealPrice: round2(priced.mealPrice || 0),
+    deliveryDays: [...(client.deliveryDays || [])],
+
     paid: 0,
     payments: [],
     status: daysBetween(period.end, day) >= 0 ? 'due' : 'open',

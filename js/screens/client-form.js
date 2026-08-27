@@ -19,7 +19,7 @@ import { icon } from '../lib/icons.js';
 import { screen } from '../ui/shell.js';
 import {
   card, field, fieldGroup, input, textarea, select, button, alert, sectionLabel,
-  loading, defList, defRow, emptyState,
+  loading, defList, defRow, emptyState, badge, chargeRows,
 } from '../ui/kit.js';
 import { toastOk, toastBad, confirm } from '../ui/overlay.js';
 import { go, back } from '../lib/router.js';
@@ -32,9 +32,9 @@ import { ensureConversation } from '../data/chat.js';
 import { store, farmById, clientsOfFarm } from '../data/store.js';
 import { openChargeSheet } from '../ui/charge-sheet.js';
 import { openOpeningSheet } from '../ui/opening-sheet.js';
-import { projectPeriod, periodFor } from '../lib/billing.js';
-import { priceFor, tierFor } from '../lib/pricing.js';
-import { today, formatRange, formatDayLong } from '../lib/dates.js';
+import { periodFor } from '../lib/billing.js';
+import { chargeFor, tierFor, fortnightCharge, mealsOn } from '../lib/pricing.js';
+import { today, formatRange, formatDayLong, WEEKDAYS, capitalize } from '../lib/dates.js';
 import { money, plural } from '../lib/format.js';
 import { dbMessage } from '../firebase.js';
 
@@ -119,7 +119,7 @@ export async function renderClientForm(context) {
         // Most of these people were already customers, on paper. Asking now —
         // while their file is open and the notebook is in hand — is the only
         // moment the balance realistically gets carried over.
-        if (priceFor(store.pricing, model.mealsPerDay)) {
+        if (chargeFor(fresh, store.pricing)) {
           await offerOpeningBalance(fresh, author);
 
           // And they are usually standing at the counter, so the other
@@ -160,7 +160,7 @@ export async function renderClientForm(context) {
     });
     if (!wants) return 0;
 
-    return openOpeningSheet({ client, tiers: store.pricing, author });
+    return openOpeningSheet({ client, pricing: store.pricing, author });
   }
 
   /**
@@ -170,7 +170,7 @@ export async function renderClientForm(context) {
    * search, a screen and a scroll while somebody is standing there with cash.
    */
   async function offerPayment(client, author) {
-    const price = priceFor(store.pricing, client.mealsPerDay);
+    const price = chargeFor(client, store.pricing);
     const wants = await confirm({
       title: '¿Va a pagar ahora?',
       message: `${client.name} quedó registrado. Su quincena cuesta ${money(price)}. `
@@ -181,7 +181,7 @@ export async function renderClientForm(context) {
     });
     if (!wants) return null;
 
-    return openChargeSheet({ client, invoices: [], tiers: store.pricing, author });
+    return openChargeSheet({ client, invoices: [], pricing: store.pricing, author });
   }
 
   /* --- Form ---------------------------------------------------------------- */
@@ -260,6 +260,15 @@ export async function renderClientForm(context) {
           error: errors.mealsPerDay,
           hint: 'Cuántas comidas lleva al día. De ahí sale lo que paga por quincena.',
           control: planPicker(),
+        }),
+
+        // Not `field`: the week has a stepper on every row, and a <label>
+        // would hand their clicks to whatever input it finds first.
+        fieldGroup({
+          label: 'Su semana',
+          error: errors.deliveryDays,
+          hint: 'Los días que recibe y cuántas comidas cada día. El precio se ajusta solo.',
+          control: weekEditor(),
         }),
         field({
           label: 'Estado',
@@ -410,11 +419,87 @@ export async function renderClientForm(context) {
   }
 
   /**
+   * The week: which days this person is served, and how many plates each day.
+   *
+   * One row per weekday rather than a row of chips, because there are two
+   * decisions per day — served or not, and how many — and a chip can only carry
+   * one of them. The stepper adjusts the *extra* above the plan, so the plan
+   * stays the thing that sets the price and the extra stays visible as an
+   * extra, on the bill and on the run sheet.
+   */
+  function weekEditor() {
+    const order = [1, 2, 3, 4, 5, 6, 0];
+    const wrap = h('div.stack.stack-2');
+
+    const paint = () => {
+      const serving = new Set((model.deliveryDays || []).map(Number));
+
+      mount(wrap,
+        h('div.week', order.map((weekday) => {
+          const on = serving.has(weekday);
+          const meals = on ? mealsOn(model, weekday) : 0;
+          const extra = Number(model.extras?.[String(weekday)]) || 0;
+
+          return h(`div.week__row${on ? '' : '.is-off'}`,
+            h('button.week__day', {
+              type: 'button',
+              'aria-pressed': on,
+              onclick: () => toggleDay(weekday, !on),
+            },
+            h('span.week__mark', on ? icon('check') : null),
+            h('span.week__name', capitalize(WEEKDAYS[weekday]))),
+
+            on
+              ? h('div.week__count',
+                  h('button.step', {
+                    type: 'button', 'aria-label': 'Quitar una comida',
+                    disabled: extra <= 0,
+                    onclick: () => setExtra(weekday, extra - 1),
+                  }, '−'),
+                  h('span.step__n', plural(meals, 'comida', 'comidas')),
+                  h('button.step', {
+                    type: 'button', 'aria-label': 'Agregar una comida',
+                    onclick: () => setExtra(weekday, extra + 1),
+                  }, '+'))
+              : h('span.t-sm.c-faint', 'Sin servicio'),
+
+            on && extra > 0 ? badge(`+${extra}`, 'warn') : null);
+        })),
+
+        h('p.t-xs.c-faint', 'El plan da las comidas base de cada día; el + agrega comidas '
+          + 'extra en ese día de la semana, todas las semanas.'));
+    };
+
+    const toggleDay = (weekday, on) => {
+      const days = new Set((model.deliveryDays || []).map(Number));
+      if (on) days.add(weekday); else days.delete(weekday);
+
+      // An extra on a day nobody is served is not an extra, it is a leftover.
+      const extras = { ...(model.extras || {}) };
+      if (!on) delete extras[String(weekday)];
+
+      update({ deliveryDays: [...days].sort((a, b) => a - b), extras });
+      paint();
+    };
+
+    const setExtra = (weekday, count) => {
+      const extras = { ...(model.extras || {}) };
+      if (count > 0) extras[String(weekday)] = count;
+      else delete extras[String(weekday)];
+      update({ extras });
+      paint();
+    };
+
+    paint();
+    return wrap;
+  }
+
+  /**
    * The plan is picked, not typed: every price the business charges is on the
    * list, so choosing from it makes an unbillable client impossible to create.
    */
   function planPicker() {
-    const known = store.pricing.map((tier) => ({
+    const known = store.pricing.tiers.map((tier) => ({
       value: String(tier.mealsPerDay),
       label: `${plural(tier.mealsPerDay, 'comida', 'comidas')} al día · ${money(tier.price)} por quincena`,
     }));
@@ -439,25 +524,24 @@ export async function renderClientForm(context) {
         : null);
   }
 
-  /** What this person gets and what a fortnight of it costs. */
+  /** What this person gets, what it costs, and why it costs that. */
   function previewCard() {
     const current = farm();
     if (!current) return alert('Elige el rancho para ver sus condiciones.', 'info');
 
     const terms = termsOf(current);
     const period = periodFor(terms.cycleAnchor, today());
-    const projection = projectPeriod({ ...terms, mealsPerDay: model.mealsPerDay }, period, store.pricing);
+    const charge = fortnightCharge(model, store.pricing);
     const priced = !!tierFor(store.pricing, model.mealsPerDay);
 
     return h('div.stack.stack-3',
-      alert(`Servicio de ${current.name}. Para cambiarlo, edita el rancho.`, 'info'),
+      alert(`Horario y ciclo de ${current.name}. Para cambiarlos, edita el rancho.`, 'info'),
       card(defList([
-        defRow('Días de servicio', `${projection.days} en el periodo`),
         defRow('Horario', terms.deliveryWindow || '—'),
         defRow('Inicio del ciclo', formatDayLong(terms.cycleAnchor)),
-        defRow('Comidas en la quincena', String(projection.meals)),
+        ...chargeRows(charge, priced),
         defRow(`Quincena ${formatRange(period.start, period.end)}`,
-          priced ? money(projection.amount) : 'Sin precio', { total: true }),
+          priced ? money(charge.amount) : 'Sin precio', { total: true }),
       ])));
   }
 

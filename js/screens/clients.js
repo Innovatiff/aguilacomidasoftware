@@ -406,7 +406,7 @@ export function renderClients(context) {
     const receipt = await openChargeSheet({
       client: row.client,
       invoices: invoicesFor(row.client.id),
-      tiers: store.pricing,
+      pricing: store.pricing,
       author: author(),
     });
     if (receipt) go(`/receipts/${receipt.id}`);

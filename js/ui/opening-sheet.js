@@ -28,25 +28,25 @@ import { dbMessage } from '../firebase.js';
 /**
  * @param {object} options
  * @param {object} options.client  who is being brought over
- * @param {object[]} options.tiers the price list
+ * @param {object} options.pricing the price list
  * @param {object} options.author  { uid, name }
  * @returns {Promise<number>} how many fortnights were written
  */
-export function openOpeningSheet({ client, tiers, author }) {
+export function openOpeningSheet({ client, pricing, author }) {
   return sheet({
     title: 'Saldo del cuaderno',
     build: (close) => {
       // Two weeks back is the common case — most people are one fortnight
       // behind — and it is a starting point, not an answer.
       let lastPaidOn = addDays(today(), -14);
-      let found = owedSince(client, lastPaidOn, tiers);
+      let found = owedSince(client, lastPaidOn, pricing);
       let busy = false;
 
       const preview = h('div.stack.stack-3');
       const submit = h('button.btn.btn--primary.btn--block.btn--lg', { type: 'button' });
 
       const recalc = () => {
-        found = owedSince(client, lastPaidOn, tiers);
+        found = owedSince(client, lastPaidOn, pricing);
         paint();
       };
 

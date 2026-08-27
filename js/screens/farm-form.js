@@ -170,7 +170,9 @@ export async function renderFarmForm(context) {
         field({
           label: 'Días de servicio',
           error: errors.deliveryDays,
-          hint: 'Los días marcados aparecen en la ruta automáticamente.',
+          hint: 'Con qué días empieza alguien registrado aquí. Cada cliente puede tener los '
+            + 'suyos: hay quien come de lunes a viernes y quien lleva una comida extra el '
+            + 'sábado. Cambiar esto no toca a los que ya están.',
           control: weekdayPicker(model.deliveryDays, (days) => update({ deliveryDays: days })),
         }),
 

@@ -22,7 +22,7 @@ import { folioFor } from './receipts.js';
 import {
   invoiceId, draftInvoice, balanceOf, invoiceStatus, round2, periodFor, periodByIndex,
 } from '../lib/billing.js';
-import { priceFor } from '../lib/pricing.js';
+import { fortnightCharge } from '../lib/pricing.js';
 import { today, addDays } from '../lib/dates.js';
 
 /** How far ahead a single payment may buy: three months, then it is refused. */
@@ -94,10 +94,10 @@ export async function listClientInvoices(clientId) {
  * recorded against the cycle: the meals and amount are refreshed, the money
  * that came in is preserved, and `settled` is recomputed from both.
  */
-export async function issueInvoice(client, period, amount, meals, author, extra = {}) {
+export async function issueInvoice(client, period, charge, meals, author, extra = {}) {
   const id = invoiceId(client.id, period.start);
   const ref = doc(db, 'invoices', id);
-  const draft = { ...draftInvoice(client, period, amount, meals), ...extra };
+  const draft = { ...draftInvoice(client, period, charge, meals), ...extra };
 
   return runTransaction(db, async (tx) => {
     const snap = await tx.get(ref);
@@ -122,7 +122,7 @@ export async function issueInvoice(client, period, amount, meals, author, extra 
 }
 
 /** Issues the cycle that just closed for a set of clients, at their plan price. */
-export async function issueClosedCycle(clients, mealsByClient, tiers, day = today(), author) {
+export async function issueClosedCycle(clients, mealsByClient, pricing, day = today(), author) {
   const results = [];
   for (const client of clients) {
     const anchor = client.cycleAnchor || day;
@@ -130,7 +130,7 @@ export async function issueClosedCycle(clients, mealsByClient, tiers, day = toda
     const closed = periodByIndex(anchor, current.index - 1);
     const meals = mealsByClient[client.id] ?? 0;
     if (!meals) continue;
-    results.push(await issueInvoice(client, closed, priceFor(tiers, client.mealsPerDay), meals, author));
+    results.push(await issueInvoice(client, closed, fortnightCharge(client, pricing), meals, author));
   }
   return results;
 }
@@ -150,11 +150,12 @@ export async function issueClosedCycle(clients, mealsByClient, tiers, day = toda
  * half-applied: the cash is already in the drawer by the time this runs, so it
  * either lands completely or not at all.
  */
-export async function takePayment({ client, tiers, amount, method, reference, note, date }, author) {
+export async function takePayment({ client, pricing, amount, method, reference, note, date }, author) {
   const total = round2(amount);
   if (!(total > 0)) throw new Error('El monto debe ser mayor a cero.');
 
-  const price = priceFor(tiers, client.mealsPerDay);
+  const charge = fortnightCharge(client, pricing);
+  const price = charge.amount;
   const day = date || today();
   const anchor = client.cycleAnchor || day;
   const current = periodFor(anchor, today());
@@ -207,7 +208,7 @@ export async function takePayment({ client, tiers, amount, method, reference, no
     for (const row of rows) {
       const draft = row.data
         || (row.period && price > 0
-          ? { ...draftInvoice(client, row.period, price, 0), issuedByName: author?.name || '' }
+          ? { ...draftInvoice(client, row.period, charge, 0), issuedByName: author?.name || '' }
           : null);
       if (!draft) continue;
 

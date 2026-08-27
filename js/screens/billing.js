@@ -23,7 +23,7 @@ import { session } from '../data/session.js';
 import { store, subscribe, moneyStats, debtors, farmById } from '../data/store.js';
 import { watchSettled, issueInvoice } from '../data/invoices.js';
 import { billableMealsInRange } from '../data/deliveries.js';
-import { priceFor } from '../lib/pricing.js';
+import { fortnightCharge } from '../lib/pricing.js';
 import {
   balanceOf, invoiceStatus, STATUS_LABEL, STATUS_TONE, periodFor, periodByIndex,
 } from '../lib/billing.js';
@@ -262,7 +262,7 @@ export function renderBilling(context) {
     try {
       const author = { uid: session.uid, name: session.displayName };
       for (const row of preview) {
-        await issueInvoice(row.client, row.period, row.amount, row.meals, author);
+        await issueInvoice(row.client, row.period, row.charge, row.meals, author);
       }
       toastOk(`${preview.length} ${preview.length === 1 ? 'factura emitida' : 'facturas emitidas'}`);
     } catch (error) {
@@ -295,9 +295,9 @@ export function renderBilling(context) {
         // defend at the gate.
         if (count <= 0) continue;
 
-        const amount = priceFor(store.pricing, client.mealsPerDay);
-        if (!amount) { unpriced.push(client); continue; }
-        preview.push({ client, period, meals: count, amount });
+        const charge = fortnightCharge(client, store.pricing);
+        if (!charge.priced) { unpriced.push(client); continue; }
+        preview.push({ client, period, meals: count, charge, amount: charge.amount });
       }
     }
 

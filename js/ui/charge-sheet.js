@@ -18,7 +18,7 @@ import { icon } from '../lib/icons.js';
 import { takePayment } from '../data/invoices.js';
 import { postSystemMessage } from '../data/chat.js';
 import { balanceOf, periodFor, periodByIndex } from '../lib/billing.js';
-import { priceFor } from '../lib/pricing.js';
+import { chargeFor } from '../lib/pricing.js';
 import { money, moneyFull, plural } from '../lib/format.js';
 import { formatRange, today } from '../lib/dates.js';
 import { PAYMENT_METHODS } from '../lib/model.js';
@@ -28,16 +28,16 @@ import { dbMessage } from '../firebase.js';
  * @param {object} options
  * @param {object} options.client    who is paying
  * @param {object[]} options.invoices  their invoices, to work out what is owed
- * @param {object[]} options.tiers   the price list
+ * @param {object} options.pricing   the price list
  * @param {object} options.author    { uid, name }
  * @returns {Promise<object|null>} the receipt, or null if nothing was taken
  */
-export function openChargeSheet({ client, invoices = [], tiers = [], author }) {
+export function openChargeSheet({ client, invoices = [], pricing, author }) {
   const owed = invoices
     .filter((invoice) => balanceOf(invoice) > 0.005)
     .sort((a, b) => String(a.periodStart).localeCompare(String(b.periodStart)));
   const balance = round2(owed.reduce((sum, invoice) => sum + balanceOf(invoice), 0));
-  const fortnight = priceFor(tiers, client.mealsPerDay);
+  const fortnight = chargeFor(client, pricing);
   const anchor = client.cycleAnchor || today();
   const current = periodFor(anchor, today());
 
@@ -95,7 +95,7 @@ export function openChargeSheet({ client, invoices = [], tiers = [], author }) {
 
           try {
             const receipt = await takePayment(
-              { client, tiers, amount: value, method, reference, note, date }, author);
+              { client, pricing, amount: value, method, reference, note, date }, author);
             await announce(receipt, client);
             toastOk(`Cobrado ${money(value)} · ${receipt.folio}`);
             close(receipt);

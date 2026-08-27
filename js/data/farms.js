@@ -33,14 +33,19 @@ const clientsRef = () => collection(db, 'clients');
 const BATCH_LIMIT = 450;
 
 /**
- * The fields a client inherits from its farm.
+ * The fields a client inherits from its farm — and keeps inheriting.
  *
  * No price: what a fortnight costs is one list for the whole business, kept in
- * `config/pricing` and looked up by how many meals the person takes. A farm
- * decides *when* and *how often* food arrives, not what it costs.
+ * `config/pricing`. A farm decides *when* food arrives, not what it costs.
+ *
+ * No serving days either, though the farm still supplies them as the starting
+ * point for somebody new. Once a client exists their week is theirs — some
+ * eat Monday to Friday, some take an extra plate on Saturdays — and a farm-wide
+ * change that quietly overwrote all of that would undo real decisions and
+ * silently rewrite what those people are charged.
  */
 export const TERM_FIELDS = [
-  'deliveryDays', 'deliveryWindow', 'cycleAnchor', 'graceDays',
+  'deliveryWindow', 'cycleAnchor', 'graceDays',
 ];
 
 export const emptyFarm = () => ({

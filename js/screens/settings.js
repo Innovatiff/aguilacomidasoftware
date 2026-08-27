@@ -69,13 +69,22 @@ export function renderSettings() {
         type: 'button', onclick: editPrices,
       }, 'Cambiar')),
 
-      list(store.pricing.map((tier) => itemRow({
+      list(store.pricing.tiers.map((tier) => itemRow({
         lead: h('span.item__ico', icon('utensils')),
         title: `${plural(tier.mealsPerDay, 'comida', 'comidas')} al día`,
         meta: `${countOn(tier.mealsPerDay)} con este plan`,
         end: h('span.t-lg.w-700', money(tier.price)),
         chevron: false,
       })), { card: true }),
+
+      card(defList([
+        defRow('Semana estándar', `${store.pricing.referenceDays} días de servicio`),
+        defRow('Comida extra o de menos', money(store.pricing.extraMealPrice)),
+      ])),
+
+      h('p.t-xs.c-faint',
+        `El precio del plan cubre ${store.pricing.referenceDays} días de servicio. Quien come `
+        + 'menos días paga menos, y quien lleva comidas extra paga más, a ese precio por comida.'),
 
       missing.length
         ? alert(`${plural(missing.length, 'cliente', 'clientes')} sin plan: `
@@ -190,8 +199,23 @@ export function renderSettings() {
     const result = await sheet({
       title: 'Precios por quincena',
       build: (close) => {
-        const draft = store.pricing.map((tier) => ({ ...tier }));
+        const draft = store.pricing.tiers.map((tier) => ({ ...tier }));
+        let draftDays = store.pricing.referenceDays;
+        let draftRate = store.pricing.extraMealPrice;
         const rows = h('div.stack.stack-3');
+        const rate = h('p.t-xs.c-faint');
+
+        // The rate is arithmetic, so show the arithmetic: nobody should have to
+        // wonder where $6.25 came from when a client asks at the counter.
+        const paintRate = () => {
+          const first = draft[0];
+          const suggested = first && draftDays
+            ? Math.round((first.price / (draftDays * first.mealsPerDay)) * 100) / 100
+            : 0;
+          mount(rate, suggested
+            ? `${money(first.price)} ÷ ${draftDays} días = ${money(suggested)} por comida.`
+            : 'Escribe el primer plan para ver el cálculo.');
+        };
 
         const paint = () => mount(rows, draft.map((tier, index) => h('div.card.card--tight',
           h('div.row',
@@ -227,11 +251,33 @@ export function renderSettings() {
             }, icon('x'))),
           h('div.t-xs.c-faint', countOn(tier.mealsPerDay) + ' en este plan'))));
         paint();
+        paintRate();
 
         return h('div.stack.stack-4',
           h('p.t-sm.c-soft', 'Lo que cuesta una quincena completa en cada plan. Se aplica a las '
             + 'facturas que se emitan de aquí en adelante.'),
           rows,
+
+          h('div.divider'),
+
+          h('div.row', { style: { gap: '12px', alignItems: 'flex-start' } },
+            h('div.grow', field({
+              label: 'Días de la semana estándar',
+              hint: 'Los días que cubre el precio del plan.',
+              control: input({
+                value: draftDays, type: 'number', inputmode: 'numeric', min: '1', max: '14', step: '1',
+                oninput: (event) => { draftDays = Number(event.target.value); paintRate(); },
+              }),
+            })),
+            h('div.grow', field({
+              label: 'Comida extra',
+              hint: 'Lo que suma o resta una comida.',
+              control: moneyInput({
+                value: draftRate,
+                oninput: (event) => { draftRate = Number(event.target.value); },
+              }),
+            }))),
+          rate,
           button('Agregar un plan', {
             variant: 'ghost', block: true, icon: 'plus',
             onClick: () => {
@@ -242,7 +288,7 @@ export function renderSettings() {
           }),
           button('Guardar precios', {
             variant: 'primary', block: true,
-            onClick: () => close(draft),
+            onClick: () => close({ tiers: draft, referenceDays: draftDays, extraMealPrice: draftRate }),
           }));
       },
     });
@@ -250,7 +296,7 @@ export function renderSettings() {
 
     try {
       const saved = await savePricing(result, { name: session.displayName });
-      toastOk(`${plural(saved.length, 'plan guardado', 'planes guardados')}`);
+      toastOk(`${plural(saved.tiers.length, 'plan guardado', 'planes guardados')}`);
     } catch (error) { toastBad(error?.message || dbMessage(error)); }
   }
 

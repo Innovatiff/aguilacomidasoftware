@@ -32,6 +32,7 @@ import {
 import { today } from '../lib/dates.js';
 import { DEFAULT_DELIVERY_DAYS, DEFAULT_GRACE_DAYS } from '../lib/billing.js';
 import { matches, fold } from '../lib/format.js';
+import { normalizeExtras } from '../lib/pricing.js';
 import { findLocation } from './farms.js';
 
 const clientsRef = () => collection(db, 'clients');
@@ -53,6 +54,9 @@ export const emptyClient = (farm) => ({
   notes: '',
   tags: [],
   mealsPerDay: Number(farm?.defaultMealsPerDay) || 1,
+  // Extra plates on particular weekdays, keyed by weekday: { '6': 1 } is one
+  // more every Saturday.
+  extras: {},
   status: 'active',
   ...termsOf(farm),
 });
@@ -313,6 +317,7 @@ function sanitize(data) {
     if (NUMERIC.has(key)) out[key] = Number(value) || 0;
     else if (key === 'deliveryDays') out[key] = (value || []).map(Number).sort((a, b) => a - b);
     else if (key === 'tags') out[key] = normalizeTags(value);
+    else if (key === 'extras') out[key] = normalizeExtras(value, data.deliveryDays);
     else if (typeof value === 'string') out[key] = value.trim();
     else out[key] = value;
   }

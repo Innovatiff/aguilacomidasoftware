@@ -19,6 +19,7 @@ cada dos semanas. Antes no se llevaba registro de nada. Este panel registra:
 | **Ranchos** | el lugar: contacto, **ubicaciones** (Casa 1, Bloque Norte…) y el servicio acordado — días, horario, ciclo de cobro |
 | **Clientes** | cada persona que come, con su rancho y su **ubicación obligatoria**. Hereda el servicio del rancho; lo suyo es su **plan**: cuántas comidas lleva al día |
 | **Precios** | una lista para todo el negocio: lo que cuesta una **quincena completa** en cada plan — 1 comida/día $75, 2 comidas/día $140. Se cambia en Ajustes |
+| **La semana de cada quien** | qué días recibe y cuántas comidas cada día. Quien come de lunes a viernes paga menos; quien lleva una comida extra el sábado paga más. El precio se ajusta solo |
 | **Ruta** | agrupada por rancho → ubicación: un toque mueve una ubicación completa, con estado en vivo que cada quien ve en su app |
 | **Clientes** | el tablero de trabajo: quién debe, quién va atrasado, quién está activo y quién tiene algo mal. Cobrar, pausar, reactivar y mandar mensaje sin salir de la lista |
 | **Restricciones** | lo que cada quien no puede comer — *sin pollo*, *sin espagueti*. Se ven en la lista sin abrir a nadie, y en la ruta junto a su nombre |
@@ -35,6 +36,29 @@ puerta es «$140 la quincena», no «$9.50 la comida». Cobrar por comida entreg
 obliga a cuadrar cuentas al cerrar el periodo y produce una cifra distinta cada
 vez; un precio plano por plan se puede cobrar el primer día, a media quincena o
 al final, que es exactamente como paga la gente.
+
+**Y por qué aun así se ajusta.** No todos comen la misma semana. El precio del
+plan cubre una **semana estándar** —12 días de servicio, lunes a sábado, dos
+semanas— y lo que se sale de ahí se cobra por comida:
+
+```
+total = precio del plan + (comidas servidas − comidas de la semana estándar) × precio por comida
+```
+
+El precio por comida es el del plan repartido en la semana estándar:
+**$75 ÷ 12 = $6.25**. Un número, en Ajustes, aplicado en los dos sentidos — un
+día menos vale lo mismo que un día más.
+
+| Caso | Cuenta | Total |
+|---|---|---|
+| 1 comida/día, lunes a sábado | el plan tal cual | **$75.00** |
+| 1 comida/día, lunes a viernes | $75 − 2 × $6.25 | **$62.50** |
+| 2 comidas/día, lunes a sábado | el plan tal cual | **$140.00** |
+| 2 comidas/día + 1 extra los sábados | $140 + 2 × $6.25 | **$152.50** |
+
+Toda quincena tiene exactamente dos de cada día de la semana, así que la cuenta
+da lo mismo en cualquier periodo: se puede cotizar antes de que empiece, que es
+lo que permite pagar por adelantado en la caja.
 
 ---
 
@@ -109,7 +133,17 @@ Son tres pasos y siempre en este orden:
    Invernadero 3 — como se le diga ahí. Un rancho sin ubicaciones no puede
    recibir gente, y el panel te lo dice.
 3. **Dentro de la ubicación → Registrar cliente aquí.** Nombre, su **plan** (de
-   la lista de precios) y, si tiene, su correo.
+   la lista de precios), **su semana** y, si tiene, su correo.
+
+**Su semana** es una fila por día: se prende o se apaga el día, y con el `+` se
+agregan comidas extra en ese día de la semana, todas las semanas. El precio de
+abajo se recalcula al instante y dice de dónde sale. Los días con extra quedan
+marcados, y el chofer ve el número correcto en la ruta — tres comidas el sábado,
+dos el resto.
+
+Los días vienen del rancho al registrar a alguien, pero después **son suyos**:
+cambiar los días del rancho no le toca la semana a quien ya está. El horario y
+el ciclo de cobro sí siguen siendo del rancho.
 
 Al guardar, el panel hace dos preguntas, en este orden:
 
@@ -402,6 +436,12 @@ tercera contaba a la misma gente para un filtro. `clientState()` lo resuelve
 una vez, así que el renglón, su etiqueta, el filtro y la cuenta de ese filtro
 no pueden contradecirse.
 
+**La factura guarda su propia aritmética.** No sólo el total: el precio del
+plan, el ajuste, los días y las comidas con que se calculó, y el precio por
+comida usado. Cambiar la lista de precios no puede reescribir nada de eso, y
+dentro de un año la factura sigue pudiendo contestar «¿por qué este número?»
+sin la lista con la que se emitió.
+
 **`paidThrough` se guarda porque el saldo no alcanza.** Un saldo en cero
 significa dos cosas distintas: «todavía no se le factura la quincena» y «ya la
 pagó por adelantado». Distinguirlas leyendo el historial de facturas costaría
@@ -435,6 +475,8 @@ users/{uid}                      -- sólo datos personales; no otorga nada
 
 config/pricing                   -- la lista de precios de todo el negocio
   tiers [{ mealsPerDay, price }] -- precio de UNA QUINCENA en cada plan
+  referenceDays                  -- días de servicio que cubre ese precio (12)
+  extraMealPrice                 -- lo que suma o resta una comida (6.25)
   updatedAt, updatedByName
 
 farms/{farmId}                   -- el lugar y lo acordado con él
@@ -451,11 +493,13 @@ clients/{clientId}               -- una persona que come
   tags        ['sin pollo', …]   -- lo que no puede comer
   farmId, farmName               -- obligatorio
   locationId, locationName       -- obligatorio
-  mealsPerDay                    -- su plan; de ahí sale su precio
+  mealsPerDay                    -- su plan; de ahí sale su precio base
+  deliveryDays [0-6]             -- SU semana; el rancho sólo da el valor inicial
+  extras      { '6': 1 }         -- comidas extra por día de la semana
   status       'active' | 'paused' | 'inactive'
   paidThrough  'YYYY-MM-DD'      -- última quincena que dejó saldada
-  deliveryDays, deliveryWindow, cycleAnchor, graceDays
-                                 -- copiados del rancho al escribir
+  deliveryWindow, cycleAnchor, graceDays
+                                 -- copiados del rancho, y se siguen heredando
 
 deliveries/{clientId_YYYY-MM-DD}
   clientId, clientName, date, meals, window, driver, notes
@@ -467,7 +511,10 @@ invoices/{clientId_YYYY-MM-DD}
   clientId, clientName, farmId, farmName, locationName
   periodStart, periodEnd, dueDate
   mealsPerDay                    -- el plan con el que se emitió
-  amount                         -- precio plano de la quincena, congelado
+  amount                         -- total de la quincena, congelado
+  planPrice, adjustment          -- de qué se compone ese total
+  plannedDays, plannedMeals      -- la semana con la que se calculó
+  extras, extraMeals, mealPrice  -- las comidas extra y a qué precio
   meals                          -- comidas entregadas (informativo)
   fromNotebook                   -- true si viene del cuaderno, no de una ruta
   paid, settled

@@ -21,7 +21,7 @@ import { getDocs, query, where, collection, db, listData } from '../firebase.js'
 import { billableMealsInRange } from './deliveries.js';
 import { issueInvoice } from './invoices.js';
 import { periodFor, periodByIndex, invoiceId } from '../lib/billing.js';
-import { priceFor } from '../lib/pricing.js';
+import { fortnightCharge } from '../lib/pricing.js';
 import { today } from '../lib/dates.js';
 
 /** How many closed periods back to look. Beyond this it is history, not a task. */
@@ -34,7 +34,7 @@ const LOOK_BACK = 4;
  * Returns `{ rows, total, periods, unpriced }` where a row is one invoice
  * waiting to be issued. Rows are the input to `issueAll`.
  */
-export async function pendingBilling(clients, tiers, day = today()) {
+export async function pendingBilling(clients, pricing, day = today()) {
   const billable = clients.filter((client) => client.status !== 'inactive');
   if (!billable.length) return empty();
 
@@ -70,10 +70,10 @@ export async function pendingBilling(clients, tiers, day = today()) {
       const count = meals.get(client.id) || 0;
       if (count <= 0) continue;
 
-      const amount = priceFor(tiers, client.mealsPerDay);
-      if (!amount) { unpriced.push(client); continue; }
+      const charge = fortnightCharge(client, pricing);
+      if (!charge.priced) { unpriced.push(client); continue; }
 
-      rows.push({ client, period, meals: count, amount });
+      rows.push({ client, period, meals: count, charge, amount: charge.amount });
     }
   }
 
@@ -93,7 +93,7 @@ export async function pendingBilling(clients, tiers, day = today()) {
 export async function issueAll(rows, author) {
   let issued = 0;
   for (const row of rows) {
-    await issueInvoice(row.client, row.period, row.amount, row.meals, author);
+    await issueInvoice(row.client, row.period, row.charge, row.meals, author);
     issued += 1;
   }
   return issued;
@@ -129,10 +129,11 @@ export function byFarm(rows) {
  * database and the person holding it knows things this does not — a month
  * somebody was away, a fortnight already settled in cash.
  */
-export function owedSince(client, lastPaidOn, tiers, day = today()) {
+export function owedSince(client, lastPaidOn, pricing, day = today()) {
   const anchor = client?.cycleAnchor || day;
-  const amount = priceFor(tiers, client?.mealsPerDay);
-  if (!lastPaidOn || lastPaidOn >= day) return { periods: [], amount, total: 0 };
+  const charge = fortnightCharge(client, pricing);
+  const amount = charge.amount;
+  if (!lastPaidOn || lastPaidOn >= day) return { periods: [], amount, charge, total: 0 };
 
   const from = periodFor(anchor, lastPaidOn).index;
   const current = periodFor(anchor, day).index;
@@ -149,12 +150,14 @@ export function owedSince(client, lastPaidOn, tiers, day = today()) {
       closed: period.end < day,
       owed: period.end < day,
       amount,
+      charge,
     });
   }
 
   return {
     periods,
     amount,
+    charge,
     total: round2(periods.filter((p) => p.owed).length * amount),
   };
 }
@@ -174,7 +177,7 @@ export async function openBalance(client, periods, author) {
     await issueInvoice(
       client,
       { index: period.index, start: period.start, end: period.end },
-      period.amount,
+      period.charge || period.amount,
       0,
       author,
       { fromNotebook: true },

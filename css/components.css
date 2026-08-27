@@ -94,6 +94,84 @@
 .fab:active { transform: scale(.95); }
 .fab svg { width: 20px; height: 20px; }
 
+/* --- The week ---------------------------------------------------------------
+   One row per weekday: served or not, and how many plates. Two decisions per
+   day, so two controls per row rather than one clever one. */
+
+.week {
+  display: flex; flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.week__row {
+  display: flex; align-items: center; gap: var(--s2);
+  padding: var(--s2) var(--s3);
+  background: var(--surface);
+  min-height: 48px;
+}
+.week__row + .week__row { border-top: 1px solid var(--border); }
+.week__row.is-off { background: var(--bg-sunken); }
+
+.week__day {
+  display: flex; align-items: center; gap: var(--s2);
+  flex: 1; min-width: 0;
+  text-align: left; color: inherit;
+}
+.week__mark {
+  display: grid; place-items: center; flex: none;
+  width: 22px; height: 22px;
+  border-radius: var(--r-sm);
+  border: 1.5px solid var(--ink-300);
+  color: #fff;
+}
+.week__row:not(.is-off) .week__mark {
+  background: var(--brand-500); border-color: var(--brand-500);
+}
+.week__mark svg { width: 15px; height: 15px; }
+.week__name { font-weight: 600; }
+.week__row.is-off .week__name { color: var(--text-faint); font-weight: 550; }
+
+.week__count { display: flex; align-items: center; gap: var(--s2); flex: none; }
+.step {
+  display: grid; place-items: center; flex: none;
+  width: 30px; height: 30px;
+  border-radius: var(--r-full);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: var(--fs-lg); font-weight: 700; line-height: 1;
+  color: var(--text-soft);
+}
+.step:disabled { opacity: .4; }
+.step__n {
+  min-width: 84px; text-align: center;
+  font-size: var(--fs-sm); font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The week, read-only: seven boxes with the plate count in each. */
+.weekstrip { display: flex; gap: 4px; }
+.weekstrip__day {
+  flex: 1; min-width: 0;
+  padding: 5px 2px 4px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  text-align: center;
+}
+.weekstrip__day.is-off { background: var(--bg-sunken); border-color: transparent; }
+.weekstrip__day.has-extra { border-color: var(--warn-500); background: var(--warn-50); }
+.weekstrip__n {
+  font-size: var(--fs-base); font-weight: 700; line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.weekstrip__day.is-off .weekstrip__n { color: var(--text-faint); font-weight: 550; }
+.weekstrip__day.has-extra .weekstrip__n { color: var(--warn-600); }
+.weekstrip__w {
+  font-size: 10px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .04em; color: var(--text-faint); margin-top: 1px;
+}
+
 /* --- Food restriction tags ------------------------------------------------ */
 
 .tags { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
