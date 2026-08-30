@@ -33,7 +33,7 @@ import { store, farmById, clientsOfFarm } from '../data/store.js';
 import { openChargeSheet } from '../ui/charge-sheet.js';
 import { openOpeningSheet } from '../ui/opening-sheet.js';
 import {
-  periodFor, payDayAfter, isPayDay, payDayOnOrAfter, PAY_WEEKDAY_LABELS,
+  periodFor, payDayAfter, isPayDay, payDayOnOrAfter, payDaysInWords,
 } from '../lib/billing.js';
 import { chargeFor, tierFor, fortnightCharge, mealsOn } from '../lib/pricing.js';
 import {
@@ -104,8 +104,7 @@ export async function renderClientForm(context) {
   function cycleHint() {
     const day = model.cycleAnchor || payDayOnOrAfter(today());
     const period = periodFor(day, today());
-    const names = Object.values(PAY_WEEKDAY_LABELS).join(' o ');
-    return `Se cobra en ${names}. Su quincena corre ahora del `
+    return `Se cobra en ${payDaysInWords()}. Su quincena corre ahora del `
       + `${formatDay(period.start)} al ${formatDay(period.end)}, `
       + `y paga otra vez el ${capitalize(WEEKDAYS[weekdayOf(payDayAfter(period))])} `
       + `${formatDay(payDayAfter(period))}.`;
@@ -119,7 +118,7 @@ export async function renderClientForm(context) {
     if (!(Number(model.mealsPerDay) > 0)) errors.mealsPerDay = 'Debe ser mayor a cero.';
     if (model.email && !isValidEmail(model.email)) errors.email = 'Ese correo no es válido.';
     if (model.cycleAnchor && !isPayDay(model.cycleAnchor)) {
-      errors.cycleAnchor = 'La quincena empieza en miércoles o en domingo.';
+      errors.cycleAnchor = `La quincena empieza en ${payDaysInWords()}.`;
     }
     if (model.endsOn && model.cycleAnchor && model.endsOn < model.cycleAnchor) {
       errors.endsOn = 'No puede terminar antes de que empiece su quincena.';

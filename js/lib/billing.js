@@ -27,7 +27,7 @@ export const DEFAULT_GRACE_DAYS = 3;
 export const DEFAULT_DELIVERY_DAYS = [1, 2, 3, 4, 5, 6];
 
 /**
- * Collection days: Wednesday and Sunday.
+ * Collection days: Wednesday and Saturday.
  *
  * The kitchen collects on two days of the week and no others, so a fortnight
  * has to start on one of them. A period is 14 days, which is exactly two
@@ -37,9 +37,17 @@ export const DEFAULT_DELIVERY_DAYS = [1, 2, 3, 4, 5, 6];
  * The cycle belongs to the person, not to the rancho. Two people at the same
  * farm can be a week apart because they started a week apart, and the day one
  * of them pays is the day their own fortnight turns over.
+ *
+ * Every screen that names these days reads them from here. Spelling them into
+ * a sentence is how "miércoles o domingo" survives in three hints after the
+ * rule underneath has changed.
  */
-export const PAY_WEEKDAYS = [0, 3];
-export const PAY_WEEKDAY_LABELS = { 0: 'domingo', 3: 'miércoles' };
+export const PAY_WEEKDAYS = [3, 6];
+export const PAY_WEEKDAY_LABELS = { 3: 'miércoles', 6: 'sábado' };
+
+/** "miércoles o sábado" — for the sentences that have to say it out loud. */
+export const payDaysInWords = () =>
+  PAY_WEEKDAYS.map((d) => PAY_WEEKDAY_LABELS[d]).join(' o ');
 
 export const isPayDay = (key) => PAY_WEEKDAYS.includes(weekdayOf(key));
 
@@ -95,7 +103,7 @@ export const prevPeriod = (anchor, period) => periodByIndex(anchor, period.index
  *
  * Not the same as the invoice's `dueDate`, which adds the grace days before a
  * bill counts as late. This is the day the client turns up — "pagas el
- * domingo 29" — and it is the number the counter actually quotes.
+ * sábado 29" — and it is the number the counter actually quotes.
  */
 export const payDayAfter = (period) => addDays(period.end, 1);
 

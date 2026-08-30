@@ -24,7 +24,9 @@ import { field, moneyInput, input, select, textarea, defList, defRow, alert, swi
 import { icon } from '../lib/icons.js';
 import { recordPastPayment } from '../data/invoices.js';
 import { updateClient } from '../data/clients.js';
-import { cycleFromPayment, periodFor, payDayAfter } from '../lib/billing.js';
+import {
+  cycleFromPayment, periodFor, payDayAfter, payDaysInWords,
+} from '../lib/billing.js';
 import { money } from '../lib/format.js';
 import { formatDay, formatDayLong, weekdayName, today } from '../lib/dates.js';
 import { PAYMENT_METHODS } from '../lib/model.js';
@@ -116,7 +118,7 @@ export function openHistorySheet({ client, author }) {
 
       field({
         label: '¿Qué día pagó?',
-        hint: 'De esta fecha sale su quincena. Se cobra en miércoles o en domingo; si eliges '
+        hint: `De esta fecha sale su quincena. Se cobra en ${payDaysInWords()}; si eliges `
           + 'otro día, la quincena empieza el siguiente día de cobro.',
         control: input({
           type: 'date', value: date, max: today(),

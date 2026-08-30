@@ -25,7 +25,9 @@ import {
   createFarm, updateFarm, getFarm, emptyFarm, deleteFarm, setFarmStatus, TERM_FIELDS,
 } from '../data/farms.js';
 import { farmById, clientsOfFarm } from '../data/store.js';
-import { periodFor, PERIOD_DAYS, servingDays, payDayOnOrAfter } from '../lib/billing.js';
+import {
+  periodFor, PERIOD_DAYS, servingDays, payDayOnOrAfter, payDaysInWords,
+} from '../lib/billing.js';
 import { WEEKDAYS_SHORT, today, formatRange } from '../lib/dates.js';
 import { plural } from '../lib/format.js';
 import { dbMessage } from '../firebase.js';
@@ -189,7 +191,7 @@ export async function renderFarmForm(context) {
       card(h('div.stack.stack-4',
         field({
           label: 'Inicio del ciclo para clientes nuevos',
-          hint: `Los periodos son de ${PERIOD_DAYS} días y se cobran en miércoles o en domingo. `
+          hint: `Los periodos son de ${PERIOD_DAYS} días y se cobran en ${payDaysInWords()}. `
             + 'Esto sólo decide desde qué día arranca alguien registrado aquí a partir de ahora: '
             + 'la quincena de cada cliente es suya y se ajusta en su ficha, con su último pago.',
           control: input({
