@@ -199,6 +199,54 @@ export async function voidCharge(invoice) {
 }
 
 
+/**
+ * Writes down a payment that happened before the software did.
+ *
+ * The first notebook was typed in before payments could be recorded at all, so
+ * a couple of hundred people carry a real history the panel has never seen —
+ * their libreta page reads "sin pagos" for money they handed over in cash.
+ *
+ * This is a record, not a collection: there is no invoice behind it to settle,
+ * so it moves nobody's balance. That is the honest behaviour. The fortnights
+ * it covered were never billed either, and inventing bills to match a
+ * half-remembered date would be worse than leaving the ledger where it is.
+ *
+ * What it does do is put the payment in the history and on the libreta page,
+ * which is where the question "¿cuándo pagó la última vez?" actually gets
+ * asked. It is marked `fromNotebook` so a year from now nobody mistakes it for
+ * a payment this system took.
+ */
+export async function recordPastPayment({ client, amount, method, date, note }, author) {
+  const total = round2(amount);
+  if (!(total > 0)) throw new Error('El monto debe ser mayor a cero.');
+  const day = date || today();
+  if (day > today()) throw new Error('Esa fecha todavía no llega.');
+
+  const ref = doc(collection(db, 'receipts'));
+  const receipt = {
+    clientId: client.id,
+    clientName: client.name || '',
+    farmId: client.farmId || '',
+    farmName: client.farmName || '',
+    locationName: client.locationName || '',
+    amount: total,
+    method: method || 'cash',
+    reference: '',
+    note: note || '',
+    date: day,
+    applied: [],
+    balanceAfter: 0,
+    fromNotebook: true,
+    takenByName: author?.name || '',
+    takenByUid: author?.uid || null,
+    folio: folioFor(ref.id, day),
+    at: serverTimestamp(),
+  };
+
+  await setDoc(ref, receipt);
+  return { id: ref.id, ...receipt, at: new Date() };
+}
+
 /* --- Payments -------------------------------------------------------------- */
 
 /**
@@ -452,7 +500,11 @@ export async function voidReceipt(receipt, author) {
       }
     }
 
-    if (!removed) throw new Error('Este pago ya estaba cancelado.');
+    // A receipt from the notebook settled no invoice, so there is nothing to
+    // give back — but it still has to be cancellable, or a wrong figure typed
+    // in during the migration is stuck on the record forever.
+    const historic = !targets.length;
+    if (!removed && !historic) throw new Error('Este pago ya estaba cancelado.');
 
     if (reopened && clientSnap?.exists()) {
       const was = clientSnap.data().paidThrough || null;
@@ -469,7 +521,7 @@ export async function voidReceipt(receipt, author) {
       farmId: receipt.farmId || '',
       farmName: receipt.farmName || '',
       locationName: receipt.locationName || '',
-      amount: -removed,
+      amount: -(removed || round2(receipt.amount)),
       method: receipt.method || 'cash',
       reference: '',
       note: `Cancelación del recibo ${receipt.folio || receipt.id}.`,
@@ -485,7 +537,7 @@ export async function voidReceipt(receipt, author) {
     };
     tx.set(counterRef, counter);
 
-    return { id: counterRef.id, ...counter, amount: -removed, undone };
+    return { id: counterRef.id, ...counter, undone };
   });
 }
 

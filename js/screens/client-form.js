@@ -32,9 +32,13 @@ import { ensureConversation } from '../data/chat.js';
 import { store, farmById, clientsOfFarm } from '../data/store.js';
 import { openChargeSheet } from '../ui/charge-sheet.js';
 import { openOpeningSheet } from '../ui/opening-sheet.js';
-import { periodFor } from '../lib/billing.js';
+import {
+  periodFor, payDayAfter, isPayDay, payDayOnOrAfter, PAY_WEEKDAY_LABELS,
+} from '../lib/billing.js';
 import { chargeFor, tierFor, fortnightCharge, mealsOn } from '../lib/pricing.js';
-import { today, formatRange, formatDayLong, WEEKDAYS, capitalize } from '../lib/dates.js';
+import {
+  today, addDays, formatRange, formatDayLong, formatDay, weekdayOf, WEEKDAYS, capitalize,
+} from '../lib/dates.js';
 import { money, plural } from '../lib/format.js';
 import { dbMessage } from '../firebase.js';
 
@@ -96,6 +100,17 @@ export async function renderClientForm(context) {
     draw();
   }
 
+  /** Says, in words, what the date they picked means for this person. */
+  function cycleHint() {
+    const day = model.cycleAnchor || payDayOnOrAfter(today());
+    const period = periodFor(day, today());
+    const names = Object.values(PAY_WEEKDAY_LABELS).join(' o ');
+    return `Se cobra en ${names}. Su quincena corre ahora del `
+      + `${formatDay(period.start)} al ${formatDay(period.end)}, `
+      + `y paga otra vez el ${capitalize(WEEKDAYS[weekdayOf(payDayAfter(period))])} `
+      + `${formatDay(payDayAfter(period))}.`;
+  }
+
   function validate() {
     errors = {};
     if (!model.name?.trim()) errors.name = 'Escribe el nombre de la persona.';
@@ -103,6 +118,12 @@ export async function renderClientForm(context) {
     if (!model.locationId) errors.locationId = 'Elige dónde está. Es obligatorio.';
     if (!(Number(model.mealsPerDay) > 0)) errors.mealsPerDay = 'Debe ser mayor a cero.';
     if (model.email && !isValidEmail(model.email)) errors.email = 'Ese correo no es válido.';
+    if (model.cycleAnchor && !isPayDay(model.cycleAnchor)) {
+      errors.cycleAnchor = 'La quincena empieza en miércoles o en domingo.';
+    }
+    if (model.endsOn && model.cycleAnchor && model.endsOn < model.cycleAnchor) {
+      errors.endsOn = 'No puede terminar antes de que empiece su quincena.';
+    }
     return Object.keys(errors).length === 0;
   }
 
@@ -285,6 +306,46 @@ export async function renderClientForm(context) {
             max: today(),
             onchange: (e) => update({ startedOn: e.target.value || today() }),
           }),
+        }),
+        field({
+          label: 'Día de pago',
+          error: errors.cycleAnchor,
+          hint: cycleHint(),
+          control: input({
+            type: 'date',
+            value: model.cycleAnchor || payDayOnOrAfter(today()),
+            // Snapped rather than refused: somebody typing "pagó el 28" means
+            // the fortnight that starts on the next collection day, and making
+            // them hunt for the right square helps nobody.
+            onchange: (e) => updateAndRedraw({
+              cycleAnchor: payDayOnOrAfter(e.target.value || today()),
+            }),
+          }),
+        }),
+        field({
+          label: 'Último día que se le sirve',
+          hint: 'Sólo cuando ya se sabe que se va: "pagó y se queda hasta el jueves". '
+            + 'Desde el día siguiente deja de aparecer en la libreta y no se le factura. '
+            + 'Déjalo vacío si sigue.',
+          control: h('div.stack.stack-2',
+            input({
+              type: 'date',
+              value: model.endsOn || '',
+              min: today(),
+              onchange: (e) => updateAndRedraw({ endsOn: e.target.value || '' }),
+            }),
+            h('div.row.row--wrap', { style: { gap: '6px' } },
+              [['Hoy', 0], ['Mañana', 1], ['En 2 días', 2], ['En 7 días', 7]].map(
+                ([label, days]) => button(label, {
+                  variant: 'soft', size: 'sm',
+                  onClick: () => updateAndRedraw({ endsOn: addDays(today(), days) }),
+                })),
+              model.endsOn
+                ? button('Sin fecha', {
+                    variant: 'ghost', size: 'sm',
+                    onClick: () => updateAndRedraw({ endsOn: '' }),
+                  })
+                : null)),
         }),
         field({
           label: 'Estado',

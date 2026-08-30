@@ -30,7 +30,7 @@ import { go } from '../lib/router.js';
 import {
   store, subscribe, clientState, paymentsFor, tillIsWindowed, firstError, startStore,
 } from '../data/store.js';
-import { matchesSearch } from '../data/clients.js';
+import { matchesSearch, isServing } from '../data/clients.js';
 import { matchesFarm } from '../data/farms.js';
 import { mealsOn, extrasOf } from '../lib/pricing.js';
 import { money, plural } from '../lib/format.js';
@@ -83,7 +83,9 @@ export function renderNotebook() {
     host.replaceWith(pages());
   }
 
-  const active = () => store.clients.filter((client) => client.status === 'active');
+  // Still being served today. Somebody whose last day has passed drops out of
+  // the book by itself, on the right morning, with nobody switching anything.
+  const active = () => store.clients.filter((client) => isServing(client, store.day));
 
   /* --- The book --------------------------------------------------------- */
 

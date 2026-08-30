@@ -29,8 +29,10 @@ import {
   onSnapshot, query, orderBy, serverTimestamp,
   writeBatch, docData, listData, toDate,
 } from '../firebase.js';
-import { today, dayKey } from '../lib/dates.js';
-import { DEFAULT_DELIVERY_DAYS, DEFAULT_GRACE_DAYS } from '../lib/billing.js';
+import { today, dayKey, daysBetween } from '../lib/dates.js';
+import {
+  DEFAULT_DELIVERY_DAYS, DEFAULT_GRACE_DAYS, payDayOnOrAfter,
+} from '../lib/billing.js';
 import { matches, fold } from '../lib/format.js';
 import { normalizeExtras } from '../lib/pricing.js';
 import { findLocation } from './farms.js';
@@ -58,12 +60,52 @@ export const emptyClient = (farm) => ({
   // more every Saturday.
   extras: {},
   status: 'active',
-  // The day they actually started eating here, which is not the same as the
-  // farm's billing anchor: the anchor says when the fortnights fall, this says
-  // which of those fortnights are theirs to pay for.
+  // The day they actually started eating here, which is not the same as their
+  // billing anchor: the anchor says when the fortnights fall, this says which
+  // of those fortnights are theirs to pay for.
   startedOn: today(),
+  // The last day they are served, when the kitchen already knows there is one:
+  // "pagó y se va el jueves". Empty is the normal case — most people have no
+  // end date.
+  endsOn: '',
   ...termsOf(farm),
 });
+
+/**
+ * Whether this person is still being served today.
+ *
+ * `endsOn` is the kitchen writing down something it already knows: "pagó y se
+ * va el jueves". Once that day passes they are finished, and nothing — not the
+ * libreta, not the billing scan, not the roster's count — should keep treating
+ * them as somebody who eats here. Deriving it means the change happens on the
+ * right morning by itself, with nobody remembering to go and switch a status
+ * on a day they are not thinking about it.
+ *
+ * Their stored `status` still wins when it says paused or inactive: an end
+ * date does not un-pause anybody.
+ */
+export function servingStatus(client, day = today()) {
+  if (!client) return 'inactive';
+  if (client.status !== 'active') return client.status || 'inactive';
+  if (client.endsOn && client.endsOn < day) return 'inactive';
+  return 'active';
+}
+
+export const isServing = (client, day = today()) => servingStatus(client, day) === 'active';
+
+/** Days left before their service ends, or null when there is no end date. */
+export function daysLeft(client, day = today()) {
+  if (!client?.endsOn) return null;
+  return daysBetween(day, client.endsOn);
+}
+
+/** Sets — or clears — the last day this person is served. */
+export async function setEndsOn(clientId, endsOn) {
+  await updateDoc(doc(db, 'clients', clientId), {
+    endsOn: endsOn || '',
+    updatedAt: serverTimestamp(),
+  });
+}
 
 /**
  * The day this person started eating here.
@@ -80,12 +122,19 @@ export function servingSince(client) {
   return created ? dayKey(created) : '';
 }
 
-/** The farm's terms, in the shape they are stored on a worker. */
+/**
+ * The farm's terms, in the shape they are stored on a worker.
+ *
+ * `cycleAnchor` is a starting point, not a term: from here on it belongs to
+ * the person. Their fortnight turns over on the collection day their own cycle
+ * began on — where their last payment left them — so it is snapped to one and
+ * then never touched by anything the farm does.
+ */
 export function termsOf(farm) {
   return {
     deliveryDays: [...(farm?.deliveryDays?.length ? farm.deliveryDays : DEFAULT_DELIVERY_DAYS)],
     deliveryWindow: farm?.deliveryWindow || '11:00 – 13:00',
-    cycleAnchor: farm?.cycleAnchor || today(),
+    cycleAnchor: payDayOnOrAfter(farm?.cycleAnchor || today()),
     graceDays: farm?.graceDays ?? DEFAULT_GRACE_DAYS,
   };
 }

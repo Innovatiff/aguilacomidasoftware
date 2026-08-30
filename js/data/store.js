@@ -11,14 +11,14 @@
  * sign-out so a second account never sees the previous one's data.
  */
 
-import { watchClients } from './clients.js';
+import { watchClients, servingStatus, isServing, daysLeft } from './clients.js';
 import { watchFarms } from './farms.js';
 import { watchPricing } from './pricing.js';
 import { watchOutstanding, summarizeInvoices, groupByClient } from './invoices.js';
 import { watchRecentReceipts, cancelledIds, RECENT_RECEIPTS } from './receipts.js';
 import { watchConversations, totalUnread } from './chat.js';
 import { today } from '../lib/dates.js';
-import { summarize, periodFor } from '../lib/billing.js';
+import { summarize, periodFor, payDayAfter } from '../lib/billing.js';
 import { DEFAULT_PRICING, chargeFor, tierFor } from '../lib/pricing.js';
 
 const state = {
@@ -138,7 +138,14 @@ export const farmById = (id) => state.farms.find((farm) => farm.id === id) || nu
 
 export const clientById = (id) => state.clients.find((client) => client.id === id) || null;
 
-export const activeClients = () => state.clients.filter((client) => client.status === 'active');
+/**
+ * Everybody still being served today.
+ *
+ * `isServing`, not `status === 'active'`: somebody whose last day has passed
+ * is finished, and the count, the libreta and the billing scan all have to
+ * agree about that on the same morning without anybody flipping a switch.
+ */
+export const activeClients = () => state.clients.filter((client) => isServing(client, state.day));
 
 /** Everyone registered at one farm, alphabetical. */
 export const clientsOfFarm = (farmId) =>
@@ -151,7 +158,7 @@ export const clientsAtLocation = (farmId, locationId) =>
 /** Head-count and money for one farm, from data already in memory. */
 export function farmStats(farmId) {
   const roster = clientsOfFarm(farmId);
-  const active = roster.filter((client) => client.status === 'active');
+  const active = roster.filter((client) => isServing(client, state.day));
   const balance = roster.reduce((sum, client) => sum + (billingFor(client)?.balance || 0), 0);
   return {
     total: roster.length,
@@ -194,6 +201,7 @@ export function clientState(client) {
   const period = periodFor(client.cycleAnchor || today(), today());
   const paidThrough = client.paidThrough || null;
   const covered = !!paidThrough && paidThrough >= period.end;
+  const serving = servingStatus(client, state.day);
 
   // A gap is something that stops this person being served or billed. Not
   // having an email is neither — most workers do not have one the day they are
@@ -215,7 +223,13 @@ export function clientState(client) {
     overdue: billing?.overdueCount || 0,
     gaps,
     hasGap: gaps.noPlan || gaps.noPlace,
-    state: nameState(client, billing, covered),
+    // The day they pay next, which is the first day of the fortnight after
+    // this one — not the invoice's due date, which adds the grace days.
+    payDay: payDayAfter(period),
+    serving,
+    endsOn: client.endsOn || null,
+    daysLeft: daysLeft(client, state.day),
+    state: nameState(client, billing, covered, serving),
   };
 }
 
@@ -226,11 +240,11 @@ export function clientState(client) {
  * roster that hides that behind "Inactivo" is how debts get written off by
  * accident.
  */
-function nameState(client, billing, covered) {
+function nameState(client, billing, covered, serving) {
   if ((billing?.overdueCount || 0) > 0) return 'overdue';
   if ((billing?.balance || 0) > 0) return 'due';
-  if (client.status === 'inactive') return 'inactive';
-  if (client.status === 'paused') return 'paused';
+  if (serving === 'inactive') return 'inactive';
+  if (serving === 'paused') return 'paused';
   if (covered) return 'covered';
   return 'clear';
 }
@@ -250,7 +264,7 @@ export const currentPeriodFor = (client) =>
 
 /** Clients whose meals-per-day has no plan — they cannot be billed as they are. */
 export const unpriced = () =>
-  state.clients.filter((client) => client.status !== 'inactive'
+  state.clients.filter((client) => servingStatus(client, state.day) !== 'inactive'
     && !tierFor(state.pricing, client.mealsPerDay));
 
 export const conversationFor = (clientId) =>

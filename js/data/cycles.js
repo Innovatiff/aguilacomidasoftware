@@ -58,8 +58,17 @@ const LOOK_BACK = 4;
  * — a scan that silently drops half its work reads as if it found nothing.
  */
 export async function pendingBilling(clients, pricing, day = today()) {
-  // Active only. A fortnight is sold as a plan, so somebody on the plan owes
-  // for it — and pausing them is how the kitchen says they are not on it.
+  /*
+   * Everybody the kitchen still counts as on the plan — by their stored
+   * status, not by whether they are being served *today*.
+   *
+   * Somebody whose last day was a week ago has stopped eating here, and the
+   * libreta drops them the morning after. They still owe for the fortnights
+   * they did eat. Filtering them out here would quietly write that money off
+   * the day their service ended, which is the opposite of what writing the end
+   * date down was for. What their last day does is close the *periods* after
+   * it, which is the check further down.
+   */
   const billable = clients.filter((client) => client.status === 'active');
   if (!billable.length) return empty();
 
@@ -79,7 +88,7 @@ export async function pendingBilling(clients, pricing, day = today()) {
 
   const rows = [];
   const unpriced = [];
-  const skipped = { paid: 0, notYet: 0 };
+  const skipped = { paid: 0, notYet: 0, ended: 0 };
 
   for (const { period, clients: group } of periods.values()) {
     const issued = await issuedIn(period.start);
@@ -100,6 +109,13 @@ export async function pendingBilling(clients, pricing, day = today()) {
       const since = servingSince(client);
       if (since && period.start < since) {
         skipped.notYet += 1;
+        continue;
+      }
+
+      // Begun after the day they stopped eating here. The kitchen wrote that
+      // date down precisely so nobody would be charged past it.
+      if (client.endsOn && period.start > client.endsOn) {
+        skipped.ended += 1;
         continue;
       }
 
@@ -231,7 +247,10 @@ async function issuedIn(periodStart) {
   return new Set(listData(snap).map((invoice) => invoice.id));
 }
 
-const empty = () => ({ rows: [], total: 0, periods: 0, unpriced: [], skipped: { paid: 0, notYet: 0 } });
+const empty = () => ({
+  rows: [], total: 0, periods: 0, unpriced: [],
+  skipped: { paid: 0, notYet: 0, ended: 0 },
+});
 
 const dedupe = (clients) => [...new Map(clients.map((c) => [c.id, c])).values()];
 

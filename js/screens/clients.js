@@ -31,12 +31,14 @@ import { session } from '../data/session.js';
 import {
   store, subscribe, roster, invoicesFor, firstError, startStore,
 } from '../data/store.js';
-import { matchesSearch, setClientStatus } from '../data/clients.js';
+import { matchesSearch, setClientStatus, setEndsOn } from '../data/clients.js';
 import { pendingBilling, issueAll, byFarm } from '../data/cycles.js';
 import { postSystemMessage } from '../data/chat.js';
 import { owedBreakdown } from '../lib/billing.js';
 import { money, moneyFull, number, plural } from '../lib/format.js';
-import { formatRange, formatDay, today, humanDelta, daysBetween } from '../lib/dates.js';
+import {
+  formatDay, formatDayLong, today, addDays, humanDelta, daysBetween,
+} from '../lib/dates.js';
 import { dbMessage } from '../firebase.js';
 
 /** What each state looks like on a row, and what to call it. */
@@ -54,9 +56,9 @@ const FILTERS = [
   { value: 'overdue',  label: 'Vencidos',   match: (row) => row.state === 'overdue' },
   { value: 'debt',     label: 'Deben',      match: (row) => row.owed > 0 },
   { value: 'pending',  label: 'Falta esta quincena',
-    match: (row) => row.client.status === 'active' && !row.covered },
+    match: (row) => row.serving === 'active' && !row.covered },
   { value: 'covered',  label: 'Pagados',    match: (row) => row.covered },
-  { value: 'active',   label: 'Activos',    match: (row) => row.client.status === 'active' },
+  { value: 'active',   label: 'Activos',    match: (row) => row.serving === 'active' },
   { value: 'paused',   label: 'En pausa',   match: (row) => row.client.status === 'paused' },
   { value: 'inactive', label: 'Inactivos',  match: (row) => row.client.status === 'inactive' },
   { value: 'diet',     label: 'Con restricciones',
@@ -164,7 +166,7 @@ export function renderClients(context) {
       statGrid([
         stat({
           label: 'Activos',
-          value: number(rows.filter((row) => row.client.status === 'active').length),
+          value: number(rows.filter((row) => row.serving === 'active').length),
           foot: `${rows.length} en total`,
           onClick: () => { filter = 'active'; draw(); },
         }),
@@ -177,7 +179,7 @@ export function renderClients(context) {
         }),
         stat({
           label: 'Al corriente',
-          value: number(rows.filter((row) => row.owed <= 0 && row.client.status !== 'inactive').length),
+          value: number(rows.filter((row) => row.owed <= 0 && row.serving !== 'inactive').length),
           foot: `${rows.filter((row) => row.covered).length} con la quincena pagada`,
           tone: 'ok',
           onClick: () => { filter = 'covered'; draw(); },
@@ -274,16 +276,23 @@ export function renderClients(context) {
       ].filter(Boolean);
       return `Revisar: ${first}`;
     }
+    // A last day already written down is the most important thing about this
+    // person today: it changes who cooks for them tomorrow.
+    if (row.endsOn && row.serving === 'active') {
+      return `Termina ${humanDelta(row.daysLeft)} · ${formatDay(row.endsOn)}`;
+    }
     if (row.owed > 0) {
       const due = row.billing?.dueDate;
       return `${owedBreakdown(row.billing?.outstanding)} · ${row.state === 'overdue'
         ? `venció ${humanDelta(daysBetween(today(), due))}`
         : `vence ${formatDay(due)}`}`;
     }
-    if (row.client.status === 'inactive') return 'Ya no recibe comida';
-    if (row.client.status === 'paused') return 'Sin entregas por ahora';
+    if (row.serving === 'inactive') {
+      return row.endsOn ? `Terminó el ${formatDay(row.endsOn)}` : 'Ya no recibe comida';
+    }
+    if (row.serving === 'paused') return 'Sin entregas por ahora';
     if (row.covered) return `Pagado hasta ${formatDay(row.paidThrough)}`;
-    return `Quincena ${formatRange(row.period.start, row.period.end)}`;
+    return `Paga el ${formatDay(row.payDay)}`;
   }
 
   /* --- Automation ---------------------------------------------------------- */
@@ -343,7 +352,7 @@ export function renderClients(context) {
   /** Shows the whole run before writing a single bill. */
   async function reviewPending() {
     const { rows, total, unpriced, skipped } = pending;
-    const left = (skipped?.paid || 0) + (skipped?.notYet || 0);
+    const left = (skipped?.paid || 0) + (skipped?.notYet || 0) + (skipped?.ended || 0);
 
     const ok = await sheet({
       title: 'Quincenas sin facturar',
@@ -370,6 +379,10 @@ export function renderClients(context) {
               skipped.notYet
                 ? h('p.t-sm.c-soft', `${plural(skipped.notYet, 'quincena anterior', 'quincenas anteriores')} `
                   + 'a la fecha en que esas personas empezaron a comer aquí.')
+                : null,
+              skipped.ended
+                ? h('p.t-sm.c-soft', `${plural(skipped.ended, 'quincena posterior', 'quincenas posteriores')} `
+                  + 'al último día de personas que ya terminaron.')
                 : null)
           : null,
 
@@ -480,8 +493,37 @@ export function renderClients(context) {
         }),
 
         h('div.divider'),
+
+        // "Pagó y se va el jueves" — two taps, from the list, without opening
+        // anybody's file. It is the thing a manager is told at the gate.
+        h('div.stack.stack-2',
+          h('div.t-xs.upper.c-faint.w-700',
+            client.endsOn ? `Termina el ${formatDay(client.endsOn)}` : 'Último día que se le sirve'),
+          h('div.row.row--wrap', { style: { gap: '6px' } },
+            [['Hoy', 0], ['Mañana', 1], ['En 2 días', 2], ['En 3 días', 3], ['En 7 días', 7]].map(
+              ([label, days]) => button(label, {
+                variant: 'soft', size: 'sm',
+                onClick: async () => { close(); await lastDay(client, addDays(today(), days)); },
+              })),
+            client.endsOn
+              ? button('Quitar', {
+                  variant: 'ghost', size: 'sm',
+                  onClick: async () => { close(); await lastDay(client, ''); },
+                })
+              : null)),
+
+        h('div.divider'),
         statusButton(client, close)),
     });
+  }
+
+  async function lastDay(client, endsOn) {
+    try {
+      await setEndsOn(client.id, endsOn);
+      toastOk(endsOn
+        ? `${client.name} termina el ${formatDayLong(endsOn)}`
+        : `${client.name} sigue sin fecha de término`);
+    } catch (error) { toastBad(dbMessage(error)); }
   }
 
   /**

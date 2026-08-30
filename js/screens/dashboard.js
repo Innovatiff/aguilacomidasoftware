@@ -51,8 +51,8 @@ function body() {
   const owing = debtors();
   const unread = unreadCount();
   const people = roster();
-  const active = people.filter((row) => row.client.status === 'active');
-  const gaps = people.filter((row) => row.hasGap && row.client.status !== 'inactive');
+  const active = people.filter((row) => row.serving === 'active');
+  const gaps = people.filter((row) => row.hasGap && row.serving !== 'inactive');
 
   return h('div.page__inner.page__inner--flow.stack.stack-4',
     h('div.span-all', moneyHero(cash)),

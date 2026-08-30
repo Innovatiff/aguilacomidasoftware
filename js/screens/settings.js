@@ -22,7 +22,7 @@ import { toastOk, toastBad, confirm, sheet } from '../ui/overlay.js';
 import { session, signOutNow, updateOwnProfile } from '../data/session.js';
 import { watchStaff, addStaff, removeStaff, isValidEmail, normalizeEmail } from '../data/staff.js';
 import { savePricing } from '../data/pricing.js';
-import { store, subscribe, moneyStats, unpriced } from '../data/store.js';
+import { store, subscribe, activeClients, moneyStats, unpriced } from '../data/store.js';
 import { money, number, plural } from '../lib/format.js';
 import { formatStamp } from '../lib/dates.js';
 import { toDate, dbMessage } from '../firebase.js';
@@ -163,7 +163,7 @@ export function renderSettings() {
 
   function numbersCard() {
     const cash = moneyStats();
-    const active = store.clients.filter((client) => client.status === 'active').length;
+    const active = activeClients().length;
 
     return h('div.stack.stack-3',
       sectionLabel('Resumen'),

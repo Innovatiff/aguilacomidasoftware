@@ -26,6 +26,51 @@ export const DEFAULT_GRACE_DAYS = 3;
 /** Monday–Saturday: the default serving week. */
 export const DEFAULT_DELIVERY_DAYS = [1, 2, 3, 4, 5, 6];
 
+/**
+ * Collection days: Wednesday and Sunday.
+ *
+ * The kitchen collects on two days of the week and no others, so a fortnight
+ * has to start on one of them. A period is 14 days, which is exactly two
+ * weeks, so a cycle that starts on a Wednesday lands on a Wednesday forever —
+ * anchoring on a valid day is the whole of the rule.
+ *
+ * The cycle belongs to the person, not to the rancho. Two people at the same
+ * farm can be a week apart because they started a week apart, and the day one
+ * of them pays is the day their own fortnight turns over.
+ */
+export const PAY_WEEKDAYS = [0, 3];
+export const PAY_WEEKDAY_LABELS = { 0: 'domingo', 3: 'miércoles' };
+
+export const isPayDay = (key) => PAY_WEEKDAYS.includes(weekdayOf(key));
+
+/** The first collection day on or after `key`. */
+export function payDayOnOrAfter(key) {
+  for (let i = 0; i < 7; i += 1) {
+    const candidate = addDays(key, i);
+    if (isPayDay(candidate)) return candidate;
+  }
+  return key;
+}
+
+/** The last collection day on or before `key`. */
+export function payDayOnOrBefore(key) {
+  for (let i = 0; i < 7; i += 1) {
+    const candidate = addDays(key, -i);
+    if (isPayDay(candidate)) return candidate;
+  }
+  return key;
+}
+
+/**
+ * The cycle a payment on `key` sets up.
+ *
+ * Somebody who hands over money on Friday the 28th is paying for the fortnight
+ * that begins on the next collection day, not for one starting mid-week — so
+ * the anchor snaps forward. Somebody paying *on* a collection day starts that
+ * same day.
+ */
+export const cycleFromPayment = (key) => payDayOnOrAfter(key);
+
 /** Which cycle a day falls in, counting from the anchor. Can be negative. */
 export function periodIndex(anchor, day = todayKey()) {
   return Math.floor(daysBetween(anchor, day) / PERIOD_DAYS);
@@ -44,6 +89,15 @@ export function periodByIndex(anchor, index) {
 
 export const nextPeriod = (anchor, period) => periodByIndex(anchor, period.index + 1);
 export const prevPeriod = (anchor, period) => periodByIndex(anchor, period.index - 1);
+
+/**
+ * The day the next payment is due: the first day of the next fortnight.
+ *
+ * Not the same as the invoice's `dueDate`, which adds the grace days before a
+ * bill counts as late. This is the day the client turns up — "pagas el
+ * domingo 29" — and it is the number the counter actually quotes.
+ */
+export const payDayAfter = (period) => addDays(period.end, 1);
 
 /** Payment deadline for a period. */
 export function dueDateFor(period, graceDays = DEFAULT_GRACE_DAYS) {

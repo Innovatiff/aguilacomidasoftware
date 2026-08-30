@@ -23,9 +23,8 @@ import {
   query, where, orderBy, serverTimestamp, writeBatch, docData, listData,
 } from '../firebase.js';
 import { today } from '../lib/dates.js';
-import { DEFAULT_DELIVERY_DAYS, DEFAULT_GRACE_DAYS } from '../lib/billing.js';
+import { DEFAULT_DELIVERY_DAYS, DEFAULT_GRACE_DAYS, payDayOnOrAfter } from '../lib/billing.js';
 import { matches } from '../lib/format.js';
-import { farmHasInvoices } from './invoices.js';
 
 const farmsRef = () => collection(db, 'farms');
 const clientsRef = () => collection(db, 'clients');
@@ -45,8 +44,18 @@ const BATCH_LIMIT = 450;
  * change that quietly overwrote all of that would undo real decisions and
  * silently rewrite what those people are charged.
  */
+/*
+ * `cycleAnchor` is deliberately not here.
+ *
+ * A person's fortnight turns over on the collection day their own cycle
+ * started on, which is where their last payment put them — two people at the
+ * same rancho can be a week apart. Copying the farm's cycle down would drag
+ * every one of them onto the same day, re-cutting fortnights that already have
+ * bills against them. The farm still carries one, as the starting point for
+ * somebody newly registered there, and nothing more.
+ */
 export const TERM_FIELDS = [
-  'deliveryWindow', 'cycleAnchor', 'graceDays',
+  'deliveryWindow', 'graceDays',
 ];
 
 export const emptyFarm = () => ({
@@ -60,7 +69,7 @@ export const emptyFarm = () => ({
   // Terms every worker at this farm inherits.
   deliveryDays: [...DEFAULT_DELIVERY_DAYS],
   deliveryWindow: '11:00 – 13:00',
-  cycleAnchor: today(),
+  cycleAnchor: payDayOnOrAfter(today()),
   graceDays: DEFAULT_GRACE_DAYS,
   defaultMealsPerDay: 1,
 });
@@ -122,19 +131,6 @@ export async function createFarm(data, author) {
  */
 export async function updateFarm(farmId, patch, previous) {
   const clean = sanitize(patch);
-
-  // The billing anchor is what cuts this farm's fortnights, and every invoice
-  // id ends in the start date of the period it belongs to. Moving it after
-  // bills exist leaves those dates on no period at all, and the panel then
-  // offers to bill fortnights that overlap ones it already billed. The form
-  // closes the field; this closes the write, because the form is not the rule.
-  if (clean.cycleAnchor !== undefined
-    && previous?.cycleAnchor
-    && clean.cycleAnchor !== previous.cycleAnchor
-    && await farmHasInvoices(farmId)) {
-    throw new Error('Este rancho ya tiene facturas emitidas: el inicio del ciclo no se puede '
-      + 'mover sin volver a cobrar quincenas ya facturadas.');
-  }
 
   await updateDoc(doc(db, 'farms', farmId), { ...clean, updatedAt: serverTimestamp() });
 

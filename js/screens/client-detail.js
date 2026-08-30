@@ -9,15 +9,18 @@ import { icon } from '../lib/icons.js';
 import { screen, topbarButton } from '../ui/shell.js';
 import {
   card, button, badge, avatar, defList, defRow, itemRow, list, sectionLabel,
-  alert, meter, loading, field, input, select, tagList, chargeRows,
+  alert, meter, loading, field, fieldGroup, input, select, tagList, chargeRows,
 } from '../ui/kit.js';
 import { toastOk, toastBad, sheet } from '../ui/overlay.js';
 import { openChargeSheet } from '../ui/charge-sheet.js';
 import { openDebtSheet } from '../ui/debt-sheet.js';
+import { openHistorySheet } from '../ui/history-sheet.js';
 import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
 import { store, subscribe, billingFor, farmById, fortnightPrice } from '../data/store.js';
-import { watchClient, updateClient, moveClient, servingSince } from '../data/clients.js';
+import {
+  watchClient, updateClient, moveClient, servingSince, setEndsOn, servingStatus, daysLeft,
+} from '../data/clients.js';
 import { watchClientInvoices, issueInvoice } from '../data/invoices.js';
 import { watchClientReceipts, totalOf, cancelledIds } from '../data/receipts.js';
 import { openOpeningSheet } from '../ui/opening-sheet.js';
@@ -25,10 +28,12 @@ import { ensureConversation } from '../data/chat.js';
 import {
   periodFor, periodByIndex, projectPeriod, balanceOf, invoiceStatus,
   STATUS_LABEL, STATUS_TONE, invoiceId, isCharge, invoiceTitle, appliedTitle,
+  payDayAfter,
 } from '../lib/billing.js';
 import { tierFor, fortnightCharge, mealsOn } from '../lib/pricing.js';
 import {
-  formatRange, formatDayLong, today, humanDelta, formatDay, WEEKDAYS_SHORT,
+  formatRange, formatDayLong, today, addDays, humanDelta, formatDay,
+  weekdayName, WEEKDAYS_SHORT,
 } from '../lib/dates.js';
 import { money, moneyFull, plural, phone as fmtPhone, telHref, number } from '../lib/format.js';
 import { clientStatusMeta, paymentMethodMeta } from '../lib/model.js';
@@ -113,6 +118,16 @@ export function renderClientDetail(context) {
             badge(clientStatusMeta(model.status).label, clientStatusMeta(model.status).tone,
               clientStatusMeta(model.status).icon)))),
 
+      model.endsOn
+        ? alert(servingStatus(model) === 'inactive'
+          ? `Terminó el ${formatDayLong(model.endsOn)}. Ya no aparece en la libreta ni se le `
+            + 'factura.'
+          : `Último día: ${formatDayLong(model.endsOn)} `
+            + `(${plural(Math.max(0, daysLeft(model)), 'día', 'días')}). Después deja de `
+            + 'aparecer en la libreta.',
+        servingStatus(model) === 'inactive' ? 'bad' : 'warn')
+        : null,
+
       (model.tags || []).length
         ? h('div.stack.stack-2',
             h('div.t-xs.upper.c-faint.w-700', 'No puede comer'),
@@ -125,7 +140,10 @@ export function renderClientDetail(context) {
         model.phone
           ? h('a.btn.btn--ghost.btn--sm', { href: telHref(model.phone) }, icon('phone'), 'Llamar')
           : null,
-        button('Mensaje', { variant: 'ghost', size: 'sm', icon: 'chat', onClick: onChat }))));
+        button('Mensaje', { variant: 'ghost', size: 'sm', icon: 'chat', onClick: onChat }),
+        button(model.endsOn ? 'Cambiar último día' : 'Poner último día', {
+          variant: 'ghost', size: 'sm', icon: 'calendar', onClick: () => setLastDay(model),
+        }))));
   }
 
   /**
@@ -201,7 +219,12 @@ export function renderClientDetail(context) {
             [`${plural(model.mealsPerDay, 'comida', 'comidas')}/día`,
               `${projection.days} días`,
               projection.extraMeals ? `+${projection.extraMeals} extra` : null,
-            ].filter(Boolean).join(' · '))),
+            ].filter(Boolean).join(' · ')),
+          // The number the counter actually quotes: not the invoice's due date
+          // with its grace days, but the day this person turns up again.
+          h('div.t-sm.w-600', { style: { marginTop: '2px' } },
+            `Paga otra vez el ${weekdayName(payDayAfter(period))} `
+            + `${formatDay(payDayAfter(period))}`)),
 
         priced
           ? null
@@ -221,7 +244,7 @@ export function renderClientDetail(context) {
       loaded
         ? (rows.length
             ? list(rows.slice(0, 6).map((invoice) => invoiceRow(invoice)), { card: true })
-            : card(h('p.t-sm.c-soft.center', 'Todavía no hay facturas para este rancho.')))
+            : card(h('p.t-sm.c-soft.center', 'Todavía no hay facturas para este cliente.')))
         : loading());
   }
 
@@ -249,12 +272,23 @@ export function renderClientDetail(context) {
             last
               ? h('p.t-xs.c-faint', `Última vez que pagó: ${formatDayLong(last.date)}.`)
               : null,
-            list(receipts.slice(0, 12).map((row) => receiptRow(row, voided.has(row.id))), { card: true }))
+            list(receipts.slice(0, 12).map((row) => receiptRow(row, voided.has(row.id))), { card: true }),
+            button('Registrar un pago anterior', {
+              variant: 'ghost', block: true, size: 'sm', icon: 'clipboard',
+              onClick: () => addHistory(client),
+            }))
         : card(h('div.stack.stack-3',
             h('p.t-sm.c-soft.center', 'Todavía no se le ha registrado ningún pago.'),
+            // The whole first notebook is in this state: registered before
+            // payments could be recorded at all. Typing the last one in is
+            // what puts their fortnight where it belongs.
+            button('Registrar un pago anterior', {
+              variant: 'primary', block: true, icon: 'clipboard',
+              onClick: () => addHistory(client),
+            }),
             !invoices.length
               ? button('Traer saldo del cuaderno', {
-                  variant: 'ghost', block: true, icon: 'clipboard',
+                  variant: 'ghost', block: true, icon: 'receipt',
                   onClick: () => bringOverBalance(client),
                 })
               : null)));
@@ -281,6 +315,76 @@ export function renderClientDetail(context) {
           : h('span.t-xs.c-faint', receipt.folio || ''),
       onClick: () => go(`/receipts/${receipt.id}`),
     });
+  }
+
+  /** What they paid before the software existed — history, not collection. */
+  async function addHistory(model) {
+    await openHistorySheet({
+      client: model,
+      author: { uid: session.uid, name: session.displayName },
+    });
+  }
+
+  /**
+   * "Pagó y se va el jueves."
+   *
+   * A date the kitchen already knows, written down once so nobody has to
+   * remember to switch this person off on a morning they are not thinking
+   * about it. From the day after, they leave the libreta and stop being
+   * billed by themselves.
+   */
+  async function setLastDay(model) {
+    const choices = [
+      ['Hoy es su último día', 0],
+      ['Mañana', 1],
+      ['En 2 días', 2],
+      ['En 3 días', 3],
+      ['En una semana', 7],
+    ];
+
+    await sheet({
+      title: 'Hasta cuándo se le sirve',
+      build: (close) => h('div.stack.stack-3',
+        h('p.t-sm.c-soft',
+          `Después de ese día ${model.name} deja de aparecer en la libreta y no se le `
+          + 'factura ninguna quincena más. Su saldo pendiente no se toca.'),
+
+        model.endsOn
+          ? alert(`Ahora mismo termina el ${formatDayLong(model.endsOn)}.`,
+              model.endsOn < today() ? 'bad' : 'warn')
+          : null,
+
+        ...choices.map(([label, days]) => button(label, {
+          variant: days === 0 ? 'danger-soft' : 'ghost', block: true,
+          onClick: async () => { close(); await saveLastDay(model, addDays(today(), days)); },
+        })),
+
+        fieldGroup({
+          label: 'Otra fecha',
+          control: input({
+            type: 'date', value: model.endsOn || '', min: today(),
+            onchange: async (event) => {
+              if (!event.target.value) return;
+              close();
+              await saveLastDay(model, event.target.value);
+            },
+          }),
+        }),
+
+        model.endsOn
+          ? button('Quitar la fecha — sigue indefinidamente', {
+              variant: 'ghost', block: true, icon: 'refresh',
+              onClick: async () => { close(); await saveLastDay(model, ''); },
+            })
+          : null),
+    });
+  }
+
+  async function saveLastDay(model, endsOn) {
+    try {
+      await setEndsOn(model.id, endsOn);
+      toastOk(endsOn ? `Termina el ${formatDay(endsOn)}` : 'Sin fecha de término');
+    } catch (error) { toastBad(error?.message || dbMessage(error)); }
   }
 
   /** A debt the billing cycle did not produce: it goes on as its own bill. */
