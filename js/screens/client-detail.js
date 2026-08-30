@@ -20,6 +20,7 @@ import { session } from '../data/session.js';
 import { store, subscribe, billingFor, farmById, fortnightPrice } from '../data/store.js';
 import {
   watchClient, updateClient, moveClient, servingSince, setEndsOn, servingStatus, daysLeft,
+  cycleIsSet,
 } from '../data/clients.js';
 import { watchClientInvoices, issueInvoice } from '../data/invoices.js';
 import { watchClientReceipts, totalOf, cancelledIds } from '../data/receipts.js';
@@ -224,7 +225,17 @@ export function renderClientDetail(context) {
           // with its grace days, but the day this person turns up again.
           h('div.t-sm.w-600', { style: { marginTop: '2px' } },
             `Paga otra vez el ${weekdayName(payDayAfter(period))} `
-            + `${formatDay(payDayAfter(period))}`)),
+            + `${formatDay(payDayAfter(period))}`),
+
+          // Whether that date is a day somebody confirmed or a placeholder
+          // inherited from the rancho. While the notebook is being migrated
+          // across, most of them are placeholders, and quoting one as if it
+          // were settled is how the wrong day gets told to a client.
+          h('div.t-xs.c-faint',
+            cycleIsSet(model)
+              ? `Quincena fijada con el pago del ${formatDay(model.cycleSetOn)}.`
+              : 'Su quincena todavía es la del rancho. Se fija sola con el próximo pago '
+                + 'que le registres.')),
 
         priced
           ? null

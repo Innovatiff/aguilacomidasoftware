@@ -11,7 +11,9 @@
  * sign-out so a second account never sees the previous one's data.
  */
 
-import { watchClients, servingStatus, isServing, daysLeft } from './clients.js';
+import {
+  watchClients, servingStatus, isServing, daysLeft, cycleIsSet,
+} from './clients.js';
 import { watchFarms } from './farms.js';
 import { watchPricing } from './pricing.js';
 import { watchOutstanding, summarizeInvoices, groupByClient } from './invoices.js';
@@ -226,6 +228,10 @@ export function clientState(client) {
     // The day they pay next, which is the first day of the fortnight after
     // this one — not the invoice's due date, which adds the grace days.
     payDay: payDayAfter(period),
+    // Whether their fortnight is a day somebody confirmed, or still the
+    // rancho's placeholder. The roster filters on it while the notebook is
+    // being migrated across.
+    cycleSet: cycleIsSet(client),
     serving,
     endsOn: client.endsOn || null,
     daysLeft: daysLeft(client, state.day),

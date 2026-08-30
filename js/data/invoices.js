@@ -21,7 +21,7 @@ import {
 import { folioFor } from './receipts.js';
 import {
   invoiceId, draftInvoice, draftCharge, chargeIdFor, isCharge, invoiceTitle,
-  balanceOf, invoiceStatus, round2, periodFor, periodByIndex,
+  balanceOf, invoiceStatus, round2, periodFor, periodByIndex, cycleFromPayment,
 } from '../lib/billing.js';
 import { fortnightCharge } from '../lib/pricing.js';
 import { today, addDays } from '../lib/dates.js';
@@ -262,14 +262,35 @@ export async function recordPastPayment({ client, amount, method, date, note }, 
  * half-applied: the cash is already in the drawer by the time this runs, so it
  * either lands completely or not at all.
  */
-export async function takePayment({ client, pricing, amount, method, reference, note, date }, author) {
+export async function takePayment(
+  { client, pricing, amount, method, reference, note, date, setCycle = false }, author,
+) {
   const total = round2(amount);
   if (!(total > 0)) throw new Error('El monto debe ser mayor a cero.');
 
   const charge = fortnightCharge(client, pricing);
   const price = charge.amount;
   const day = date || today();
-  const anchor = client.cycleAnchor || day;
+
+  /*
+   * When this payment sets the cycle, it has to set it *before* anything else
+   * happens here.
+   *
+   * The fortnights this money is applied to are cut from the anchor, and every
+   * invoice id ends in the start date of the period it belongs to. Re-anchoring
+   * afterwards would leave the bills this very payment just wrote sitting on
+   * dates that no period lands on any more — the same way moving a rancho's
+   * cycle used to. So the new anchor is decided first and everything below is
+   * built from it.
+   *
+   * It snaps to a collection day: somebody paying on Thursday the 20th is
+   * paying for the fortnight that opens on Saturday the 22nd, not for one
+   * starting mid-week.
+   */
+  const anchor = setCycle
+    ? cycleFromPayment(day)
+    : (client.cycleAnchor || cycleFromPayment(day));
+  const payer = setCycle ? { ...client, cycleAnchor: anchor } : client;
   const current = periodFor(anchor, today());
 
   // Everything unpaid today, plus the fortnights that could be paid ahead.
@@ -328,7 +349,7 @@ export async function takePayment({ client, pricing, amount, method, reference, 
     for (const row of rows) {
       const draft = row.data
         || (row.period && price > 0
-          ? { ...draftInvoice(client, row.period, charge, 0), issuedByName: author?.name || '' }
+          ? { ...draftInvoice(payer, row.period, charge, 0), issuedByName: author?.name || '' }
           : null);
       if (!draft) continue;
 
@@ -409,6 +430,7 @@ export async function takePayment({ client, pricing, amount, method, reference, 
       date: day,
       applied,
       balanceAfter,
+      ...(setCycle ? { setCycleTo: anchor } : {}),
       takenByName: author?.name || '',
       takenByUid: author?.uid || null,
       folio: folioFor(receiptRef.id, day),
@@ -416,8 +438,18 @@ export async function takePayment({ client, pricing, amount, method, reference, 
     };
     tx.set(receiptRef, receipt);
 
-    if (paidThrough && paidThrough !== (client.paidThrough || null)) {
-      tx.update(clientRef, { paidThrough, updatedAt: serverTimestamp() });
+    // One write for whatever actually changed about this person.
+    const patch = {};
+    if (paidThrough && paidThrough !== (client.paidThrough || null)) patch.paidThrough = paidThrough;
+    if (setCycle) {
+      patch.cycleAnchor = anchor;
+      // The day the cycle was fixed, and from which payment. Its absence is
+      // how every screen knows a client is still on the rancho's inherited
+      // default rather than on a cycle somebody confirmed.
+      patch.cycleSetOn = day;
+    }
+    if (Object.keys(patch).length) {
+      tx.update(clientRef, { ...patch, updatedAt: serverTimestamp() });
     }
 
     return { id: receiptRef.id, ...receipt, at: new Date() };

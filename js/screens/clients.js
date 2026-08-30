@@ -63,6 +63,10 @@ const FILTERS = [
   { value: 'inactive', label: 'Inactivos',  match: (row) => row.client.status === 'inactive' },
   { value: 'diet',     label: 'Con restricciones',
     match: (row) => (row.client.tags || []).length > 0 },
+  // The migration list: everybody still on their rancho's placeholder cycle
+  // rather than on a day somebody confirmed. It empties as payments come in.
+  { value: 'nocycle',  label: 'Sin quincena fija',
+    match: (row) => row.serving !== 'inactive' && !row.cycleSet },
   { value: 'gaps',     label: 'Revisar',    match: (row) => row.hasGap },
 ];
 

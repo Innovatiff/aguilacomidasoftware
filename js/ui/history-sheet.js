@@ -90,7 +90,10 @@ export function openHistorySheet({ client, author }) {
             const receipt = await recordPastPayment(
               { client, amount: value, method, date, note }, author);
             if (setCycle) {
-              await updateClient(client.id, { cycleAnchor: cycleFromPayment(date) });
+              await updateClient(client.id, {
+                cycleAnchor: cycleFromPayment(date),
+                cycleSetOn: date,
+              });
             }
             toastOk(`Pago registrado · ${receipt.folio}`);
             close(receipt);

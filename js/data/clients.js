@@ -72,6 +72,22 @@ export const emptyClient = (farm) => ({
 });
 
 /**
+ * Whether somebody's fortnight has actually been set, or is still the default.
+ *
+ * A client registered at a rancho inherits that rancho's date as a starting
+ * point. It is a guess: nobody has said "this person pays on Saturdays". The
+ * moment a payment fixes the cycle — at the counter or from the notebook —
+ * `cycleSetOn` records the day it came from, and that is what tells every
+ * screen the difference between a real cycle and a placeholder.
+ *
+ * It is also what keeps the two rules from fighting. Paying late must never
+ * push somebody's day forward; but the first payment the system ever sees from
+ * somebody has no day to push. So the offer to set the cycle is on by default
+ * exactly while this is empty, and off after.
+ */
+export const cycleIsSet = (client) => !!client?.cycleSetOn;
+
+/**
  * Whether this person is still being served today.
  *
  * `endsOn` is the kitchen writing down something it already knows: "pagó y se

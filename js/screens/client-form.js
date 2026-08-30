@@ -316,8 +316,12 @@ export async function renderClientForm(context) {
             // Snapped rather than refused: somebody typing "pagó el 28" means
             // the fortnight that starts on the next collection day, and making
             // them hunt for the right square helps nobody.
+            // Typing it by hand is somebody saying "this is their day", which
+            // is the same statement a payment makes. Marked as set either way,
+            // so the counter stops offering to move it.
             onchange: (e) => updateAndRedraw({
               cycleAnchor: payDayOnOrAfter(e.target.value || today()),
+              cycleSetOn: today(),
             }),
           }),
         }),

@@ -13,16 +13,20 @@
 
 import { h, mount } from '../lib/dom.js';
 import { sheet, toastOk, toastBad } from './overlay.js';
-import { field, moneyInput, input, select, textarea, defList, defRow, button, alert } from './kit.js';
+import {
+  field, moneyInput, input, select, textarea, defList, defRow, button, alert, switchRow,
+} from './kit.js';
 import { icon } from '../lib/icons.js';
 import { takePayment } from '../data/invoices.js';
+import { cycleIsSet } from '../data/clients.js';
 import { postSystemMessage } from '../data/chat.js';
 import {
   balanceOf, periodFor, periodByIndex, isCharge, invoiceTitle, appliedTitle,
+  cycleFromPayment, payDayAfter, payDaysInWords,
 } from '../lib/billing.js';
 import { chargeFor } from '../lib/pricing.js';
 import { money, moneyFull, plural } from '../lib/format.js';
-import { formatRange, today } from '../lib/dates.js';
+import { formatRange, formatDay, weekdayName, today } from '../lib/dates.js';
 import { PAYMENT_METHODS } from '../lib/model.js';
 import { dbMessage } from '../firebase.js';
 
@@ -48,6 +52,18 @@ export function openChargeSheet({ client, invoices = [], pricing, author }) {
   // store, not when the bill falls due.
   const suggested = balance > 0.005 ? balance : fortnight;
 
+  /*
+   * The first payment the system sees from somebody sets where their fortnight
+   * falls; the ones after it never move it again.
+   *
+   * Both halves are the kitchen's rule. A client registered from the notebook
+   * carries their rancho's date as a placeholder — nobody has said which day is
+   * theirs — and the payment they make at the counter is what says it. But once
+   * it is said, paying five days late must not push their day forward, or a
+   * late payer drifts for free. `cycleSetOn` is the line between the two.
+   */
+  const cycleKnown = cycleIsSet(client);
+
   return sheet({
     title: 'Cobrar',
     build: (close) => {
@@ -56,10 +72,12 @@ export function openChargeSheet({ client, invoices = [], pricing, author }) {
       let reference = '';
       let note = '';
       let date = today();
+      let setCycle = !cycleKnown;
       let busy = false;
 
       const submit = h('button.btn.btn--primary.btn--block.btn--lg', { type: 'submit' });
       const covers = h('div.t-sm.c-soft');
+      const cycleLine = h('div.t-sm.c-soft');
 
       const amountBox = moneyInput({
         value: suggested,
@@ -77,6 +95,15 @@ export function openChargeSheet({ client, invoices = [], pricing, author }) {
         const value = Number(amount) || 0;
         mount(submit, icon('cash'), `Cobrar ${money(value)}`);
         mount(covers, explain(value, { owed, balance, fortnight, anchor, current }));
+
+        const next = cycleFromPayment(date);
+        const period = periodFor(next, today());
+        mount(cycleLine, setCycle
+          ? `Su quincena queda en ${weekdayName(next)}: empieza el ${formatDay(next)} `
+            + `y paga otra vez el ${weekdayName(payDayAfter(period))} `
+            + `${formatDay(payDayAfter(period))}.`
+          : `Su quincena no se mueve: sigue pagando el ${weekdayName(payDayAfter(current))} `
+            + `${formatDay(payDayAfter(current))}.`);
       }
 
       const form = h('form.stack.stack-4', {
@@ -97,7 +124,8 @@ export function openChargeSheet({ client, invoices = [], pricing, author }) {
 
           try {
             const receipt = await takePayment(
-              { client, pricing, amount: value, method, reference, note, date }, author);
+              { client, pricing, amount: value, method, reference, note, date, setCycle },
+              author);
             await announce(receipt, client);
             toastOk(`Cobrado ${money(value)} · ${receipt.folio}`);
             close(receipt);
@@ -152,9 +180,20 @@ export function openChargeSheet({ client, invoices = [], pricing, author }) {
         label: 'Fecha del pago',
         control: input({
           type: 'date', value: date,
-          onchange: (event) => { date = event.target.value || today(); },
+          onchange: (event) => { date = event.target.value || today(); repaint(); },
         }),
       }),
+
+      switchRow(cycleKnown ? 'Reajustar su quincena con este pago' : 'Fijar su quincena con este pago', {
+        checked: !cycleKnown,
+        hint: cycleKnown
+          ? `Su quincena ya está fijada. Actívalo sólo si de verdad vuelve a empezar — `
+            + 'pagar tarde no le mueve el día.'
+          : `Primera vez que el sistema le registra un pago. Se cobra en ${payDaysInWords()}: `
+            + 'si pagó otro día, la quincena arranca el siguiente día de cobro.',
+        onChange: (value) => { setCycle = value; repaint(); },
+      }),
+      cycleLine,
 
       field({
         label: 'Referencia',
