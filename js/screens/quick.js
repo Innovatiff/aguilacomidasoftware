@@ -20,6 +20,7 @@
 import { h, mount } from '../lib/dom.js';
 import { icon } from '../lib/icons.js';
 import { screen } from '../ui/shell.js';
+import { emptyState, button } from '../ui/kit.js';
 import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
 import { runFlow } from '../ui/flow.js';
@@ -43,12 +44,31 @@ import {
   today, addDays, formatDay, formatDayLong, weekdayName, capitalize, WEEKDAYS_SHORT,
 } from '../lib/dates.js';
 
+/**
+ * The width below which the counter screen is not offered.
+ *
+ * 900px is the panel's own breakpoint — the width at which the tab bar becomes
+ * a rail — so the app has one idea of "small", not two. Below it this screen
+ * cannot be what it is: the tiles are three across, the keypad is a grid of
+ * twelve, and Atrás and Siguiente sit side by side at 62px tall. Squeezed onto
+ * a phone all of that becomes exactly the cramped, mis-tappable thing it was
+ * built to replace — and on a phone the ordinary panel is already good.
+ *
+ * `css/pos.css` hides the way in below the same number. Change both together.
+ */
+export const POS_MIN_WIDTH = 900;
+
+const wideEnough = () => window.innerWidth >= POS_MIN_WIDTH;
+
 const author = () => ({ uid: session.uid, name: session.displayName });
 const round2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
 const owedBy = (client) => billingFor(client)?.balance || 0;
 
 export function renderQuick() {
   let panel = null;
+  // The action running on top, if any — so a window that shrinks below the
+  // threshold can close it rather than leave it squeezed.
+  let flow = null;
   // What has come in today. A till closes on this number, and the tile grid
   // was leaving the room for it empty.
   let takings = [];
@@ -61,18 +81,72 @@ export function renderQuick() {
     if (panel && !document.querySelector('.pos--flow')) paintTiles();
   });
 
-  screen({ title: 'Acción rápida', hideTabs: true, body: h('div') });
+  /**
+   * Two screens behind one address.
+   *
+   * Wide enough, and this is the counter. Too narrow — a phone, or a laptop
+   * window dragged small — and it says so and points back, rather than drawing
+   * a POS nobody can hit. Re-decided on resize because the second case is
+   * something somebody does *while* it is open.
+   */
+  function apply() {
+    if (wideEnough()) { mountPos(); return; }
+    unmountPos();
+    screen({
+      title: 'Acción rápida',
+      backTo: '/',
+      tab: 'home',
+      body: h('div.page__inner', emptyState({
+        icon: 'bolt',
+        title: 'Es para la pantalla de la tienda',
+        text: 'Acción rápida está hecha para la computadora del mostrador: botones grandes, '
+          + 'un teclado numérico y una pregunta por pantalla. En el teléfono no cabe, y aquí '
+          + 'el panel normal hace lo mismo con menos vueltas.',
+        action: button('Ir a Clientes', {
+          variant: 'primary', block: true, icon: 'users', onClick: () => go('/clients'),
+        }),
+      })),
+    });
+  }
 
-  panel = h('div.pos.pos--home',
-    h('header.pos__bar',
-      h('button.pos__exit', { type: 'button', onclick: () => go('/') },
-        icon('chevronL'), h('span', 'Salir')),
-      h('span.pos__title', 'Acción rápida'),
-      h('span.pos__day', capitalize(formatDayLong(today())))),
-    h('div.pos__body', h('div.pos__inner', { id: 'quick-tiles' })));
+  function mountPos() {
+    if (panel) return;
+    screen({ title: 'Acción rápida', hideTabs: true, body: h('div') });
 
-  document.body.append(panel);
-  paintTiles();
+    panel = h('div.pos.pos--home',
+      h('header.pos__bar',
+        h('button.pos__exit', { type: 'button', onclick: () => go('/') },
+          icon('chevronL'), h('span', 'Salir')),
+        h('span.pos__title', 'Acción rápida'),
+        h('span.pos__day', capitalize(formatDayLong(today())))),
+      h('div.pos__body', h('div.pos__inner', { id: 'quick-tiles' })));
+
+    document.body.append(panel);
+    paintTiles();
+  }
+
+  function unmountPos() {
+    flow?.close();
+    flow = null;
+    panel?.remove();
+    panel = null;
+  }
+
+  /** Runs one action, remembering it so a shrinking window can close it. */
+  function start(config) {
+    flow = runFlow({ ...config, onExit: () => { flow = null; paintTiles(); } });
+  }
+
+  // Cheap and unthrottled would run on every pixel of a drag; a frame's delay
+  // is invisible and turns a drag into one decision.
+  let resizeTimer;
+  const onResize = () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(apply, 150);
+  };
+  window.addEventListener('resize', onResize);
+
+  apply();
 
   function paintTiles() {
     // The receipts listener is attached before the panel is built, and can
@@ -179,7 +253,7 @@ export function renderQuick() {
   /* --- Cobrar ------------------------------------------------------------- */
 
   function flowCharge() {
-    runFlow({
+    start({
       title: 'Cobrar',
       subject: subjectOf,
       state: { amount: 0, setCycle: false },
@@ -243,7 +317,6 @@ export function renderQuick() {
           ? `Su quincena queda en ${weekdayName(cycleFromPayment(today()))}.`
           : null,
       }),
-      onExit: paintTiles,
     });
   }
 
@@ -266,7 +339,7 @@ export function renderQuick() {
   /* --- Comidas al día ----------------------------------------------------- */
 
   function flowMeals() {
-    runFlow({
+    start({
       title: 'Cambiar comidas',
       subject: subjectOf,
       steps: (s) => [
@@ -310,14 +383,13 @@ export function renderQuick() {
         what: `${plural(s.meals, 'comida', 'comidas')} al día`,
         who: s.client.name,
       }),
-      onExit: paintTiles,
     });
   }
 
   /* --- Los días que come -------------------------------------------------- */
 
   function flowWeek() {
-    runFlow({
+    start({
       title: 'Cambiar días',
       subject: subjectOf,
       steps: (s) => [
@@ -355,14 +427,13 @@ export function renderQuick() {
       ],
       commit: (s) => updateClient(s.client.id, { deliveryDays: s.days }),
       done: (s) => ({ what: 'Días actualizados', who: `${s.client.name} · ${dayWords(s.days)}` }),
-      onExit: paintTiles,
     });
   }
 
   /* --- El día de pago ----------------------------------------------------- */
 
   function flowCycle() {
-    runFlow({
+    start({
       title: 'Cambiar quincena',
       subject: subjectOf,
       steps: (s) => [
@@ -408,14 +479,13 @@ export function renderQuick() {
         what: `Quincena en ${weekdayName(s.anchor)}`,
         who: `${s.client.name} · desde el ${formatDay(s.anchor)}`,
       }),
-      onExit: paintTiles,
     });
   }
 
   /* --- Alta de cliente ---------------------------------------------------- */
 
   function flowNew() {
-    runFlow({
+    start({
       title: 'Nuevo cliente',
       state: { name: '', farmId: '', locationId: '', meals: 1 },
       steps: (s) => {
@@ -499,14 +569,13 @@ export function renderQuick() {
         { ...emptyClient(farmById(s.farmId)), name: s.name.trim(), locationId: s.locationId, mealsPerDay: s.meals },
         farmById(s.farmId), author()),
       done: (s) => ({ what: 'Cliente dado de alta', who: s.name.trim() }),
-      onExit: paintTiles,
     });
   }
 
   /* --- Una deuda aparte --------------------------------------------------- */
 
   function flowDebt() {
-    runFlow({
+    start({
       title: 'Agregar deuda',
       subject: subjectOf,
       state: { amount: 0, reason: '' },
@@ -555,14 +624,13 @@ export function renderQuick() {
       commit: (s) => addCharge(
         { client: s.client, amount: s.amount, reason: s.reason.trim(), date: today() }, author()),
       done: (s) => ({ what: `Deuda de ${money(s.amount)}`, who: `${s.client.name} · ${s.reason.trim()}` }),
-      onExit: paintTiles,
     });
   }
 
   /* --- Pausar o reactivar ------------------------------------------------- */
 
   function flowStatus() {
-    runFlow({
+    start({
       title: 'Pausar o reactivar',
       subject: subjectOf,
       steps: (s) => [
@@ -602,14 +670,13 @@ export function renderQuick() {
       ],
       commit: (s) => setClientStatus(s.client.id, s.status),
       done: (s) => ({ what: capitalize(statusWord(s.status)), who: s.client.name }),
-      onExit: paintTiles,
     });
   }
 
   /* --- Último día --------------------------------------------------------- */
 
   function flowLastDay() {
-    runFlow({
+    start({
       title: 'Último día',
       subject: subjectOf,
       steps: (s) => [
@@ -649,11 +716,16 @@ export function renderQuick() {
       ],
       commit: (s) => setEndsOn(s.client.id, s.endsOn),
       done: (s) => ({ what: `Come hasta el ${formatDay(s.endsOn)}`, who: s.client.name }),
-      onExit: paintTiles,
     });
   }
 
-  return () => { stop(); stopTill?.(); panel?.remove(); };
+  return () => {
+    window.removeEventListener('resize', onResize);
+    clearTimeout(resizeTimer);
+    stop();
+    stopTill?.();
+    unmountPos();
+  };
 }
 
 /* --- Small helpers ---------------------------------------------------------- */

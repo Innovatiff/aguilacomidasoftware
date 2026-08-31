@@ -538,3 +538,16 @@
 .quickcta__ico svg { width: 30px; height: 30px; }
 .quickcta__t { font-size: var(--fs-lg); font-weight: 800; }
 .quickcta__s { font-size: var(--fs-sm); color: var(--ink-300); }
+
+/*
+ * Gone below 900px — the same width at which `renderQuick` turns a phone away
+ * (POS_MIN_WIDTH in js/screens/quick.js; change both together). Offering a way
+ * into a screen that then says "not here" is worse than not offering it.
+ *
+ * It has to come *after* the rule above: a media query adds no specificity, so
+ * with both at (0,1,0) the later one wins and an earlier block would simply
+ * never apply.
+ */
+@media (max-width: 899px) {
+  .quickcta { display: none; }
+}
