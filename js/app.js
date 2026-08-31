@@ -24,6 +24,7 @@ import { renderClientForm } from './screens/client-form.js';
 import { renderClientDetail } from './screens/client-detail.js';
 import { renderBilling } from './screens/billing.js';
 import { renderCheckout } from './screens/checkout.js';
+import { renderQuick } from './screens/quick.js';
 import { renderInvoice } from './screens/invoice.js';
 import { renderReceipt } from './screens/receipt.js';
 import { renderMessages } from './screens/messages.js';
@@ -129,6 +130,7 @@ function registerRoutes() {
   register('/billing', renderBilling);
   // The counter: find somebody and take their money.
   register('/cobrar', renderCheckout);
+  register('/rapido', renderQuick);
   register('/invoices/:id', renderInvoice);
   register('/receipts/:id', renderReceipt);
   register('/messages', renderMessages);

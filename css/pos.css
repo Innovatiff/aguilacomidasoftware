@@ -1,0 +1,534 @@
+/* ==========================================================================
+   Acción rápida — the counter screen.
+
+   This runs on the store's point-of-sale PC: an old Windows machine with a
+   low-resolution panel, poor contrast and a mouse. Everything here is sized
+   and drawn for that screen, and it is scoped to `.pos` so the panel the
+   manager uses on a good laptop is left exactly as it was.
+
+   What a bad panel does to an interface, and what this does about it:
+
+     - Thin lines alias away.        Borders are 3px, never 1px.
+     - Soft shadows band and smear.  The only shadow is a hard offset, like
+                                     the edge of a physical key.
+     - Low contrast disappears.      No grey text on white; the softest text
+                                     here is near-black, and disabled controls
+                                     say so with a pattern, not a tint.
+     - Small type is unreadable.     The base is 20px, questions are 30px, and
+                                     money is 44px.
+     - A mouse is not a fingertip,   Nothing is smaller than 56px tall, and the
+       but the pointer is coarse     two footer buttons are 72px.
+       and the operator is fast.
+
+   Colour is never the only signal: a chosen tile is filled *and* outlined
+   *and* carries a check mark.
+   ========================================================================== */
+
+.pos {
+  --pos-line: #14171b;
+  --pos-line-soft: #8a929c;
+  --pos-fill: #ffffff;
+  --pos-sunken: #eef1f4;
+  --pos-text: #14171b;
+  --pos-soft: #414a55;
+  --pos-brand: #d95c05;
+  --pos-brand-dark: #a54304;
+  --pos-ok: #0f7a3d;
+  --pos-bad: #b91c1c;
+
+  --pos-r: 10px;
+  --pos-key: 4px;              /* the hard shadow that makes a key look like one */
+
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  background: var(--pos-sunken);
+  color: var(--pos-text);
+  font-size: 20px;
+  line-height: 1.35;
+  /* Old Windows machines rarely have Inter; Segoe is what they do have, and a
+     font that fails to load is a font that renders in something worse. */
+  font-family: "Segoe UI", Inter, Tahoma, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.pos *, .pos *::before, .pos *::after { box-sizing: border-box; }
+
+/* --- Frame ---------------------------------------------------------------- */
+
+.pos__bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  background: var(--pos-line);
+  color: #ffffff;
+  border-bottom: 3px solid var(--pos-brand);
+  flex: none;
+}
+
+.pos__title { font-size: 26px; font-weight: 800; letter-spacing: -0.01em; }
+.pos__day {
+  margin-left: auto;
+  font-size: 17px; font-weight: 700; color: #cfd5dd;
+  white-space: nowrap;
+}
+.pos__step {
+  margin-left: 14px;
+  font-size: 18px; font-weight: 700;
+  padding: 6px 14px;
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.pos__exit {
+  display: inline-flex; align-items: center; gap: 8px;
+  min-height: 48px; padding: 0 18px;
+  font: inherit; font-size: 18px; font-weight: 700;
+  color: #ffffff; background: transparent;
+  border: 3px solid #ffffff; border-radius: var(--pos-r);
+  cursor: pointer;
+}
+.pos__exit:hover { background: rgba(255, 255, 255, .16); }
+.pos__exit svg { width: 22px; height: 22px; }
+
+/* The scrolling middle. `min-height: 0` or the flex child refuses to scroll. */
+.pos__body { flex: 1; min-height: 0; overflow-y: auto; position: relative; }
+.pos__inner { max-width: 900px; margin: 0 auto; padding: 22px 18px 28px; }
+
+/* --- Who this is about ----------------------------------------------------
+   Once somebody is chosen their name stays on screen. Losing sight of it two
+   steps later, with a queue at the counter, is how the wrong person gets
+   charged and nobody notices. */
+
+.pos__subject {
+  flex: none;
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 18px;
+  background: var(--pos-fill);
+  border-bottom: 3px solid var(--pos-line);
+}
+.pos__subjectmark {
+  width: 40px; height: 40px; flex: none;
+  display: grid; place-items: center;
+  border: 3px solid var(--pos-brand); border-radius: 999px;
+  color: var(--pos-brand);
+  font-size: 15px; font-weight: 900;
+}
+.pos__subjectname { font-size: 20px; font-weight: 800; }
+.pos__subjectwhere { font-size: 16px; color: var(--pos-soft); }
+
+/* --- One slide ------------------------------------------------------------ */
+
+.pos__q {
+  font-size: 30px; font-weight: 800; line-height: 1.2;
+  margin: 0 0 4px;
+}
+.pos__hint {
+  font-size: 18px; color: var(--pos-soft);
+  margin: 0 0 20px;
+}
+
+/* Enter from the side it came from. Short on purpose: at a counter a
+   transition that announces itself is a transition in the way. */
+@keyframes pos-in-next { from { opacity: 0; transform: translateX(34px); } }
+@keyframes pos-in-back { from { opacity: 0; transform: translateX(-34px); } }
+.pos__slide { animation: pos-in-next 190ms cubic-bezier(.2, .7, .3, 1) both; }
+.pos__slide--back { animation-name: pos-in-back; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pos__slide { animation: none; }
+}
+
+/* --- Footer: back and next, always in the same two places ----------------- */
+
+.pos__foot {
+  flex: none;
+  display: flex; gap: 14px;
+  padding: 14px 18px;
+  background: var(--pos-fill);
+  border-top: 3px solid var(--pos-line);
+}
+.pos__foot > * { flex: 1; }
+/* The wrapper stretches, and the button has to stretch with it — a bare
+   inline-flex button shrink-wraps, which is why the finish screen ended up
+   with a small button floating at the left of a full-width footer. */
+.pos__foot > .pos__next { flex: 2; display: flex; }
+.pos__foot > .pos__next > .posbtn { flex: 1; }
+
+.posbtn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  min-height: 72px; padding: 0 20px;
+  font: inherit; font-size: 22px; font-weight: 800;
+  border-radius: var(--pos-r);
+  border: 3px solid var(--pos-line);
+  background: var(--pos-fill);
+  color: var(--pos-text);
+  cursor: pointer;
+  box-shadow: 0 var(--pos-key) 0 var(--pos-line);
+  transform: translateY(0);
+  transition: transform 60ms linear, box-shadow 60ms linear;
+}
+.posbtn:active { transform: translateY(var(--pos-key)); box-shadow: 0 0 0 var(--pos-line); }
+.posbtn:focus-visible { outline: 4px solid var(--pos-brand); outline-offset: 3px; }
+.posbtn svg { width: 26px; height: 26px; }
+
+.posbtn--go {
+  background: var(--pos-brand); color: #ffffff;
+  border-color: var(--pos-brand-dark);
+  box-shadow: 0 var(--pos-key) 0 var(--pos-brand-dark);
+}
+.posbtn--go:active { box-shadow: 0 0 0 var(--pos-brand-dark); }
+
+.posbtn--done {
+  background: var(--pos-ok); color: #ffffff;
+  border-color: #0a5a2c; box-shadow: 0 var(--pos-key) 0 #0a5a2c;
+}
+.posbtn--done:active { box-shadow: 0 0 0 #0a5a2c; }
+
+/* Disabled has to be obvious without relying on a colour a bad panel washes
+   out, so it is also striped and loses its key shadow. */
+.posbtn:disabled {
+  cursor: not-allowed;
+  color: #5b6673;
+  border-color: var(--pos-line-soft);
+  box-shadow: none;
+  transform: none;
+  background:
+    repeating-linear-gradient(135deg,
+      #e6e9ed 0 10px, #dce0e5 10px 20px);
+}
+
+/* --- Tiles: the grid on the home screen and every pick-one step ----------- */
+
+.postiles { display: grid; gap: 14px; }
+.postiles--2 { grid-template-columns: repeat(2, 1fr); }
+.postiles--3 { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 720px) {
+  .postiles--3 { grid-template-columns: repeat(2, 1fr); }
+}
+
+.postile {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+  min-height: 132px; padding: 18px;
+  text-align: left;
+  font: inherit;
+  background: var(--pos-fill);
+  border: 3px solid var(--pos-line);
+  border-radius: var(--pos-r);
+  box-shadow: 0 var(--pos-key) 0 var(--pos-line);
+  cursor: pointer;
+  color: var(--pos-text);
+  transform: translateY(0);
+  transition: transform 60ms linear, box-shadow 60ms linear;
+}
+.postile:active { transform: translateY(var(--pos-key)); box-shadow: 0 0 0 var(--pos-line); }
+.postile:focus-visible { outline: 4px solid var(--pos-brand); outline-offset: 3px; }
+.postile__ico { color: var(--pos-brand); }
+.postile__ico svg { width: 40px; height: 40px; stroke-width: 2.2; }
+.postile__name { font-size: 21px; font-weight: 800; line-height: 1.15; }
+.postile__sub { font-size: 16px; color: var(--pos-soft); }
+
+/* The one action that is most of the day. */
+.postile--hero {
+  min-height: 152px;
+  background: var(--pos-brand); color: #ffffff;
+  border-color: var(--pos-brand-dark);
+  box-shadow: 0 var(--pos-key) 0 var(--pos-brand-dark);
+}
+.postile--hero:active { box-shadow: 0 0 0 var(--pos-brand-dark); }
+.postile--hero .postile__ico { color: #ffffff; }
+.postile--hero .postile__name { font-size: 30px; }
+.postile--hero .postile__sub { color: #ffeadb; font-size: 18px; }
+
+/* A pick-one tile: shorter, centred, and unmistakable once chosen. */
+.postile--pick {
+  align-items: center; justify-content: center; text-align: center;
+  min-height: 104px; gap: 4px;
+  position: relative;
+}
+.postile--pick .postile__name { font-size: 26px; }
+.postile.is-on {
+  background: var(--pos-brand); color: #ffffff;
+  border-color: var(--pos-brand-dark);
+  box-shadow: 0 var(--pos-key) 0 var(--pos-brand-dark);
+}
+.postile.is-on .postile__sub { color: #ffeadb; }
+.postile.is-on .postile__ico { color: #ffffff; }
+/* Colour is never the only signal. */
+.postile.is-on::after {
+  content: "✓";
+  position: absolute; top: 6px; right: 12px;
+  font-size: 22px; font-weight: 900; line-height: 1;
+}
+
+/* --- Text and number fields ---------------------------------------------- */
+
+.posfield {
+  width: 100%;
+  min-height: 68px; padding: 0 16px;
+  font: inherit; font-size: 24px; font-weight: 600;
+  color: var(--pos-text);
+  background: var(--pos-fill);
+  border: 3px solid var(--pos-line);
+  border-radius: var(--pos-r);
+}
+.posfield::placeholder { color: #6b7480; font-weight: 500; }
+.posfield:focus { outline: 4px solid var(--pos-brand); outline-offset: 2px; }
+
+.poslabel {
+  display: block;
+  font-size: 17px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--pos-soft);
+  margin: 0 0 8px;
+}
+.posrow { display: grid; gap: 18px; }
+.posrow--2 { grid-template-columns: 1fr 1fr; }
+@media (max-width: 720px) { .posrow--2 { grid-template-columns: 1fr; } }
+
+/* --- Search and its results ---------------------------------------------- */
+
+.posresults { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; }
+
+.posperson {
+  display: flex; align-items: center; gap: 14px;
+  width: 100%; min-height: 76px; padding: 10px 16px;
+  font: inherit; text-align: left;
+  background: var(--pos-fill);
+  border: 3px solid var(--pos-line);
+  border-radius: var(--pos-r);
+  cursor: pointer;
+  color: var(--pos-text);
+}
+.posperson:hover { background: #fff3e9; }
+.posperson:focus-visible { outline: 4px solid var(--pos-brand); outline-offset: 3px; }
+.posperson.is-on { background: var(--pos-brand); color: #ffffff; border-color: var(--pos-brand-dark); }
+.posperson.is-on .posperson__where { color: #ffeadb; }
+
+.posperson__mark {
+  flex: none;
+  width: 52px; height: 52px;
+  display: grid; place-items: center;
+  border: 3px solid currentColor; border-radius: 999px;
+  font-size: 19px; font-weight: 900;
+}
+.posperson__who { flex: 1; min-width: 0; }
+.posperson__name { display: block; font-size: 21px; font-weight: 800; line-height: 1.2; }
+.posperson__where {
+  display: block;
+  font-size: 16px; color: var(--pos-soft);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.posperson__flag {
+  display: inline-block; margin-left: 8px;
+  font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em;
+  padding: 1px 8px; border: 2px solid currentColor; border-radius: 999px;
+  color: #b87c07;
+}
+.posperson__owes {
+  flex: none;
+  font-size: 19px; font-weight: 800;
+  padding: 6px 12px; border-radius: 999px;
+  border: 3px solid currentColor;
+}
+.posperson__owes--bad { color: var(--pos-bad); }
+.posperson__owes--ok { color: var(--pos-ok); }
+.posperson.is-on .posperson__owes { color: #ffffff; }
+
+/* --- Keypad --------------------------------------------------------------- */
+
+.poskeys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.poskey {
+  min-height: 62px;
+  font: inherit; font-size: 30px; font-weight: 800;
+  background: var(--pos-fill); color: var(--pos-text);
+  border: 3px solid var(--pos-line); border-radius: var(--pos-r);
+  box-shadow: 0 var(--pos-key) 0 var(--pos-line);
+  cursor: pointer;
+  transform: translateY(0);
+  transition: transform 60ms linear, box-shadow 60ms linear;
+}
+.poskey:active { transform: translateY(var(--pos-key)); box-shadow: 0 0 0 var(--pos-line); }
+.poskey:focus-visible { outline: 4px solid var(--pos-brand); outline-offset: 3px; }
+/* Distinguishable from a digit without looking switched off — a greyed key on
+   a bad panel is read as "you cannot press this". */
+.poskey--wipe { background: #ffe7d3; color: var(--pos-brand-dark); font-size: 26px; }
+
+.posamount {
+  display: flex; align-items: baseline; justify-content: flex-end; gap: 6px;
+  min-height: 74px; padding: 8px 20px; margin-bottom: 10px;
+  background: var(--pos-fill);
+  border: 3px solid var(--pos-line);
+  border-radius: var(--pos-r);
+  font-variant-numeric: tabular-nums;
+}
+.posamount__cur { font-size: 26px; font-weight: 800; color: var(--pos-soft); }
+.posamount__n { font-size: 40px; font-weight: 900; letter-spacing: -0.02em; }
+
+.poschips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.poschip {
+  min-height: 52px; padding: 0 16px;
+  font: inherit; font-size: 19px; font-weight: 800;
+  background: var(--pos-fill); color: var(--pos-text);
+  border: 3px solid var(--pos-line); border-radius: var(--pos-r);
+  cursor: pointer;
+}
+.poschip:hover { background: #fff3e9; }
+.poschip:focus-visible { outline: 4px solid var(--pos-brand); outline-offset: 3px; }
+
+/* --- Weekday toggles ------------------------------------------------------ */
+
+.posdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+@media (max-width: 720px) { .posdays { grid-template-columns: repeat(4, 1fr); } }
+
+.posday {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2px; min-height: 84px;
+  font: inherit;
+  background: var(--pos-fill); color: var(--pos-text);
+  border: 3px solid var(--pos-line); border-radius: var(--pos-r);
+  cursor: pointer;
+}
+.posday__d { font-size: 18px; font-weight: 800; text-transform: uppercase; }
+.posday__n { font-size: 24px; font-weight: 900; }
+.posday.is-off { background: var(--pos-sunken); color: #6b7480; border-color: var(--pos-line-soft); }
+.posday.is-off .posday__n { font-weight: 700; }
+.posday:focus-visible { outline: 4px solid var(--pos-brand); outline-offset: 3px; }
+.posday.is-on { background: var(--pos-brand); color: #ffffff; border-color: var(--pos-brand-dark); }
+
+/* --- Summary and messages ------------------------------------------------- */
+
+.possum {
+  background: var(--pos-fill);
+  border: 3px solid var(--pos-line);
+  border-radius: var(--pos-r);
+  overflow: hidden;
+}
+.possum__row {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 18px;
+  padding: 14px 18px;
+  border-bottom: 3px solid var(--pos-sunken);
+}
+.possum__row:last-child { border-bottom: 0; }
+.possum__k { font-size: 17px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--pos-soft); }
+.possum__v { font-size: 22px; font-weight: 800; text-align: right; }
+.possum__row--total { background: var(--pos-sunken); }
+.possum__row--total .possum__v { font-size: 30px; }
+
+.posnote {
+  display: flex; gap: 12px; align-items: flex-start;
+  padding: 14px 16px; margin-top: 16px;
+  font-size: 18px; font-weight: 600;
+  border: 3px solid var(--pos-line);
+  border-left-width: 10px;
+  border-radius: var(--pos-r);
+  background: var(--pos-fill);
+}
+.posnote--warn { border-color: #b87c07; background: #fff8e8; }
+.posnote--bad  { border-color: var(--pos-bad); background: #fdecec; }
+.posnote--ok   { border-color: var(--pos-ok); background: #e8f7ee; }
+.posnote svg { flex: none; width: 26px; height: 26px; }
+
+.posempty {
+  padding: 28px 18px; text-align: center;
+  font-size: 19px; font-weight: 600; color: var(--pos-soft);
+  border: 3px dashed var(--pos-line-soft);
+  border-radius: var(--pos-r);
+  background: var(--pos-fill);
+}
+
+/* --- The finish screen ---------------------------------------------------- */
+
+.posdone { text-align: center; padding: 20px 0 8px; }
+.posdone__mark {
+  width: 104px; height: 104px; margin: 0 auto 18px;
+  display: grid; place-items: center;
+  border: 6px solid var(--pos-ok); border-radius: 999px;
+  color: var(--pos-ok);
+  animation: pos-pop 260ms cubic-bezier(.2, .9, .3, 1.3) both;
+}
+.posdone__mark svg { width: 56px; height: 56px; stroke-width: 3; }
+.posdone__what { font-size: 30px; font-weight: 900; margin-bottom: 6px; }
+.posdone__who { font-size: 20px; color: var(--pos-soft); }
+@keyframes pos-pop { from { transform: scale(.6); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .posdone__mark { animation: none; } }
+
+/* --- The day's takings ---------------------------------------------------- */
+
+.postill {
+  display: flex; align-items: center; gap: 18px;
+  margin-top: 18px; padding: 14px 18px;
+  background: var(--pos-fill);
+  border: 3px solid var(--pos-line);
+  border-radius: var(--pos-r);
+}
+.postill__k {
+  font-size: 16px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--pos-soft);
+}
+.postill__v { font-size: 30px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.postill__n { margin-left: auto; font-size: 17px; font-weight: 700; color: var(--pos-soft); }
+
+/* --- Short screens ---------------------------------------------------------
+   The store's panel is 768px tall and the keypad is the tightest thing here:
+   four rows of keys, an amount, the quick amounts, a question and two big
+   buttons. Below ~820px everything tightens by a few pixels so the last row of
+   keys — the one with ← on it — stays on screen. A delete key you have to
+   scroll to find is a delete key nobody uses, and the wrong amount gets taken.
+
+   Keyed to the viewport rather than to one machine's size, so it holds on
+   whatever they plug in next. */
+
+@media (max-height: 820px) {
+  .pos__inner { padding: 14px 18px 18px; }
+  .pos__q { font-size: 26px; }
+  .pos__hint { font-size: 16px; margin-bottom: 12px; }
+
+  .posamount { min-height: 66px; margin-bottom: 8px; }
+  .posamount__n { font-size: 34px; }
+  .poschips { gap: 8px; margin-bottom: 8px; }
+  .poschip { min-height: 46px; font-size: 17px; }
+  .poskeys { gap: 8px; }
+  .poskey { min-height: 56px; font-size: 26px; }
+
+  .postile { min-height: 112px; padding: 14px; }
+  .postile--hero { min-height: 128px; }
+  .postile__ico svg { width: 34px; height: 34px; }
+  .postile--pick { min-height: 88px; }
+
+  .posperson { min-height: 66px; }
+  .posbtn { min-height: 62px; font-size: 20px; }
+  .pos__foot { padding: 10px 18px; }
+}
+
+/* Very short — a netbook panel, or a browser carrying three toolbars. */
+@media (max-height: 660px) {
+  .pos__q { font-size: 23px; }
+  .poskey { min-height: 48px; font-size: 23px; }
+  .posamount { min-height: 58px; }
+  .posamount__n { font-size: 30px; }
+  .posbtn { min-height: 56px; }
+  .postile { min-height: 96px; }
+  .postile--hero { min-height: 108px; }
+}
+
+/* --- The way in, from the panel ------------------------------------------ */
+
+.quickcta {
+  display: flex; align-items: center; gap: 14px;
+  width: 100%; min-height: 76px; padding: 14px 18px;
+  font: inherit; text-align: left; cursor: pointer;
+  color: #ffffff;
+  background: var(--ink-800);
+  border: 3px solid var(--ink-900);
+  border-radius: var(--r-lg);
+  box-shadow: 0 4px 0 var(--ink-900);
+}
+.quickcta:active { transform: translateY(4px); box-shadow: 0 0 0 var(--ink-900); }
+.quickcta__ico { color: var(--brand-400); }
+.quickcta__ico svg { width: 30px; height: 30px; }
+.quickcta__t { font-size: var(--fs-lg); font-weight: 800; }
+.quickcta__s { font-size: var(--fs-sm); color: var(--ink-300); }

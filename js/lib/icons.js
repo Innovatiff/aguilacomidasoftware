@@ -25,6 +25,7 @@ export const PATHS = {
   arrowLeft: '<path d="M19 12H5M12 19l-7-7 7-7"/>',
   arrowRight:'<path d="M5 12h14M12 5l7 7-7 7"/>',
   plus:      '<path d="M12 5v14M5 12h14"/>',
+  bolt:      '<path d="M13 2 4.5 13.5H11l-1 8.5 8.5-11.5H12l1-8.5Z"/>',
   search:    '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.1-4.1"/>',
   check:     '<path d="m20 6-11 11-5-5"/>',
   checkDouble:'<path d="m1.5 12.5 4 4 8-8"/><path d="m10 16.5 1.5 1.5 9-9"/>',

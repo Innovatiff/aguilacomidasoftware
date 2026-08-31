@@ -87,6 +87,14 @@ function body() {
     h('div.stack.stack-3',
       sectionLabel('Acciones'),
       h('div.stack.stack-2',
+        // The way in to the counter screen. Deliberately the loudest thing on
+        // this list: on the store's machine it is the only thing anybody opens.
+        h('button.quickcta', { type: 'button', onclick: () => go('/rapido') },
+          h('span.quickcta__ico', icon('bolt')),
+          h('span.grow',
+            h('span.quickcta__t', { style: { display: 'block' } }, 'Acción rápida'),
+            h('span.quickcta__s', 'Pantalla grande para la tienda: cobrar, comidas, días…')),
+          icon('chevronR')),
         button('Cobrar en la tienda', { variant: 'primary', block: true, icon: 'cash', onClick: () => go('/cobrar') }),
         button('Abrir la libreta', { variant: 'dark', block: true, icon: 'clipboard', onClick: () => go('/libreta') }),
         button('Registrar un cliente', { variant: 'ghost', block: true, icon: 'userPlus', onClick: () => go('/clients/new') }))));
