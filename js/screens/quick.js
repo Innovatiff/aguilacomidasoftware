@@ -75,6 +75,9 @@ export function renderQuick() {
   paintTiles();
 
   function paintTiles() {
+    // The receipts listener is attached before the panel is built, and can
+    // answer before it exists — from the local cache, on the second visit.
+    if (!panel) return;
     const host = panel.querySelector('#quick-tiles');
     if (!host) return;
     const ready = store.loaded.clients && store.loaded.farms;

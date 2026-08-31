@@ -23,6 +23,7 @@ const SHELL = [
   './css/screens.css',
   './css/pos.css',
   './assets/icon.svg',
+  './assets/icon-180.png',
   './js/app.js',
 ];
 

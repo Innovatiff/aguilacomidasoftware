@@ -232,6 +232,7 @@ export function runFlow({ title, steps, state = {}, subject, commit, done, onExi
 
   function leave() {
     document.removeEventListener('keydown', onKey);
+    window.removeEventListener('hashchange', leave);
     panel.remove();
     onExit?.(finished);
   }
@@ -252,6 +253,16 @@ export function runFlow({ title, steps, state = {}, subject, commit, done, onExi
   }
 
   document.addEventListener('keydown', onKey);
+
+  /*
+   * A flow is appended to the document, not to the page, so it outlives a
+   * route change unless it is told not to: leaving with the browser's back
+   * button left the counter screen floating over whatever came next, with its
+   * keyboard listener still attached. Nothing in it is written before the last
+   * step, so walking out is always safe — it just has to actually happen.
+   */
+  window.addEventListener('hashchange', leave);
+
   document.body.append(panel);
   draw();
 

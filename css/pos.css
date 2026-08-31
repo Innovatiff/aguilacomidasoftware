@@ -41,7 +41,13 @@
 
   position: fixed;
   inset: 0;
-  z-index: 60;
+  /*
+   * Above the panel's own chrome (40–45), below the sheet scrim (60) and the
+   * toasts (80). It used to sit exactly on the scrim and rely on which element
+   * was appended last, which is not a rule — it is a coincidence that holds
+   * until somebody opens a dialog from in here.
+   */
+  z-index: 55;
   display: flex;
   flex-direction: column;
   background: var(--pos-sunken);
