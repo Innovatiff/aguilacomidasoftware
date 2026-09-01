@@ -27,6 +27,7 @@ import { store, subscribe, billingFor, invoicesFor } from '../data/store.js';
 import { matchesSearch } from '../data/clients.js';
 import { watchReceiptsOn, totalOf, cancelledIds } from '../data/receipts.js';
 import { chargeFor } from '../lib/pricing.js';
+import { periodWord } from '../lib/billing.js';
 import { money, plural } from '../lib/format.js';
 import { today, formatDayLong, formatTime } from '../lib/dates.js';
 import { paymentMethodMeta } from '../lib/model.js';
@@ -110,7 +111,7 @@ export function renderCheckout() {
           ? badge(money(billing.balance, { round: true }), billing.status === 'overdue' ? 'bad' : 'warn')
           : badge('Al corriente', 'ok'),
         h('span.t-xs.c-soft', fortnight
-          ? `${money(fortnight)}/quincena`
+          ? `${money(fortnight)}/${periodWord(client)}`
           : 'sin precio'),
       ],
       onClick: () => charge(client),

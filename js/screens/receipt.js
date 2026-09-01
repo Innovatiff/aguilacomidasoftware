@@ -106,7 +106,7 @@ export function renderReceipt(context) {
         list((receipt.applied || []).map((row) => itemRow({
           lead: h('span.item__ico', icon('receipt')),
           title: appliedTitle(row),
-          meta: row.kind === 'charge' ? 'Deuda agregada' : 'Quincena',
+          meta: row.kind === 'charge' ? 'Deuda agregada' : 'Periodo de comida',
           end: h('span.w-700', money(row.amount)),
           onClick: () => go(`/invoices/${row.invoiceId}`),
         })), { card: true })),

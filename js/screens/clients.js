@@ -55,7 +55,7 @@ const FILTERS = [
   { value: 'all',      label: 'Todos',      match: () => true },
   { value: 'overdue',  label: 'Vencidos',   match: (row) => row.state === 'overdue' },
   { value: 'debt',     label: 'Deben',      match: (row) => row.owed > 0 },
-  { value: 'pending',  label: 'Falta esta quincena',
+  { value: 'pending',  label: 'Falta este periodo',
     match: (row) => row.serving === 'active' && !row.covered },
   { value: 'covered',  label: 'Pagados',    match: (row) => row.covered },
   { value: 'active',   label: 'Activos',    match: (row) => row.serving === 'active' },
@@ -65,7 +65,7 @@ const FILTERS = [
     match: (row) => (row.client.tags || []).length > 0 },
   // The migration list: everybody still on their rancho's placeholder cycle
   // rather than on a day somebody confirmed. It empties as payments come in.
-  { value: 'nocycle',  label: 'Sin quincena fija',
+  { value: 'nocycle',  label: 'Sin periodo fijo',
     match: (row) => row.serving !== 'inactive' && !row.cycleSet },
   { value: 'gaps',     label: 'Revisar',    match: (row) => row.hasGap },
 ];
@@ -184,7 +184,7 @@ export function renderClients(context) {
         stat({
           label: 'Al corriente',
           value: number(rows.filter((row) => row.owed <= 0 && row.serving !== 'inactive').length),
-          foot: `${rows.filter((row) => row.covered).length} con la quincena pagada`,
+          foot: `${rows.filter((row) => row.covered).length} con su periodo pagado`,
           tone: 'ok',
           onClick: () => { filter = 'covered'; draw(); },
         }),
@@ -324,7 +324,7 @@ export function renderClients(context) {
     return actionBanner({
       tone: 'brand', icon: 'receipt',
       title: `${plural(pending.rows.length, 'factura por emitir', 'facturas por emitir')}`,
-      text: `${plural(pending.periods, 'quincena cerrada', 'quincenas cerradas')} sin facturar · `
+      text: `${plural(pending.periods, 'periodo cerrado', 'periodos cerrados')} sin facturar · `
         + `${moneyFull(pending.total)} que todavía no se cobran.`,
       cta: 'Revisar y emitir',
       onClick: reviewPending,
@@ -359,7 +359,7 @@ export function renderClients(context) {
     const left = (skipped?.paid || 0) + (skipped?.notYet || 0) + (skipped?.ended || 0);
 
     const ok = await sheet({
-      title: 'Quincenas sin facturar',
+      title: 'Periodos sin facturar',
       build: (close) => h('div.stack.stack-4',
         alert(`Se emitirán ${plural(rows.length, 'factura', 'facturas')} por ${moneyFull(total)}, `
           + 'al precio del plan de cada quien.', 'brand', 'receipt'),
@@ -377,21 +377,21 @@ export function renderClients(context) {
           ? h('div.stack.stack-1',
               h('div.t-xs.upper.c-faint.w-700', 'Se dejaron fuera'),
               skipped.paid
-                ? h('p.t-sm.c-soft', `${plural(skipped.paid, 'quincena ya cubierta', 'quincenas ya cubiertas')} `
+                ? h('p.t-sm.c-soft', `${plural(skipped.paid, 'periodo ya cubierto', 'periodos ya cubiertos')} `
                   + 'por lo que pagaron antes del sistema.')
                 : null,
               skipped.notYet
-                ? h('p.t-sm.c-soft', `${plural(skipped.notYet, 'quincena anterior', 'quincenas anteriores')} `
+                ? h('p.t-sm.c-soft', `${plural(skipped.notYet, 'periodo anterior', 'periodos anteriores')} `
                   + 'a la fecha en que esas personas empezaron a comer aquí.')
                 : null,
               skipped.ended
-                ? h('p.t-sm.c-soft', `${plural(skipped.ended, 'quincena posterior', 'quincenas posteriores')} `
+                ? h('p.t-sm.c-soft', `${plural(skipped.ended, 'periodo posterior', 'periodos posteriores')} `
                   + 'al último día de personas que ya terminaron.')
                 : null)
           : null,
 
-        h('p.t-xs.c-faint', 'Sólo se factura a quien recibió comida en el periodo. Una quincena que '
-          + 'ya tenía factura no se toca.'),
+        h('p.t-xs.c-faint', 'Sólo se factura a quien recibió comida en el periodo, cada quien '
+          + 'con el suyo: semanal o quincenal. Un periodo que ya tenía factura no se toca.'),
         button('Emitir las facturas', {
           variant: 'primary', block: true, onClick: () => close(true),
         })),

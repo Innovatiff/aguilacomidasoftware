@@ -33,9 +33,10 @@ import { store, farmById, clientsOfFarm } from '../data/store.js';
 import { openChargeSheet } from '../ui/charge-sheet.js';
 import { openOpeningSheet } from '../ui/opening-sheet.js';
 import {
-  periodFor, payDayAfter, isPayDay, payDayOnOrAfter, payDaysInWords,
+  periodOf, payDayAfter, isPayDay, payDayOnOrAfter, payDaysInWords,
+  PAY_EVERY, payEveryOf, periodWord, cadenceWord,
 } from '../lib/billing.js';
-import { chargeFor, tierFor, fortnightCharge, mealsOn } from '../lib/pricing.js';
+import { chargeFor, tierFor, periodCharge, mealsOn } from '../lib/pricing.js';
 import {
   today, addDays, formatRange, formatDayLong, formatDay, weekdayOf, WEEKDAYS, capitalize,
 } from '../lib/dates.js';
@@ -103,8 +104,8 @@ export async function renderClientForm(context) {
   /** Says, in words, what the date they picked means for this person. */
   function cycleHint() {
     const day = model.cycleAnchor || payDayOnOrAfter(today());
-    const period = periodFor(day, today());
-    return `Se cobra en ${payDaysInWords()}. Su quincena corre ahora del `
+    const period = periodOf({ ...model, cycleAnchor: day });
+    return `Se cobra en ${payDaysInWords()}. Su ${periodWord(model)} corre ahora del `
       + `${formatDay(period.start)} al ${formatDay(period.end)}, `
       + `y paga otra vez el ${capitalize(WEEKDAYS[weekdayOf(payDayAfter(period))])} `
       + `${formatDay(payDayAfter(period))}.`;
@@ -118,10 +119,10 @@ export async function renderClientForm(context) {
     if (!(Number(model.mealsPerDay) > 0)) errors.mealsPerDay = 'Debe ser mayor a cero.';
     if (model.email && !isValidEmail(model.email)) errors.email = 'Ese correo no es válido.';
     if (model.cycleAnchor && !isPayDay(model.cycleAnchor)) {
-      errors.cycleAnchor = `La quincena empieza en ${payDaysInWords()}.`;
+      errors.cycleAnchor = `El periodo empieza en ${payDaysInWords()}.`;
     }
     if (model.endsOn && model.cycleAnchor && model.endsOn < model.cycleAnchor) {
-      errors.endsOn = 'No puede terminar antes de que empiece su quincena.';
+      errors.endsOn = 'No puede terminar antes de que empiece su periodo.';
     }
     return Object.keys(errors).length === 0;
   }
@@ -198,7 +199,8 @@ export async function renderClientForm(context) {
     const price = chargeFor(client, store.pricing);
     const wants = await confirm({
       title: '¿Va a pagar ahora?',
-      message: `${client.name} quedó registrado. Su quincena cuesta ${money(price)}. `
+      message: `${client.name} quedó registrado. Su ${periodWord(client)} cuesta `
+        + `${money(price)}. `
         + 'Si está pagando en este momento, cóbrale aquí mismo y se le manda su recibo.',
       confirmLabel: 'Cobrar ahora',
       cancelLabel: 'Después',
@@ -283,7 +285,7 @@ export async function renderClientForm(context) {
         field({
           label: 'Plan',
           error: errors.mealsPerDay,
-          hint: 'Cuántas comidas lleva al día. De ahí sale lo que paga por quincena.',
+          hint: `Cuántas comidas lleva al día. De ahí sale lo que paga por ${periodWord(model)}.`,
           control: planPicker(),
         }),
 
@@ -297,13 +299,26 @@ export async function renderClientForm(context) {
         }),
         field({
           label: '¿Desde cuándo come aquí?',
-          hint: 'Decide desde qué quincena se le cobra. El panel nunca le factura una '
-            + 'quincena que cerró antes de esta fecha.',
+          hint: `Decide desde qué ${periodWord(model)} se le cobra. El panel nunca le `
+            + `factura una ${periodWord(model)} que cerró antes de esta fecha.`,
           control: input({
             type: 'date',
             value: model.startedOn || today(),
             max: today(),
             onchange: (e) => update({ startedOn: e.target.value || today() }),
+          }),
+        }),
+        field({
+          label: '¿Cada cuánto paga?',
+          hint: 'Algunos cobran por semana y prefieren pagar por semana. Es la misma '
+            + 'comida y el mismo precio por plato — sólo cambia cada cuándo se cobra.',
+          control: select({
+            value: String(payEveryOf(model)),
+            options: [
+              { value: String(PAY_EVERY.FORTNIGHT), label: 'Cada quincena — 14 días' },
+              { value: String(PAY_EVERY.WEEK), label: 'Cada semana — 7 días' },
+            ],
+            onchange: (e) => updateAndRedraw({ payEvery: Number(e.target.value) }),
           }),
         }),
         field({
@@ -579,9 +594,14 @@ export async function renderClientForm(context) {
    * list, so choosing from it makes an unbillable client impossible to create.
    */
   function planPicker() {
+    // The list price is a fortnight's; somebody paying weekly pays half of it,
+    // twice as often. Quoting the fortnight to a weekly client is how the wrong
+    // amount ends up on the counter.
     const known = store.pricing.tiers.map((tier) => ({
       value: String(tier.mealsPerDay),
-      label: `${plural(tier.mealsPerDay, 'comida', 'comidas')} al día · ${money(tier.price)} por quincena`,
+      label: `${plural(tier.mealsPerDay, 'comida', 'comidas')} al día · `
+        + `${money(periodCharge({ ...model, mealsPerDay: tier.mealsPerDay }, store.pricing).base)}`
+        + ` por ${periodWord(model)}`,
     }));
     const current = String(Number(model.mealsPerDay) || '');
     const offList = current && !known.some((option) => option.value === current);
@@ -610,8 +630,8 @@ export async function renderClientForm(context) {
     if (!current) return alert('Elige el rancho para ver sus condiciones.', 'info');
 
     const terms = termsOf(current);
-    const period = periodFor(terms.cycleAnchor, today());
-    const charge = fortnightCharge(model, store.pricing);
+    const period = periodOf({ ...model, cycleAnchor: terms.cycleAnchor });
+    const charge = periodCharge(model, store.pricing);
     const priced = !!tierFor(store.pricing, model.mealsPerDay);
 
     return h('div.stack.stack-3',
@@ -620,7 +640,8 @@ export async function renderClientForm(context) {
         defRow('Horario', terms.deliveryWindow || '—'),
         defRow('Inicio del ciclo', formatDayLong(terms.cycleAnchor)),
         ...chargeRows(charge, priced),
-        defRow(`Quincena ${formatRange(period.start, period.end)}`,
+        defRow('Paga', capitalize(cadenceWord(model))),
+        defRow(`${capitalize(periodWord(model))} ${formatRange(period.start, period.end)}`,
           priced ? money(charge.amount) : 'Sin precio', { total: true }),
       ])));
   }

@@ -21,9 +21,10 @@
  * serving days is $6.25 a meal. One number, set in Ajustes, applied in both
  * directions — a day dropped is worth the same as a day added.
  *
- * Every 14-day period contains exactly two of each weekday, so this total is
- * the same for a given person in every period. It can be quoted before the
- * fortnight starts, which is what lets somebody pay ahead at the counter.
+ * A period is a whole number of weeks, so it contains the same weekdays every
+ * time round and this total is the same for a given person in every period. It
+ * can be quoted before the period starts, which is what lets somebody pay
+ * ahead at the counter.
  *
  * The whole list lives in one document (`config/pricing`) because there is one
  * price list for the business. Editing it never touches an invoice already
@@ -42,8 +43,14 @@ export const DEFAULT_REFERENCE_DAYS = 12;
 /** $75 ÷ 12 serving days. What one meal more or less is worth. */
 export const DEFAULT_EXTRA_MEAL_PRICE = 6.25;
 
-/** Weekdays in a 14-day period: two of each, always. */
-const WEEKS_PER_PERIOD = 2;
+/**
+ * The plan prices are quoted per fortnight — two weeks of the standard week.
+ *
+ * A client who pays every week eats half of that and pays half of it. Nothing
+ * else changes: the rate for a meal above or below the standard is the same
+ * $6.25 either way, because a plate costs what a plate costs.
+ */
+const WEEKS_PER_FORTNIGHT = 2;
 
 export const DEFAULT_PRICING = {
   tiers: DEFAULT_TIERS,
@@ -151,38 +158,47 @@ export function extrasOf(client) {
 /* --- What a fortnight comes to ---------------------------------------------- */
 
 /**
- * The full charge for one person's fortnight, and the arithmetic behind it.
+ * The full charge for one of this person's periods, and the arithmetic behind it.
  *
  * Returned in parts rather than as one number because the parts are what a
  * client asks about — "why is mine $152.50 and his is $140?" — and a bill that
  * cannot answer that is a bill somebody argues with.
  */
-export function fortnightCharge(client, pricing) {
+export function periodCharge(client, pricing) {
   const list = normalizePricing(pricing);
   const plan = tierFor(list, client?.mealsPerDay);
   const perDay = Number(client?.mealsPerDay) || 0;
-  const days = ((client?.deliveryDays || []).length) * WEEKS_PER_PERIOD;
 
+  // 1 for somebody who pays weekly, 2 for a fortnight. Everything the plan
+  // price assumes is a fortnight's worth, so this is what scales it.
+  const weeks = weeksOf(client);
+  const share = weeks / WEEKS_PER_FORTNIGHT;
+
+  const days = ((client?.deliveryDays || []).length) * weeks;
   const extras = extrasOf(client);
-  const extraMeals = extras.reduce((sum, entry) => sum + entry.count, 0) * WEEKS_PER_PERIOD;
+  const extraMeals = extras.reduce((sum, entry) => sum + entry.count, 0) * weeks;
   const meals = days * perDay + extraMeals;
 
-  const standardMeals = list.referenceDays * perDay;
-  const base = plan?.price || 0;
+  const standardMeals = list.referenceDays * perDay * share;
+  const base = round2((plan?.price || 0) * share);
   const difference = meals - standardMeals;
   const adjustment = plan ? round2(difference * list.extraMealPrice) : 0;
 
   return {
     plan,
     priced: !!plan,
+    // Carried out with the numbers so anything that renders a breakdown can
+    // say "quincena" or "semana" without having to ask the client again.
+    payEvery: weeks * 7,
     base,
     days,
     perDay,
+    weeks,
     meals,
     extras,
     extraMeals,
     standardMeals,
-    standardDays: list.referenceDays,
+    standardDays: list.referenceDays * share,
     mealPrice: list.extraMealPrice,
     difference,
     adjustment,
@@ -195,6 +211,15 @@ export function fortnightCharge(client, pricing) {
 }
 
 /** Just the number, for the many places that only need the number. */
-export const chargeFor = (client, pricing) => fortnightCharge(client, pricing).amount;
+export const chargeFor = (client, pricing) => periodCharge(client, pricing).amount;
+
+/**
+ * How many weeks one of this person's periods lasts.
+ *
+ * Read here rather than imported from billing.js, which imports this file —
+ * one small duplicated rule beats a cycle between the two modules everything
+ * else depends on.
+ */
+const weeksOf = (client) => (Number(client?.payEvery) === 7 ? 1 : WEEKS_PER_FORTNIGHT);
 
 export const round2 = (value) => Math.round((Number(value) || 0) * 100) / 100;

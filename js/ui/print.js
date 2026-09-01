@@ -96,7 +96,7 @@ export function receiptSheet(receipt, { business, nextPay, copy = false } = {}) 
             money(Math.abs(Number(row.amount) || 0)))))
       : line(receipt.fromNotebook
         ? 'PAGO ANTERIOR AL SISTEMA'
-        : 'SIN QUINCENA APLICADA'),
+        : 'SIN PERIODO APLICADO'),
 
     rule(),
 

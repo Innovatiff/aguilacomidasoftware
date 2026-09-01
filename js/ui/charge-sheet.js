@@ -21,8 +21,8 @@ import { takePayment } from '../data/invoices.js';
 import { cycleIsSet } from '../data/clients.js';
 import { postSystemMessage } from '../data/chat.js';
 import {
-  balanceOf, periodFor, periodByIndex, isCharge, invoiceTitle, appliedTitle,
-  cycleFromPayment, payDayAfter, payDaysInWords,
+  balanceOf, periodOf, periodOfIndex, isCharge, invoiceTitle, appliedTitle,
+  cycleFromPayment, payDayAfter, payDaysInWords, periodWord, periodWordPlural,
 } from '../lib/billing.js';
 import { chargeFor } from '../lib/pricing.js';
 import { money, moneyFull, plural } from '../lib/format.js';
@@ -45,9 +45,14 @@ export function openChargeSheet({ client, invoices = [], pricing, author }) {
   const balance = round2(owed.reduce((sum, invoice) => sum + balanceOf(invoice), 0));
   const fortnight = chargeFor(client, pricing);
   const anchor = client.cycleAnchor || today();
-  const current = periodFor(anchor, today());
+  // Everything below reasons about periods, and how long a period is belongs
+  // to the person: some pay every week, some every fortnight.
+  const payer = { ...client, cycleAnchor: anchor };
+  const current = periodOf(payer);
+  const word = periodWord(client);
+  const words = periodWordPlural(client);
 
-  // What they owe, or — if they are up to date — the fortnight they are about
+  // What they owe, or — if they are up to date — the period they are about
   // to start. Paying ahead is normal here: people pay when they are at the
   // store, not when the bill falls due.
   const suggested = balance > 0.005 ? balance : fortnight;
@@ -94,15 +99,15 @@ export function openChargeSheet({ client, invoices = [], pricing, author }) {
       function repaint() {
         const value = Number(amount) || 0;
         mount(submit, icon('cash'), `Cobrar ${money(value)}`);
-        mount(covers, explain(value, { owed, balance, fortnight, anchor, current }));
+        mount(covers, explain(value, { owed, balance, fortnight, payer, current }));
 
         const next = cycleFromPayment(date);
-        const period = periodFor(next, today());
+        const period = periodOf({ ...payer, cycleAnchor: next });
         mount(cycleLine, setCycle
-          ? `Su quincena queda en ${weekdayName(next)}: empieza el ${formatDay(next)} `
+          ? `Su ${word} queda en ${weekdayName(next)}: empieza el ${formatDay(next)} `
             + `y paga otra vez el ${weekdayName(payDayAfter(period))} `
             + `${formatDay(payDayAfter(period))}.`
-          : `Su quincena no se mueve: sigue pagando el ${weekdayName(payDayAfter(current))} `
+          : `Su ${word} no se mueve: sigue pagando el ${weekdayName(payDayAfter(current))} `
             + `${formatDay(payDayAfter(current))}.`);
       }
 
@@ -143,13 +148,14 @@ export function openChargeSheet({ client, invoices = [], pricing, author }) {
           defRow('Cliente', client.name),
           defRow('Dónde', [client.farmName, client.locationName].filter(Boolean).join(' · ') || '—'),
           defRow('Plan', client.mealsPerDay
-            ? `${plural(client.mealsPerDay, 'comida', 'comidas')}/día · ${fortnight ? money(fortnight) : 'sin precio'} por quincena`
+            ? `${plural(client.mealsPerDay, 'comida', 'comidas')}/día · `
+              + `${fortnight ? money(fortnight) : 'sin precio'} por ${word}`
             : '—'),
           defRow('Debe hoy', balance > 0.005 ? money(balance) : 'Nada', { total: true }),
         ])),
 
       fortnight ? null : alert('Este plan no tiene precio. Agrégalo en Ajustes → Precios '
-        + 'para poder cobrar quincenas por adelantado.', 'warn'),
+        + `para poder cobrar ${words} por adelantado.`, 'warn'),
 
       field({
         label: 'Monto recibido',
@@ -159,9 +165,9 @@ export function openChargeSheet({ client, invoices = [], pricing, author }) {
             balance > 0.005
               ? quick(`Saldo ${money(balance)}`, () => setAmount(balance))
               : null,
-            fortnight ? quick(`Una quincena ${money(fortnight)}`, () => setAmount(fortnight)) : null,
+            fortnight ? quick(`Una ${word} ${money(fortnight)}`, () => setAmount(fortnight)) : null,
             fortnight && balance > 0.005
-              ? quick(`Saldo + quincena ${money(round2(balance + fortnight))}`,
+              ? quick(`Saldo + ${word} ${money(round2(balance + fortnight))}`,
                   () => setAmount(round2(balance + fortnight)))
               : null)),
       }),
@@ -184,13 +190,13 @@ export function openChargeSheet({ client, invoices = [], pricing, author }) {
         }),
       }),
 
-      switchRow(cycleKnown ? 'Reajustar su quincena con este pago' : 'Fijar su quincena con este pago', {
+      switchRow(cycleKnown ? `Reajustar su ${word} con este pago` : `Fijar su ${word} con este pago`, {
         checked: !cycleKnown,
         hint: cycleKnown
-          ? `Su quincena ya está fijada. Actívalo sólo si de verdad vuelve a empezar — `
+          ? `Su ${word} ya está fijada. Actívalo sólo si de verdad vuelve a empezar — `
             + 'pagar tarde no le mueve el día.'
           : `Primera vez que el sistema le registra un pago. Se cobra en ${payDaysInWords()}: `
-            + 'si pagó otro día, la quincena arranca el siguiente día de cobro.',
+            + `si pagó otro día, la ${word} arranca el siguiente día de cobro.`,
         onChange: (value) => { setCycle = value; repaint(); },
       }),
       cycleLine,
@@ -225,7 +231,7 @@ const quick = (label, onClick) => button(label, { variant: 'soft', size: 'sm', o
  * The cashier is holding cash and the person is standing there: the moment to
  * catch "that pays two fortnights, not one" is now, not on the receipt.
  */
-function explain(value, { owed, balance, fortnight, anchor, current }) {
+function explain(value, { owed, balance, fortnight, payer, current }) {
   if (!(value > 0)) return 'Escribe el monto recibido.';
 
   const parts = [];
@@ -245,7 +251,7 @@ function explain(value, { owed, balance, fortnight, anchor, current }) {
     .map((invoice) => invoice.periodStart));
   if (fortnight > 0) {
     for (let ahead = 0; left > 0.005 && ahead < 6; ahead += 1) {
-      const period = periodByIndex(anchor, current.index + ahead);
+      const period = periodOfIndex(payer, current.index + ahead);
       if (paidAhead.has(period.start)) continue;
       const take = Math.min(left, fortnight);
       left = round2(left - take);

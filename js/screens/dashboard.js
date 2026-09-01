@@ -70,7 +70,7 @@ function body() {
         stat({
           label: 'Al corriente',
           value: number(active.filter((row) => row.owed <= 0).length),
-          foot: `${active.filter((row) => row.covered).length} con la quincena pagada`,
+          foot: `${active.filter((row) => row.covered).length} con su periodo pagado`,
           tone: 'ok',
           onClick: () => go('/clients?filter=covered'),
         }),

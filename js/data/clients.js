@@ -31,7 +31,7 @@ import {
 } from '../firebase.js';
 import { today, dayKey, daysBetween } from '../lib/dates.js';
 import {
-  DEFAULT_DELIVERY_DAYS, DEFAULT_GRACE_DAYS, payDayOnOrAfter,
+  DEFAULT_DELIVERY_DAYS, DEFAULT_GRACE_DAYS, DEFAULT_PAY_EVERY, payDayOnOrAfter,
 } from '../lib/billing.js';
 import { matches, fold } from '../lib/format.js';
 import { normalizeExtras } from '../lib/pricing.js';
@@ -151,6 +151,9 @@ export function termsOf(farm) {
     deliveryDays: [...(farm?.deliveryDays?.length ? farm.deliveryDays : DEFAULT_DELIVERY_DAYS)],
     deliveryWindow: farm?.deliveryWindow || '11:00 – 13:00',
     cycleAnchor: payDayOnOrAfter(farm?.cycleAnchor || today()),
+    // How often they pay. A fortnight unless somebody says otherwise, which
+    // is what everybody registered before this existed was already on.
+    payEvery: Number(farm?.defaultPayEvery) === 7 ? 7 : DEFAULT_PAY_EVERY,
     graceDays: farm?.graceDays ?? DEFAULT_GRACE_DAYS,
   };
 }
@@ -388,7 +391,7 @@ export function tagsInUse(clients) {
     .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag, 'es'));
 }
 
-const NUMERIC = new Set(['mealsPerDay', 'graceDays']);
+const NUMERIC = new Set(['mealsPerDay', 'graceDays', 'payEvery']);
 
 /** Fields a worker never sets for themselves — they belong to the farm. */
 const NOT_WRITABLE = new Set(['id', 'farmId', 'farmName', 'locationId', 'locationName', 'email']);

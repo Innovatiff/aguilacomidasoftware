@@ -19,7 +19,7 @@ import { field, moneyInput, input, defList, defRow, button, alert, switchRow } f
 import { icon } from '../lib/icons.js';
 import { addCharge } from '../data/invoices.js';
 import { postSystemMessage } from '../data/chat.js';
-import { balanceOf } from '../lib/billing.js';
+import { balanceOf, periodWord } from '../lib/billing.js';
 import { money, moneyFull } from '../lib/format.js';
 import { formatDayLong, today } from '../lib/dates.js';
 import { dbMessage } from '../firebase.js';
@@ -41,6 +41,7 @@ const COMMON = ['Comida extra', 'Ajuste de saldo'];
  */
 export function openDebtSheet({ client, invoices = [], author }) {
   const balance = round2(invoices.reduce((sum, invoice) => sum + balanceOf(invoice), 0));
+  const word = periodWord(client);
 
   return sheet({
     title: 'Agregar deuda',
@@ -151,7 +152,7 @@ export function openDebtSheet({ client, invoices = [], author }) {
         onChange: (value) => { tell = value; },
       }),
 
-      alert('Se suma a lo que debe y se cobra como cualquier otra quincena. '
+      alert(`Se suma a lo que debe y se cobra como cualquier otro cobro de la ${word}. `
         + 'Mientras no tenga pagos aplicados, se puede quitar desde la misma deuda.', 'info'),
 
       submit);

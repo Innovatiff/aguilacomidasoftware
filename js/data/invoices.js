@@ -21,9 +21,9 @@ import {
 import { folioFor } from './receipts.js';
 import {
   invoiceId, draftInvoice, draftCharge, chargeIdFor, isCharge, invoiceTitle,
-  balanceOf, invoiceStatus, round2, periodFor, periodByIndex, cycleFromPayment,
+  balanceOf, invoiceStatus, round2, periodOf, periodOfIndex, cycleFromPayment,
 } from '../lib/billing.js';
-import { fortnightCharge } from '../lib/pricing.js';
+import { periodCharge } from '../lib/pricing.js';
 import { today, addDays } from '../lib/dates.js';
 
 /** How far ahead a single payment may buy: three months, then it is refused. */
@@ -268,7 +268,7 @@ export async function takePayment(
   const total = round2(amount);
   if (!(total > 0)) throw new Error('El monto debe ser mayor a cero.');
 
-  const charge = fortnightCharge(client, pricing);
+  const charge = periodCharge(client, pricing);
   const price = charge.amount;
   const day = date || today();
 
@@ -290,8 +290,8 @@ export async function takePayment(
   const anchor = setCycle
     ? cycleFromPayment(day)
     : (client.cycleAnchor || cycleFromPayment(day));
-  const payer = setCycle ? { ...client, cycleAnchor: anchor } : client;
-  const current = periodFor(anchor, today());
+  const payer = { ...client, cycleAnchor: anchor };
+  const current = periodOf(payer, today());
 
   // Everything unpaid today, plus the fortnights that could be paid ahead.
   // Read outside the transaction: a query cannot run inside one.
@@ -300,7 +300,7 @@ export async function takePayment(
     .docs.map((found) => found.id);
 
   const ahead = Array.from({ length: MAX_PREPAID_PERIODS }, (unused, i) =>
-    periodByIndex(anchor, current.index + i));
+    periodOfIndex(payer, current.index + i));
 
   const targets = [];
   const seen = new Set();

@@ -20,10 +20,10 @@ import { getReceipt } from '../data/receipts.js';
 import { store, clientById, invoicesFor } from '../data/store.js';
 import { postSystemMessage } from '../data/chat.js';
 import {
-  balanceOf, invoiceStatus, isCharge, invoiceTitle, STATUS_LABEL, STATUS_TONE,
+  balanceOf, invoiceStatus, isCharge, invoiceTitle, periodWord, STATUS_LABEL, STATUS_TONE,
 } from '../lib/billing.js';
 import {
-  formatDayLong, formatDay, today, humanDelta, daysBetween, formatStamp, dayKey,
+  formatDayLong, formatDay, today, humanDelta, daysBetween, formatStamp, dayKey, capitalize,
 } from '../lib/dates.js';
 import { money, moneyFull, number, percent } from '../lib/format.js';
 import { paymentMethodMeta } from '../lib/model.js';
@@ -138,17 +138,17 @@ export function renderInvoice(context) {
 
               defRow('Comidas entregadas', number(invoice.meals)),
               defRow('Fecha límite de pago', formatDayLong(invoice.dueDate)),
-              defRow('Quincena', moneyFull(amount), { total: true }),
+              defRow(capitalize(periodWord(invoice)), moneyFull(amount), { total: true }),
             ]),
       ].filter(Boolean))),
 
       isCharge(invoice)
         ? alert('Esta deuda se agregó a mano'
           + (invoice.issuedByName ? ` (${invoice.issuedByName})` : '')
-          + ': no la generó una quincena. Se cobra igual que cualquier otra.', 'info')
+          + ': no la generó un periodo de comida. Se cobra igual que cualquier otra.', 'info')
         : invoice.fromNotebook
-          ? alert('Esta quincena viene del cuaderno: se registró al pasar al cliente al sistema, '
-            + 'no la generó una ruta.', 'info')
+          ? alert(`Esta ${periodWord(invoice)} viene del cuaderno: se registró al pasar al `
+            + 'cliente al sistema, no la generó una ruta.', 'info')
           : null,
 
       // Only while nothing has been paid against it: after that the mistake is

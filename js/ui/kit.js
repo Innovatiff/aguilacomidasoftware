@@ -4,6 +4,7 @@ import { h, frag, autosize } from '../lib/dom.js';
 import { icon } from '../lib/icons.js';
 import { initials, money } from '../lib/format.js';
 import { badgeClass, dotClass } from '../lib/model.js';
+import { periodWord } from '../lib/billing.js';
 
 /* --- Badges & dots -------------------------------------------------------- */
 
@@ -272,7 +273,7 @@ export { frag };
  * counter, and an answer that changes depending on which screen you are looking
  * at is not an answer.
  *
- * Accepts either a live charge from `fortnightCharge` or an issued invoice,
+ * Accepts either a live charge from `periodCharge` or an issued invoice,
  * which carries the same fields frozen at the moment it was written.
  */
 export function chargeRows(charge, priced = true) {
@@ -284,10 +285,15 @@ export function chargeRows(charge, priced = true) {
   const extras = charge?.extras || [];
   const rate = Number(charge?.mealPrice) || 0;
 
+  // Either shape carries it: a live charge from `periodCharge`, an invoice
+  // frozen by `draftInvoice`. Anything older is a fortnight, which is what
+  // everybody was on before cadence existed.
+  const word = periodWord({ payEvery: charge?.payEvery });
+
   const rows = [
     defRow('Plan', `${perDay} ${perDay === 1 ? 'comida' : 'comidas'} al día`),
-    defRow('Días de servicio', `${days} en la quincena`),
-    defRow('Comidas de la quincena', String(meals)),
+    defRow('Días de servicio', `${days} en la ${word}`),
+    defRow(`Comidas de la ${word}`, String(meals)),
   ];
 
   if (extras.length) {

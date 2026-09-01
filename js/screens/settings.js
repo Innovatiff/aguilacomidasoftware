@@ -27,6 +27,7 @@ import { printReceipt } from '../ui/print.js';
 import { store, subscribe, activeClients, moneyStats, unpriced } from '../data/store.js';
 import { money, number, plural } from '../lib/format.js';
 import { formatStamp, today } from '../lib/dates.js';
+import { PAY_EVERY, payEveryOf } from '../lib/billing.js';
 import { toDate, dbMessage } from '../firebase.js';
 
 export function renderSettings() {
@@ -83,6 +84,7 @@ export function renderSettings() {
       card(defList([
         defRow('Semana estándar', `${store.pricing.referenceDays} días de servicio`),
         defRow('Comida extra o de menos', money(store.pricing.extraMealPrice)),
+        defRow('Pagan cada semana', `${weeklyCount()} de ${store.clients.length}`),
       ])),
 
       h('p.t-xs.c-faint',
@@ -95,8 +97,20 @@ export function renderSettings() {
             .map((meals) => `${meals} al día`).join(', ')}. `
           + 'Agrega ese precio o cámbiales las comidas por día; mientras tanto no se les puede cobrar.', 'warn')
         : h('p.t-xs.c-faint',
-            'Es lo que cuesta una quincena completa. Las facturas ya emitidas conservan el '
-            + 'precio con el que se emitieron.'));
+            'Es lo que cuesta una quincena completa. Quien paga cada semana paga la mitad, dos '
+            + 'veces: es la misma comida al mismo precio por plato. Las facturas ya emitidas '
+            + 'conservan el precio con el que se emitieron.'));
+  }
+
+  /**
+   * How many people are on the weekly cadence — context for a fortnightly list.
+   *
+   * A declaration, for the same reason `draw` is one: the listeners above call
+   * `draw()` while they are being set up, and a `const` down here would still
+   * be in its dead zone when `pricesCard` reaches for it.
+   */
+  function weeklyCount() {
+    return store.clients.filter((client) => payEveryOf(client) === PAY_EVERY.WEEK).length;
   }
 
   // A declaration, not a const: the listeners fire `draw()` the moment they are
@@ -270,7 +284,7 @@ export function renderSettings() {
         defRow('Aplicación', 'El Águila Cocina · Administración'),
         defRow('Versión', '1.0.0'),
         defRow('Moneda', 'CAD'),
-        defRow('Ciclo de cobro', 'Quincenal (14 días)'),
+        defRow('Ciclo de cobro', 'Semanal o quincenal, por cliente'),
       ])));
   }
 
@@ -342,8 +356,9 @@ export function renderSettings() {
         paintRate();
 
         return h('div.stack.stack-4',
-          h('p.t-sm.c-soft', 'Lo que cuesta una quincena completa en cada plan. Se aplica a las '
-            + 'facturas que se emitan de aquí en adelante.'),
+          h('p.t-sm.c-soft', 'Lo que cuesta una quincena completa en cada plan. A quien paga '
+            + 'cada semana se le cobra la mitad, cada semana. Se aplica a las facturas que se '
+            + 'emitan de aquí en adelante.'),
           rows,
 
           h('div.divider'),

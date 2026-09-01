@@ -21,8 +21,9 @@ import { field, input, alert, card } from './kit.js';
 import { icon } from '../lib/icons.js';
 import { owedSince, openBalance } from '../data/cycles.js';
 import { setPaidThrough } from '../data/clients.js';
-import { money, moneyFull, plural } from '../lib/format.js';
-import { formatRange, formatDayLong, today, addDays } from '../lib/dates.js';
+import { money, moneyFull } from '../lib/format.js';
+import { formatRange, formatDayLong, today, addDays, capitalize } from '../lib/dates.js';
+import { periodWord, periodWordPlural, payEveryOf } from '../lib/billing.js';
 import { dbMessage } from '../firebase.js';
 
 /**
@@ -30,15 +31,18 @@ import { dbMessage } from '../firebase.js';
  * @param {object} options.client  who is being brought over
  * @param {object} options.pricing the price list
  * @param {object} options.author  { uid, name }
- * @returns {Promise<number>} how many fortnights were written
+ * @returns {Promise<number>} how many periods were written
  */
 export function openOpeningSheet({ client, pricing, author }) {
+  const word = periodWord(client);
+  const words = periodWordPlural(client);
+
   return sheet({
     title: 'Saldo del cuaderno',
     build: (close) => {
-      // Two weeks back is the common case — most people are one fortnight
-      // behind — and it is a starting point, not an answer.
-      let lastPaidOn = addDays(today(), -14);
+      // One period back is the common case — most people are one behind — and
+      // it is a starting point, not an answer.
+      let lastPaidOn = addDays(today(), -payEveryOf(client));
       let found = owedSince(client, lastPaidOn, pricing);
       let busy = false;
 
@@ -60,7 +64,7 @@ export function openOpeningSheet({ client, pricing, author }) {
         mount(submit,
           icon('receipt'),
           chosen
-            ? `Registrar ${plural(chosen, 'quincena', 'quincenas')} · ${money(total())}`
+            ? `Registrar ${chosen} ${chosen === 1 ? word : words} · ${money(total())}`
             : 'No hay nada que registrar');
         submit.disabled = !chosen || busy;
 
@@ -72,9 +76,9 @@ export function openOpeningSheet({ client, pricing, author }) {
 
           found.periods.length
             ? h('div.stack.stack-2',
-                h('div.t-xs.upper.c-faint.w-700', 'Quincenas desde entonces'),
+                h('div.t-xs.upper.c-faint.w-700', `${capitalize(words)} desde entonces`),
                 card(h('div.stack.stack-1', found.periods.map(periodRow))))
-            : alert('Con esa fecha no queda ninguna quincena pendiente.', 'info'),
+            : alert(`Con esa fecha no queda ninguna ${word} pendiente.`, 'info'),
 
           chosen
             ? h('div.row.row--between',
@@ -110,7 +114,7 @@ export function openOpeningSheet({ client, pricing, author }) {
           const issued = await openBalance(client, found.periods, author);
           // Their account starts the day after the last payment covered.
           await setPaidThrough(client.id, lastPaidOn);
-          toastOk(`${plural(issued, 'quincena registrada', 'quincenas registradas')}`);
+          toastOk(`${issued} ${issued === 1 ? `${word} registrada` : `${words} registradas`}`);
           close(issued);
         } catch (error) {
           busy = false;
@@ -124,12 +128,12 @@ export function openOpeningSheet({ client, pricing, author }) {
       return h('div.stack.stack-4',
         h('p.t-sm.c-soft',
           `Lo que ${client.name} traía debiendo antes de usar el sistema. Dinos cuándo pagó por `
-          + 'última vez y el panel calcula las quincenas que quedaron abiertas.'),
+          + `última vez y el panel calcula las ${words} que quedaron abiertas.`),
 
         field({
           label: '¿Cuándo pagó por última vez?',
           hint: `Su ciclo empezó el ${formatDayLong(client.cycleAnchor || today())}, así que las `
-            + 'quincenas se cuentan desde ahí.',
+            + `${words} se cuentan desde ahí.`,
           control: input({
             type: 'date',
             value: lastPaidOn,
@@ -140,8 +144,8 @@ export function openOpeningSheet({ client, pricing, author }) {
 
         preview,
 
-        h('p.t-xs.c-faint', 'Se emite una factura por quincena, marcada como traída del cuaderno. '
-          + 'Puedes cobrarlas como cualquier otra, completas o de a poco.'),
+        h('p.t-xs.c-faint', `Se emite una factura por ${word}, marcada como traída del `
+          + 'cuaderno. Puedes cobrarlas como cualquier otra, completas o de a poco.'),
 
         submit);
     },

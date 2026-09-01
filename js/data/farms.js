@@ -23,7 +23,9 @@ import {
   query, where, orderBy, serverTimestamp, writeBatch, docData, listData,
 } from '../firebase.js';
 import { today } from '../lib/dates.js';
-import { DEFAULT_DELIVERY_DAYS, DEFAULT_GRACE_DAYS, payDayOnOrAfter } from '../lib/billing.js';
+import {
+  DEFAULT_DELIVERY_DAYS, DEFAULT_GRACE_DAYS, DEFAULT_PAY_EVERY, payDayOnOrAfter,
+} from '../lib/billing.js';
 import { matches } from '../lib/format.js';
 
 const farmsRef = () => collection(db, 'farms');
@@ -70,6 +72,10 @@ export const emptyFarm = () => ({
   deliveryDays: [...DEFAULT_DELIVERY_DAYS],
   deliveryWindow: '11:00 – 13:00',
   cycleAnchor: payDayOnOrAfter(today()),
+  // How often somebody registered here pays, by default. It is only a starting
+  // value: cadence belongs to the person — two brothers at the same rancho can
+  // pay weekly and fortnightly — so it is never fanned out over the roster.
+  defaultPayEvery: DEFAULT_PAY_EVERY,
   graceDays: DEFAULT_GRACE_DAYS,
   defaultMealsPerDay: 1,
 });
@@ -254,7 +260,7 @@ async function eachClient(clientQuery, write) {
 
 /* --- Shaping ---------------------------------------------------------------- */
 
-const NUMERIC = new Set(['graceDays', 'defaultMealsPerDay']);
+const NUMERIC = new Set(['graceDays', 'defaultMealsPerDay', 'defaultPayEvery']);
 
 function sanitize(data) {
   const out = {};

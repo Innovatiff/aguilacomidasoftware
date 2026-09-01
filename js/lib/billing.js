@@ -1,17 +1,22 @@
 /**
- * Bi-weekly billing.
+ * Billing by period.
  *
- * Every client is billed on a rolling 14-day cycle anchored on the day they
- * started (`cycleAnchor`). Periods never drift and never overlap: period *i*
- * runs from `anchor + 14i` through `anchor + 14i + 13`, so any date maps to
- * exactly one period with plain arithmetic — no schedule table to maintain and
- * no cron job needed to "open" the next cycle.
+ * Every client is billed on a rolling cycle of their own length — 7 days or 14,
+ * whichever they chose — anchored on the day they started (`cycleAnchor`).
+ * Periods never drift and never overlap: period *i* runs from `anchor + n·i`
+ * through `anchor + n·i + n − 1`, so any date maps to exactly one period with
+ * plain arithmetic — no schedule table to maintain and no cron job needed to
+ * "open" the next cycle.
  *
- * A fortnight is sold at a flat price for the plan the person is on — one meal
- * a day, two meals a day — not counted meal by meal. That is what is quoted
- * and what is paid, and it means the bill for a period is known the day the
- * period opens, which is what lets somebody walk into the store and pay for a
- * fortnight that has not happened yet.
+ * A period is sold at a flat price for the plan the person is on — one meal a
+ * day, two meals a day — not counted meal by meal. That is what is quoted and
+ * what is paid, and it means the bill for a period is known the day the period
+ * opens, which is what lets somebody walk into the store and pay for a period
+ * that has not happened yet.
+ *
+ * Both lengths are whole weeks, which is what keeps everything below working
+ * on either: the serving days in a period are the same every time round, and
+ * the collection day never moves.
  *
  * Payment is due `graceDays` after the period closes.
  */
@@ -19,9 +24,45 @@
 import {
   addDays, daysBetween, today as todayKey, dayRange, weekdayOf, formatRange,
 } from './dates.js';
-import { fortnightCharge } from './pricing.js';
+import { periodCharge } from './pricing.js';
 
-export const PERIOD_DAYS = 14;
+/**
+ * How often somebody pays.
+ *
+ * Most people pay every fortnight; some want to pay every week, because they
+ * are paid every week and would rather hand over half as much twice as often.
+ * It is the same food either way — the plan price is quoted per fortnight and
+ * a weekly client pays half of it — so this changes when money is collected,
+ * not what it costs to eat here.
+ *
+ * Both are whole weeks, which is what keeps the collection day fixed: 7 and 14
+ * days both land on the same weekday forever, so a client anchored on a
+ * Saturday pays on Saturdays whichever of the two they are on.
+ */
+export const PAY_EVERY = { WEEK: 7, FORTNIGHT: 14 };
+export const DEFAULT_PAY_EVERY = PAY_EVERY.FORTNIGHT;
+
+/** Kept for the many places that mean "a fortnight" as a fixed idea. */
+export const PERIOD_DAYS = PAY_EVERY.FORTNIGHT;
+
+/** The cadence stored on a client, coerced to one of the two we support. */
+export const payEveryOf = (client) =>
+  (Number(client?.payEvery) === PAY_EVERY.WEEK ? PAY_EVERY.WEEK : PAY_EVERY.FORTNIGHT);
+
+/** How many weeks one of their periods lasts: 1 or 2. */
+export const weeksPerPeriod = (client) => payEveryOf(client) / 7;
+
+/** "semana" / "quincena" — the word for one of this person's periods. */
+export const periodWord = (client) =>
+  (payEveryOf(client) === PAY_EVERY.WEEK ? 'semana' : 'quincena');
+
+export const periodWordPlural = (client) =>
+  (payEveryOf(client) === PAY_EVERY.WEEK ? 'semanas' : 'quincenas');
+
+/** "cada semana" / "cada quincena" — for a sentence about the cadence itself. */
+export const cadenceWord = (client) =>
+  (payEveryOf(client) === PAY_EVERY.WEEK ? 'cada semana' : 'cada quincena');
+
 export const DEFAULT_GRACE_DAYS = 3;
 /** Monday–Saturday: the default serving week. */
 export const DEFAULT_DELIVERY_DAYS = [1, 2, 3, 4, 5, 6];
@@ -29,14 +70,14 @@ export const DEFAULT_DELIVERY_DAYS = [1, 2, 3, 4, 5, 6];
 /**
  * Collection days: Wednesday and Saturday.
  *
- * The kitchen collects on two days of the week and no others, so a fortnight
- * has to start on one of them. A period is 14 days, which is exactly two
- * weeks, so a cycle that starts on a Wednesday lands on a Wednesday forever —
- * anchoring on a valid day is the whole of the rule.
+ * The kitchen collects on two days of the week and no others, so a period has
+ * to start on one of them. Both period lengths are whole weeks, so a cycle
+ * that starts on a Wednesday lands on a Wednesday forever, weekly or
+ * fortnightly — anchoring on a valid day is the whole of the rule.
  *
  * The cycle belongs to the person, not to the rancho. Two people at the same
  * farm can be a week apart because they started a week apart, and the day one
- * of them pays is the day their own fortnight turns over.
+ * of them pays is the day their own period turns over.
  *
  * Every screen that names these days reads them from here. Spelling them into
  * a sentence is how "miércoles o domingo" survives in three hints after the
@@ -79,27 +120,50 @@ export function payDayOnOrBefore(key) {
  */
 export const cycleFromPayment = (key) => payDayOnOrAfter(key);
 
-/** Which cycle a day falls in, counting from the anchor. Can be negative. */
-export function periodIndex(anchor, day = todayKey()) {
-  return Math.floor(daysBetween(anchor, day) / PERIOD_DAYS);
+/**
+ * Which cycle a day falls in, counting from the anchor. Can be negative.
+ *
+ * `every` is the client's cadence in days. It defaults to a fortnight so that
+ * the handful of places reasoning about a period without a person in hand keep
+ * meaning what they always meant.
+ */
+export function periodIndex(anchor, day = todayKey(), every = DEFAULT_PAY_EVERY) {
+  return Math.floor(daysBetween(anchor, day) / every);
 }
 
-/** The period containing `day`: `{ index, start, end }`, both ends inclusive. */
-export function periodFor(anchor, day = todayKey()) {
-  const index = periodIndex(anchor, day);
-  return periodByIndex(anchor, index);
+/** The period containing `day`: `{ index, start, end, every }`, ends inclusive. */
+export function periodFor(anchor, day = todayKey(), every = DEFAULT_PAY_EVERY) {
+  return periodByIndex(anchor, periodIndex(anchor, day, every), every);
 }
 
-export function periodByIndex(anchor, index) {
-  const start = addDays(anchor, index * PERIOD_DAYS);
-  return { index, start, end: addDays(start, PERIOD_DAYS - 1) };
+export function periodByIndex(anchor, index, every = DEFAULT_PAY_EVERY) {
+  const start = addDays(anchor, index * every);
+  return { index, start, end: addDays(start, every - 1), every };
 }
 
-export const nextPeriod = (anchor, period) => periodByIndex(anchor, period.index + 1);
-export const prevPeriod = (anchor, period) => periodByIndex(anchor, period.index - 1);
+export const nextPeriod = (anchor, period) =>
+  periodByIndex(anchor, period.index + 1, period.every || DEFAULT_PAY_EVERY);
+export const prevPeriod = (anchor, period) =>
+  periodByIndex(anchor, period.index - 1, period.every || DEFAULT_PAY_EVERY);
+
+/* --- The same, from a person ------------------------------------------------
+   Almost every caller has a client rather than a bare anchor, and every one of
+   them was writing `periodFor(client.cycleAnchor || today(), today())` by hand.
+   Now the cadence lives on the client too, that repetition is one more place
+   for the two to fall out of step. */
+
+export const anchorOf = (client) => client?.cycleAnchor || todayKey();
+
+/** The period this person is in right now. */
+export const periodOf = (client, day = todayKey()) =>
+  periodFor(anchorOf(client), day, payEveryOf(client));
+
+/** Their period `index` counted from their own anchor. */
+export const periodOfIndex = (client, index) =>
+  periodByIndex(anchorOf(client), index, payEveryOf(client));
 
 /**
- * The day the next payment is due: the first day of the next fortnight.
+ * The day the next payment is due: the first day of their next period.
  *
  * Not the same as the invoice's `dueDate`, which adds the grace days before a
  * bill counts as late. This is the day the client turns up — "pagas el
@@ -183,13 +247,14 @@ export function servingDays(period, deliveryDays = DEFAULT_DELIVERY_DAYS) {
 /**
  * What a period costs this person, and what they get for it.
  *
- * Every 14-day period holds exactly two of each weekday, so the charge is the
- * same in every period and the day count from the calendar always matches the
- * one the price was built from. Returned together so a screen can show the
- * number and the reason for it in the same breath.
+ * A period is a whole number of weeks, so it holds the same weekdays every
+ * time round: the charge is the same in every period and the day count from
+ * the calendar always matches the one the price was built from. Returned
+ * together so a screen can show the number and the reason for it in the same
+ * breath.
  */
 export function projectPeriod(client, period, pricing) {
-  const charge = fortnightCharge(client, pricing);
+  const charge = periodCharge(client, pricing);
   return {
     ...charge,
     days: servingDays(period, client.deliveryDays).length,
@@ -234,8 +299,7 @@ export const STATUS_TONE = { open: 'info', due: 'warn', overdue: 'bad', paid: 'o
  * home screen both need: what is owed right now and how urgent it is.
  */
 export function summarize(client, invoices = [], day = todayKey()) {
-  const anchor = client?.cycleAnchor || day;
-  const current = periodFor(anchor, day);
+  const current = periodOf(client, day);
   const outstanding = invoices
     .filter((inv) => balanceOf(inv) > 0.005)
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
@@ -271,7 +335,7 @@ export function summarize(client, invoices = [], day = todayKey()) {
  * now the bill can still answer "why this number?" without the price list it
  * was issued under.
  *
- * `charge` is what `fortnightCharge` returns; a bare number is accepted for the
+ * `charge` is what `periodCharge` returns; a bare number is accepted for the
  * one case with no breakdown behind it — a balance carried in from paper.
  *
  * `meals` is what was actually delivered in the period. Information, not the
@@ -290,6 +354,9 @@ export function draftInvoice(client, period, charge, deliveredMeals, day = today
     locationName: client.locationName || '',
     periodStart: period.start,
     periodEnd: period.end,
+    // Frozen with the bill: a client who moves from weekly to fortnightly
+    // must not make last month's invoices describe a period they never had.
+    payEvery: period.every || payEveryOf(client),
     dueDate: dueDateFor(period, client.graceDays),
     mealsPerDay: Number(client.mealsPerDay) || 0,
     meals,

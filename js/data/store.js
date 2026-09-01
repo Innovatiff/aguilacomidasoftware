@@ -21,7 +21,7 @@ import { watchOutstanding, summarizeInvoices, groupByClient } from './invoices.j
 import { watchRecentReceipts, cancelledIds, RECENT_RECEIPTS } from './receipts.js';
 import { watchConversations, totalUnread } from './chat.js';
 import { today, formatDay, weekdayName } from '../lib/dates.js';
-import { summarize, periodFor, payDayAfter } from '../lib/billing.js';
+import { summarize, periodOf, payDayAfter } from '../lib/billing.js';
 import { DEFAULT_PRICING, chargeFor, tierFor } from '../lib/pricing.js';
 
 const state = {
@@ -209,7 +209,7 @@ export const billingFor = (client) =>
  */
 export function clientState(client) {
   const billing = billingFor(client);
-  const period = periodFor(client.cycleAnchor || today(), today());
+  const period = periodOf(client);
   const paidThrough = client.paidThrough || null;
   const covered = !!paidThrough && paidThrough >= period.end;
   const serving = servingStatus(client, state.day);
@@ -268,14 +268,13 @@ function nameState(client, billing, covered, serving) {
 export const roster = () => state.clients.map(clientState);
 
 /**
- * What one fortnight costs this person: their plan, adjusted for the week they
- * actually eat and the extra plates they take.
+ * What one of this person's periods costs: their plan, scaled to how often
+ * they pay, adjusted for the week they actually eat and the extra plates.
  */
-export const fortnightPrice = (client) => chargeFor(client, state.pricing);
+export const periodPrice = (client) => chargeFor(client, state.pricing);
 
-/** The fortnight they are in right now. */
-export const currentPeriodFor = (client) =>
-  periodFor(client?.cycleAnchor || state.day, today());
+/** The period they are in right now. */
+export const currentPeriodFor = (client) => periodOf(client);
 
 /** Clients whose meals-per-day has no plan — they cannot be billed as they are. */
 export const unpriced = () =>
@@ -325,7 +324,7 @@ export function printContext(receipt) {
   const client = state.clients.find((row) => row.id === receipt?.clientId) || null;
   if (!client?.cycleAnchor) return { business: state.business };
 
-  const period = periodFor(client.cycleAnchor, today());
+  const period = periodOf(client);
   const day = payDayAfter(period);
   return {
     business: state.business,

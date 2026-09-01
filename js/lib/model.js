@@ -53,7 +53,7 @@ export const ADMIN_QUICK_REPLIES = [
   'Buen día, le recordamos su pago pendiente.',
   'Los datos para el pago son:',
   'Confirmamos su pago, gracias.',
-  '¿Cuántas comidas necesita la próxima quincena?',
+  '¿Cuántas comidas necesita el próximo periodo?',
   'Puede pasar a la cocina cuando guste.',
 ];
 

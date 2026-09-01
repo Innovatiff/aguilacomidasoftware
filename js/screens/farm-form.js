@@ -26,7 +26,7 @@ import {
 } from '../data/farms.js';
 import { farmById, clientsOfFarm } from '../data/store.js';
 import {
-  periodFor, PERIOD_DAYS, servingDays, payDayOnOrAfter, payDaysInWords,
+  periodFor, PAY_EVERY, servingDays, payDayOnOrAfter, payDaysInWords, periodWord,
 } from '../lib/billing.js';
 import { WEEKDAYS_SHORT, today, formatRange } from '../lib/dates.js';
 import { plural } from '../lib/format.js';
@@ -162,7 +162,7 @@ export async function renderFarmForm(context) {
       card(h('div.stack.stack-4',
         field({
           label: 'Comidas por persona',
-          hint: 'Valor inicial al registrar a alguien aquí. El precio de la quincena sale de '
+          hint: 'Valor inicial al registrar a alguien aquí. El precio del periodo sale de '
             + 'ese número, según los planes en Ajustes.',
           control: input({
             value: model.defaultMealsPerDay, type: 'number', inputmode: 'numeric', min: '1', step: '1',
@@ -190,10 +190,24 @@ export async function renderFarmForm(context) {
       sectionLabel('Cobro'),
       card(h('div.stack.stack-4',
         field({
+          label: 'Cada cuánto pagan, por defecto',
+          hint: 'Con qué periodo arranca alguien registrado aquí. Cada cliente puede tener el '
+            + 'suyo: en un mismo rancho hay quien paga cada semana y quien paga cada quincena. '
+            + 'Cambiar esto no toca a los que ya están.',
+          control: select({
+            value: String(model.defaultPayEvery ?? PAY_EVERY.FORTNIGHT),
+            options: [
+              { value: String(PAY_EVERY.FORTNIGHT), label: 'Cada quincena — 14 días' },
+              { value: String(PAY_EVERY.WEEK), label: 'Cada semana — 7 días' },
+            ],
+            onchange: (e) => { update({ defaultPayEvery: Number(e.target.value) }); draw(); },
+          }),
+        }),
+        field({
           label: 'Inicio del ciclo para clientes nuevos',
-          hint: `Los periodos son de ${PERIOD_DAYS} días y se cobran en ${payDaysInWords()}. `
-            + 'Esto sólo decide desde qué día arranca alguien registrado aquí a partir de ahora: '
-            + 'la quincena de cada cliente es suya y se ajusta en su ficha, con su último pago.',
+          hint: `Se cobra en ${payDaysInWords()}. Esto sólo decide desde qué día arranca `
+            + 'alguien registrado aquí a partir de ahora: el periodo de cada cliente es suyo y '
+            + 'se ajusta en su ficha, con su último pago.',
           control: input({
             value: model.cycleAnchor, type: 'date',
             // Snapped: a cycle that does not start on a collection day would
@@ -239,7 +253,9 @@ export async function renderFarmForm(context) {
 
   /** What this farm's week actually looks like — the thing to sanity-check. */
   function termsPreview() {
-    const period = periodFor(model.cycleAnchor || today(), today());
+    const every = Number(model.defaultPayEvery) === PAY_EVERY.WEEK
+      ? PAY_EVERY.WEEK : PAY_EVERY.FORTNIGHT;
+    const period = periodFor(model.cycleAnchor || today(), today(), every);
     const days = servingDays(period, model.deliveryDays).length;
     const perDay = Number(model.defaultMealsPerDay) || 0;
 
@@ -249,7 +265,7 @@ export async function renderFarmForm(context) {
     return alert(
       `Periodo actual ${formatRange(period.start, period.end)}: ${days} días de servicio. `
       + `Una persona con ${plural(perDay, 'comida', 'comidas')} al día recibe `
-      + `${days * perDay} comidas en la quincena.`,
+      + `${days * perDay} comidas en la ${periodWord({ payEvery: every })}.`,
       'brand', 'receipt');
   }
 

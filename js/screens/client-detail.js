@@ -17,7 +17,7 @@ import { openDebtSheet } from '../ui/debt-sheet.js';
 import { openHistorySheet } from '../ui/history-sheet.js';
 import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
-import { store, subscribe, billingFor, farmById, fortnightPrice } from '../data/store.js';
+import { store, subscribe, billingFor, farmById, periodPrice } from '../data/store.js';
 import {
   watchClient, updateClient, moveClient, servingSince, setEndsOn, servingStatus, daysLeft,
   cycleIsSet,
@@ -27,14 +27,14 @@ import { watchClientReceipts, totalOf, cancelledIds } from '../data/receipts.js'
 import { openOpeningSheet } from '../ui/opening-sheet.js';
 import { ensureConversation } from '../data/chat.js';
 import {
-  periodFor, periodByIndex, projectPeriod, balanceOf, invoiceStatus,
+  periodOf, periodOfIndex, projectPeriod, balanceOf, invoiceStatus,
   STATUS_LABEL, STATUS_TONE, invoiceId, isCharge, invoiceTitle, appliedTitle,
-  payDayAfter,
+  payDayAfter, periodWord, cadenceWord,
 } from '../lib/billing.js';
-import { tierFor, fortnightCharge, mealsOn } from '../lib/pricing.js';
+import { tierFor, periodCharge, mealsOn } from '../lib/pricing.js';
 import {
   formatRange, formatDayLong, today, addDays, humanDelta, formatDay,
-  weekdayName, WEEKDAYS_SHORT,
+  weekdayName, capitalize, WEEKDAYS_SHORT,
 } from '../lib/dates.js';
 import { money, moneyFull, plural, phone as fmtPhone, telHref, number } from '../lib/format.js';
 import { clientStatusMeta, paymentMethodMeta } from '../lib/model.js';
@@ -184,7 +184,7 @@ export function renderClientDetail(context) {
   }
 
   function billingCard(model, billing, rows, loaded) {
-    const period = periodFor(model.cycleAnchor || today(), today());
+    const period = periodOf(model);
     const projection = projectPeriod(model, period, store.pricing);
     const priced = !!tierFor(store.pricing, model.mealsPerDay);
     const owes = billing.balance > 0;
@@ -213,7 +213,8 @@ export function renderClientDetail(context) {
 
         h('div.stack.stack-2',
           h('div.row.row--between.t-sm',
-            h('span.c-soft', `Quincena en curso · ${formatRange(period.start, period.end)}`),
+            h('span.c-soft',
+              `${capitalize(periodWord(model))} en curso · ${formatRange(period.start, period.end)}`),
             h('span.w-600', priced ? money(projection.amount) : 'Sin precio')),
           meter(periodProgress(period), { tone: 'ok' }),
           h('div.t-xs.c-faint',
@@ -233,9 +234,10 @@ export function renderClientDetail(context) {
           // were settled is how the wrong day gets told to a client.
           h('div.t-xs.c-faint',
             cycleIsSet(model)
-              ? `Quincena fijada con el pago del ${formatDay(model.cycleSetOn)}.`
-              : 'Su quincena todavía es la del rancho. Se fija sola con el próximo pago '
-                + 'que le registres.')),
+              ? `${capitalize(periodWord(model))} fijada con el pago del `
+                + `${formatDay(model.cycleSetOn)}.`
+              : `Su ${periodWord(model)} todavía es la del rancho. Se fija sola con el `
+                + 'próximo pago que le registres.')),
 
         priced
           ? null
@@ -358,7 +360,7 @@ export function renderClientDetail(context) {
       build: (close) => h('div.stack.stack-3',
         h('p.t-sm.c-soft',
           `Después de ese día ${model.name} deja de aparecer en la libreta y no se le `
-          + 'factura ninguna quincena más. Su saldo pendiente no se toca.'),
+          + `factura ninguna ${periodWord(model)} más. Su saldo pendiente no se toca.`),
 
         model.endsOn
           ? alert(`Ahora mismo termina el ${formatDayLong(model.endsOn)}.`,
@@ -464,7 +466,7 @@ export function renderClientDetail(context) {
   }
 
   function termsCard(model) {
-    const price = fortnightPrice(model);
+    const price = periodPrice(model);
 
     return h('div.stack.stack-3',
       sectionLabel('Condiciones del servicio', model.farmId
@@ -478,8 +480,10 @@ export function renderClientDetail(context) {
           weekStrip(model)),
 
         defList([
-          ...chargeRows(fortnightCharge(model, store.pricing), !!price),
-          defRow('Precio por quincena', price ? moneyFull(price) : 'Sin precio', { total: true }),
+          ...chargeRows(periodCharge(model, store.pricing), !!price),
+          defRow('Paga', capitalize(cadenceWord(model))),
+          defRow(`Precio por ${periodWord(model)}`,
+            price ? moneyFull(price) : 'Sin precio', { total: true }),
           defRow('Horario', model.deliveryWindow || '—'),
           // Two dates that are easy to confuse and mean different things: the
           // anchor is the rancho's calendar, this one is the day this person
@@ -491,7 +495,8 @@ export function renderClientDetail(context) {
           defRow('Días de gracia', model.graceDays === 0 ? 'Mismo día' : `${model.graceDays} días`),
         ]),
         h('p.t-xs.c-faint',
-          'El precio del plan se cambia en Ajustes → Precios; los días y las comidas extra, '
+          'El precio del plan se cambia en Ajustes → Precios; los días, las comidas extra y '
+          + 'cada cuánto paga, '
           + 'aquí en su ficha. '
           + (model.farmName ? `El horario y el ciclo vienen de ${model.farmName}.` : '')))));
   }
@@ -527,26 +532,26 @@ export function renderClientDetail(context) {
   }
 
   async function issueCycle(model) {
-    const anchor = model.cycleAnchor || today();
-    const current = periodFor(anchor, today());
+    const current = periodOf(model);
     const choice = await sheet({
       title: 'Cerrar y facturar',
       build: (close) => h('div.stack.stack-3',
-        h('p.t-sm.c-soft', 'Se emite la factura de la quincena al precio de su plan.'),
+        h('p.t-sm.c-soft', `Se emite la factura de la ${periodWord(model)} al precio de su `
+          + 'plan.'),
         h('div.stack.stack-2',
-          periodOption(periodByIndex(anchor, current.index - 1), 'Periodo anterior (cerrado)', close),
+          periodOption(periodOfIndex(model, current.index - 1), 'Periodo anterior (cerrado)', close),
           periodOption(current, 'Periodo en curso', close))),
     });
     if (!choice) return;
 
-    const price = fortnightPrice(model);
+    const price = periodPrice(model);
     if (!price) {
       toastBad('Su plan no tiene precio. Ponlo en Ajustes → Precios.');
       return;
     }
 
     try {
-      const charge = fortnightCharge(model, store.pricing);
+      const charge = periodCharge(model, store.pricing);
       await issueInvoice(model, choice, charge, charge.meals,
         { uid: session.uid, name: session.displayName });
       toastOk('Factura generada');

@@ -25,8 +25,8 @@
 import { getDocs, query, where, collection, db, listData } from '../firebase.js';
 import { issueInvoice } from './invoices.js';
 import { servingSince } from './clients.js';
-import { periodFor, periodByIndex, invoiceId } from '../lib/billing.js';
-import { fortnightCharge } from '../lib/pricing.js';
+import { periodOf, periodOfIndex, invoiceId } from '../lib/billing.js';
+import { periodCharge } from '../lib/pricing.js';
 import { today } from '../lib/dates.js';
 
 /** How many closed periods back to look. Beyond this it is history, not a task. */
@@ -76,10 +76,9 @@ export async function pendingBilling(clients, pricing, day = today()) {
   // one date range, and a range costs one read however many people are in it.
   const periods = new Map();
   for (const client of billable) {
-    const anchor = client.cycleAnchor || day;
-    const current = periodFor(anchor, day).index;
+    const current = periodOf(client, day).index;
     for (let back = 1; back <= LOOK_BACK; back += 1) {
-      const period = periodByIndex(anchor, current - back);
+      const period = periodOfIndex(client, current - back);
       const key = period.start;
       if (!periods.has(key)) periods.set(key, { period, clients: [] });
       periods.get(key).clients.push(client);
@@ -119,7 +118,7 @@ export async function pendingBilling(clients, pricing, day = today()) {
         continue;
       }
 
-      const charge = fortnightCharge(client, pricing);
+      const charge = periodCharge(client, pricing);
       if (!charge.priced) { unpriced.push(client); continue; }
 
       rows.push({ client, period, meals: charge.meals, charge, amount: charge.amount });
@@ -180,17 +179,16 @@ export function byFarm(rows) {
  * somebody was away, a fortnight already settled in cash.
  */
 export function owedSince(client, lastPaidOn, pricing, day = today()) {
-  const anchor = client?.cycleAnchor || day;
-  const charge = fortnightCharge(client, pricing);
+  const charge = periodCharge(client, pricing);
   const amount = charge.amount;
   if (!lastPaidOn || lastPaidOn >= day) return { periods: [], amount, charge, total: 0 };
 
-  const from = periodFor(anchor, lastPaidOn).index;
-  const current = periodFor(anchor, day).index;
+  const from = periodOf(client, lastPaidOn).index;
+  const current = periodOf(client, day).index;
 
   const periods = [];
   for (let index = from; index <= current; index += 1) {
-    const period = periodByIndex(anchor, index);
+    const period = periodOfIndex(client, index);
     // A fortnight that was already running when they last paid is theirs to
     // judge: the payment may or may not have covered it.
     if (period.start <= lastPaidOn) continue;

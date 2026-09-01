@@ -25,7 +25,7 @@ import { icon } from '../lib/icons.js';
 import { recordPastPayment } from '../data/invoices.js';
 import { updateClient } from '../data/clients.js';
 import {
-  cycleFromPayment, periodFor, payDayAfter, payDaysInWords,
+  cycleFromPayment, periodOf, payDayAfter, payDaysInWords, periodWord, periodWordPlural,
 } from '../lib/billing.js';
 import { money } from '../lib/format.js';
 import { formatDay, formatDayLong, weekdayName, today } from '../lib/dates.js';
@@ -39,6 +39,7 @@ import { dbMessage } from '../firebase.js';
  * @returns {Promise<object|null>} the receipt written, or null
  */
 export function openHistorySheet({ client, author }) {
+  const word = periodWord(client);
   return sheet({
     title: 'Registrar un pago anterior',
     build: (close) => {
@@ -66,13 +67,13 @@ export function openHistorySheet({ client, author }) {
         submit.disabled = busy || !(value > 0) || !date;
 
         const anchor = cycleFromPayment(date);
-        const period = periodFor(anchor, today());
+        const period = periodOf({ ...client, cycleAnchor: anchor });
         mount(cycleLine, setCycle
-          ? `Su quincena queda anclada al ${weekdayName(anchor)} ${formatDay(anchor)}. `
+          ? `Su ${word} queda anclada al ${weekdayName(anchor)} ${formatDay(anchor)}. `
             + `Hoy corre del ${formatDay(period.start)} al ${formatDay(period.end)}, `
             + `y paga otra vez el ${weekdayName(payDayAfter(period))} `
             + `${formatDay(payDayAfter(period))}.`
-          : 'Sólo se guarda el pago; su quincena no se mueve.');
+          : `Sólo se guarda el pago; su ${word} no se mueve.`);
       }
 
       const form = h('form.stack.stack-4', {
@@ -109,20 +110,21 @@ export function openHistorySheet({ client, author }) {
         defList([
           defRow('Cliente', client.name),
           defRow('Dónde', [client.farmName, client.locationName].filter(Boolean).join(' · ') || '—'),
-          defRow('Su quincena hoy', client.cycleAnchor
+          defRow(`Su ${word} hoy`, client.cycleAnchor
             ? formatDayLong(client.cycleAnchor)
             : 'Sin definir'),
         ])),
 
       alert('Es lo que ya te pagaron antes de usar el sistema. Queda en su historial y en la '
-        + 'libreta, pero no cambia su saldo: esas quincenas tampoco se facturaron aquí.', 'info'),
+        + `libreta, pero no cambia su saldo: esas ${periodWordPlural(client)} tampoco se `
+        + 'facturaron aquí.', 'info'),
 
       field({ label: 'Cuánto pagó', control: amountBox }),
 
       field({
         label: '¿Qué día pagó?',
-        hint: `De esta fecha sale su quincena. Se cobra en ${payDaysInWords()}; si eliges `
-          + 'otro día, la quincena empieza el siguiente día de cobro.',
+        hint: `De esta fecha sale su ${word}. Se cobra en ${payDaysInWords()}; si eliges `
+          + `otro día, la ${word} empieza el siguiente día de cobro.`,
         control: input({
           type: 'date', value: date, max: today(),
           onchange: (event) => { date = event.target.value || today(); repaint(); },
@@ -138,7 +140,7 @@ export function openHistorySheet({ client, author }) {
         }),
       }),
 
-      switchRow('Fijar su quincena con esta fecha', {
+      switchRow(`Fijar su ${word} con esta fecha`, {
         checked: setCycle,
         hint: 'Recomendado. Es lo que decide cuándo le toca pagar otra vez.',
         onChange: (value) => { setCycle = value; repaint(); },

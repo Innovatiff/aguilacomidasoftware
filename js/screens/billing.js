@@ -42,7 +42,7 @@ export function renderBilling(context) {
       subtitle: `${money(moneyStats().outstanding, { round: true })} por cobrar`,
       backTo: '/clients',
       tab: 'clients',
-      actions: [topbarButton('receipt', { label: 'Cerrar quincena', onClick: closeCycle })],
+      actions: [topbarButton('receipt', { label: 'Cerrar periodos', onClick: closeCycle })],
       sunken: true,
       sticky: h('div.searchbar.searchbar--sunken',
         chips(filters(), filter, (value) => { filter = value; draw(); })),
@@ -225,12 +225,12 @@ export function renderBilling(context) {
     }
 
     if (!pending.rows.length) {
-      toastBad('No hay quincenas cerradas sin facturar.');
+      toastBad('No hay periodos cerrados sin facturar.');
       return;
     }
 
     const confirmed = await sheet({
-      title: 'Cerrar quincena',
+      title: 'Cerrar periodos',
       build: (close) => h('div.stack.stack-4',
         alert(`Se emitirán ${plural(pending.rows.length, 'factura', 'facturas')} por `
           + `${moneyFull(pending.total)}, al precio de cada plan.`, 'brand', 'receipt'),
@@ -242,8 +242,8 @@ export function renderBilling(context) {
           farm.name,
           `${plural(farm.count, 'factura', 'facturas')} · ${money(farm.amount)}`,
         )))),
-        h('p.t-xs.c-faint', 'Sólo se factura a los clientes activos, y sólo las quincenas que '
-          + 'todavía no tienen factura.'),
+        h('p.t-xs.c-faint', 'Sólo se factura a los clientes activos, y sólo los periodos que '
+          + 'todavía no tienen factura. Cada quien con el suyo: semanal o quincenal.'),
         button('Emitir facturas', { variant: 'primary', block: true, onClick: () => close(true) })),
     });
     if (!confirmed) return;

@@ -28,7 +28,7 @@ import {
   posTile, posPick, posFind, posMoney, posDays, posSummary, posNote, posField, posText,
 } from '../ui/pos-kit.js';
 import {
-  store, subscribe, billingFor, farmById, fortnightPrice, printContext,
+  store, subscribe, billingFor, farmById, periodPrice, printContext,
 } from '../data/store.js';
 import {
   createClient, updateClient, setClientStatus, setEndsOn, cycleIsSet, emptyClient,
@@ -37,9 +37,10 @@ import { takePayment, addCharge } from '../data/invoices.js';
 import { watchReceiptsOn, totalOf, cancelledIds } from '../data/receipts.js';
 import { printReceipt } from '../ui/print.js';
 import {
-  periodFor, payDayAfter, payDayOnOrBefore, cycleFromPayment, isPayDay, payDaysInWords,
+  periodOf, payDayAfter, payDayOnOrBefore, cycleFromPayment, isPayDay, payDaysInWords,
+  PAY_EVERY, payEveryOf, periodWord, periodWordPlural, cadenceWord,
 } from '../lib/billing.js';
-import { fortnightCharge, tierFor } from '../lib/pricing.js';
+import { periodCharge, tierFor } from '../lib/pricing.js';
 import { money, plural } from '../lib/format.js';
 import {
   today, addDays, formatDay, formatDayLong, weekdayName, capitalize, WEEKDAYS_SHORT,
@@ -183,8 +184,8 @@ export function renderQuick() {
           onClick: () => ready && flowWeek(),
         }),
         posTile({
-          icon: 'clock', title: 'Cambiar quincena',
-          sub: 'Su día de pago',
+          icon: 'clock', title: 'Cambiar periodo',
+          sub: 'Semanal o quincenal',
           onClick: () => ready && flowCycle(),
         }),
         posTile({
@@ -295,7 +296,7 @@ export function renderQuick() {
       state: { amount: 0, setCycle: false },
       steps: (s) => {
         const owed = s.client ? owedBy(s.client) : 0;
-        const fortnight = s.client ? fortnightPrice(s.client) : 0;
+        const fortnight = s.client ? periodPrice(s.client) : 0;
         return [
           whoStep('El que debe más sale primero en la lista.'),
           {
@@ -303,7 +304,7 @@ export function renderQuick() {
             title: `¿Cuánto te dio ${firstName(s.client)}?`,
             hint: owed > 0
               ? `Debe ${money(owed)}.`
-              : 'No debe nada: esto le paga quincenas por adelantado.',
+              : `No debe nada: esto le paga ${periodWordPlural(s.client)} por adelantado.`,
             ready: (st) => st.amount > 0,
             next: 'Siguiente',
             build: (st, api) => posMoney({
@@ -311,7 +312,9 @@ export function renderQuick() {
               onChange: (v) => { st.amount = v; api.revalidate(); },
               quick: [
                 owed > 0.005 ? { label: `Debe ${money(owed)}`, value: owed } : null,
-                fortnight ? { label: `1 quincena ${money(fortnight)}`, value: fortnight } : null,
+                fortnight
+                  ? { label: `1 ${periodWord(s.client)} ${money(fortnight)}`, value: fortnight }
+                  : null,
                 owed > 0.005 && fortnight
                   ? { label: `Las dos ${money(round2(owed + fortnight))}`, value: round2(owed + fortnight) }
                   : null,
@@ -358,7 +361,8 @@ export function renderQuick() {
           onclick: () => printReceipt(receipt, printContext(receipt)),
         }, icon('receipt'), h('span', 'Imprimir recibo')),
         note: s.setCycle
-          ? `Su quincena queda en ${weekdayName(cycleFromPayment(today()))}.`
+          ? `Su ${periodWord(s.client)} queda en `
+            + `${weekdayName(cycleFromPayment(today()))}.`
           : null,
       }),
     });
@@ -376,7 +380,7 @@ export function renderQuick() {
     st.setCycle = true;
     const anchor = cycleFromPayment(today());
     return posNote(
-      `Es su primer pago aquí, así que su quincena queda en `
+      `Es su primer pago aquí, así que su ${periodWord(st.client)} queda en `
       + `${weekdayName(anchor)}: empieza el ${formatDay(anchor)}.`, 'ok');
   }
 
@@ -447,7 +451,8 @@ export function renderQuick() {
             st.days = st.days || [...(st.client.deliveryDays || [])];
             const price = h('div.posnote.posnote--ok', icon('info'), h('div'));
             const paintPrice = () => mount(price.lastChild,
-              `Su quincena costaría ${priceLabel(st.client, { deliveryDays: st.days })}.`);
+              `Su ${periodWord(st.client)} costaría `
+              + `${priceLabel(st.client, { deliveryDays: st.days })}.`);
             paintPrice();
             return h('div',
               posDays({
@@ -465,7 +470,8 @@ export function renderQuick() {
             ...whoRows(st.client),
             ['Antes', dayWords(st.client.deliveryDays)],
             ['Ahora', dayWords(st.days)],
-            ['Su quincena', priceLabel(st.client, { deliveryDays: st.days }), { total: true }],
+            [`Su ${periodWord(st.client)}`,
+              priceLabel(st.client, { deliveryDays: st.days }), { total: true }],
           ]),
         },
       ],
@@ -478,13 +484,41 @@ export function renderQuick() {
 
   function flowCycle() {
     start({
-      title: 'Cambiar quincena',
+      title: 'Cambiar periodo',
       subject: subjectOf,
       steps: (s) => [
         whoStep(),
         {
+          id: 'every',
+          title: '¿Cada cuánto paga?',
+          hint: s.client
+            ? `Ahora paga ${cadenceWord(s.client)}.`
+            : '',
+          ready: (st) => !!st.payEvery,
+          build: (st, api) => posPick({
+            columns: 2,
+            value: st.payEvery ?? payEveryOf(st.client),
+            onPick: (v) => { st.payEvery = v; api.revalidate(); },
+            advance: api.next,
+            options: [
+              {
+                value: PAY_EVERY.FORTNIGHT,
+                label: 'Cada quincena',
+                sub: `14 días · ${priceLabel(st.client, { payEvery: PAY_EVERY.FORTNIGHT })}`,
+                icon: 'calendar',
+              },
+              {
+                value: PAY_EVERY.WEEK,
+                label: 'Cada semana',
+                sub: `7 días · ${priceLabel(st.client, { payEvery: PAY_EVERY.WEEK })}`,
+                icon: 'clock',
+              },
+            ],
+          }),
+        },
+        {
           id: 'day',
-          title: '¿Qué día empieza su quincena?',
+          title: `¿Qué día empieza su ${periodWord({ payEvery: s.payEvery })}?`,
           hint: `Se cobra en ${payDaysInWords()}. Normalmente es el día que pagó.`,
           ready: (st) => !!st.anchor,
           build: (st, api) => posPick({
@@ -501,26 +535,40 @@ export function renderQuick() {
         },
         {
           id: 'confirm',
-          title: 'Revisa la quincena',
+          title: 'Revisa el periodo',
           last: true,
           build: (st) => {
-            const period = periodFor(st.anchor, today());
+            const after = { ...st.client, cycleAnchor: st.anchor, payEvery: st.payEvery };
+            const period = periodOf(after);
+            const word = periodWord(after);
             return h('div',
               posSummary([
                 ...whoRows(st.client),
-                ['Antes', st.client.cycleAnchor ? formatDayLong(st.client.cycleAnchor) : 'Sin fijar'],
-                ['Quincena en curso', `${formatDay(period.start)} – ${formatDay(period.end)}`],
-                ['Paga otra vez', `${weekdayName(payDayAfter(period))} ${formatDay(payDayAfter(period))}`,
+                ['Antes', `${capitalize(cadenceWord(st.client))} · ${priceLabel(st.client)}`],
+                ['Ahora', `${capitalize(cadenceWord(after))} · ${priceLabel(after)}`],
+                [`${capitalize(word)} en curso`,
+                  `${formatDay(period.start)} - ${formatDay(period.end)}`],
+                ['Paga otra vez',
+                  `${weekdayName(payDayAfter(period))} ${formatDay(payDayAfter(period))}`,
                   { total: true }],
               ]),
-              posNote('De aquí en adelante su quincena corre cada 14 días desde ese día. '
-                + 'Pagar tarde no se lo mueve.', 'ok'));
+              // First, because it is the line that stops an argument: half as
+              // much twice as often is the same food at the same rate per
+              // plate, and the amount on the next line looks wrong without it.
+              st.payEvery !== payEveryOf(st.client)
+                ? posNote('Es la misma comida y el mismo precio por plato: cambia cada cuándo '
+                  + 'se cobra, no cuánto cuesta comer.', 'warn')
+                : null,
+              posNote(`De aquí en adelante su ${word} corre cada ${st.payEvery} días desde ese `
+                + 'día. Pagar tarde no se lo mueve.', 'ok'));
           },
         },
       ],
-      commit: (s) => updateClient(s.client.id, { cycleAnchor: s.anchor, cycleSetOn: today() }),
+      commit: (s) => updateClient(s.client.id, {
+        cycleAnchor: s.anchor, payEvery: s.payEvery, cycleSetOn: today(),
+      }),
       done: (s) => ({
-        what: `Quincena en ${weekdayName(s.anchor)}`,
+        what: `Paga ${cadenceWord({ payEvery: s.payEvery })}`,
         who: `${s.client.name} · desde el ${formatDay(s.anchor)}`,
       }),
     });
@@ -589,14 +637,15 @@ export function renderQuick() {
               options: [1, 2, 3].map((n) => ({
                 value: n,
                 label: String(n),
-                sub: money(tierFor(store.pricing, n)?.price || 0) + ' / quincena',
+                sub: `${money(tierFor(store.pricing, n)?.price || 0)} / quincena`,
               })),
             }),
           },
           {
             id: 'confirm',
             title: 'Revisa antes de darlo de alta',
-            hint: 'Come de lunes a sábado. Los días y su quincena se ajustan después si hace falta.',
+            hint: 'Come de lunes a sábado y paga cada quincena. Los días y el periodo se '
+              + 'ajustan después si hace falta.',
             last: true,
             next: 'Dar de alta',
             build: (st) => posSummary([
@@ -754,8 +803,8 @@ export function renderQuick() {
               ...whoRows(st.client),
               ['Último día', capitalize(formatDayLong(st.endsOn)), { total: true }],
             ]),
-            posNote('Las quincenas hasta ese día se le siguen cobrando. Las que empiecen '
-              + 'después, no.', 'ok')),
+            posNote(`Las ${periodWordPlural(st.client)} hasta ese día se le siguen cobrando. `
+              + 'Las que empiecen después, no.', 'ok')),
         },
       ],
       commit: (s) => setEndsOn(s.client.id, s.endsOn),
@@ -781,7 +830,7 @@ const statusWord = (status) => (
 
 /** What a fortnight would cost with `patch` applied — the live price preview. */
 function priceLabel(client, patch = {}) {
-  const charge = fortnightCharge({ ...client, ...patch }, store.pricing);
+  const charge = periodCharge({ ...client, ...patch }, store.pricing);
   return charge.priced ? money(charge.amount) : 'Sin precio';
 }
 
