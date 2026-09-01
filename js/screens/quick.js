@@ -119,6 +119,7 @@ export function renderQuick() {
       h('header.pos__bar',
         h('button.pos__exit', { type: 'button', onclick: () => go('/') },
           icon('chevronL'), h('span', 'Salir')),
+        h('span.pos__mark', icon('eagle')),
         h('span.pos__title', 'Acción rápida'),
         h('span.pos__day', capitalize(formatDayLong(today())))),
       h('div.pos__body', h('div.pos__inner', { id: 'quick-tiles' })));
@@ -172,19 +173,19 @@ export function renderQuick() {
           onClick: () => ready && flowCharge(),
         }),
         posTile({
-          icon: 'utensils', title: 'Cambiar comidas',
+          icon: 'utensils', title: 'Cambiar comidas', family: 'plan',
           sub: '1 ó 2 al día',
           onClick: () => ready && flowMeals(),
         })),
 
       h('div.postiles.postiles--4',
         posTile({
-          icon: 'calendar', title: 'Cambiar días',
+          icon: 'calendar', title: 'Cambiar días', family: 'plan',
           sub: 'Qué días come',
           onClick: () => ready && flowWeek(),
         }),
         posTile({
-          icon: 'clock', title: 'Cambiar periodo',
+          icon: 'clock', title: 'Cambiar periodo', family: 'plan',
           sub: 'Semanal o quincenal',
           onClick: () => ready && flowCycle(),
         }),
@@ -192,27 +193,27 @@ export function renderQuick() {
         // change who is eating next to each other. Four across, so the row
         // break falls between the two groups rather than through one.
         posTile({
-          icon: 'plus', title: 'Agregar deuda',
+          icon: 'plus', title: 'Agregar deuda', family: 'money',
           sub: 'Un cargo aparte',
           onClick: () => ready && flowDebt(),
         }),
         posTile({
-          icon: 'edit', title: 'Corregir saldo',
+          icon: 'edit', title: 'Corregir saldo', family: 'money',
           sub: 'Dejarlo en lo correcto',
           onClick: () => ready && flowBalance(),
         }),
         posTile({
-          icon: 'userPlus', title: 'Nuevo cliente',
+          icon: 'userPlus', title: 'Nuevo cliente', family: 'who',
           sub: 'Dar de alta',
           onClick: () => ready && flowNew(),
         }),
         posTile({
-          icon: 'pause', title: 'Pausar o reactivar',
+          icon: 'pause', title: 'Pausar o reactivar', family: 'who',
           sub: 'Deja o vuelve a comer',
           onClick: () => ready && flowStatus(),
         }),
         posTile({
-          icon: 'ban', title: 'Último día',
+          icon: 'ban', title: 'Último día', family: 'who',
           sub: 'Hasta cuándo come',
           onClick: () => ready && flowLastDay(),
         })),

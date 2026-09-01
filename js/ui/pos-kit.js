@@ -21,12 +21,23 @@ import { WEEKDAYS_SHORT, today as todayKey } from '../lib/dates.js';
 /* --- Tiles ----------------------------------------------------------------- */
 
 /** A big action tile: icon, name, one line under it. */
-export const posTile = ({ icon: name, title, sub, onClick, on = false, hero = false }) =>
-  h(`button.postile${hero ? '.postile--hero' : ''}${on ? '.is-on' : ''}`,
-    { type: 'button', onclick: onClick },
-    name ? h('span.postile__ico', icon(name)) : null,
-    h('span.postile__name', title),
-    sub ? h('span.postile__sub', sub) : null);
+/**
+ * @param {object} options
+ * @param {'money'|'plan'|'who'} [options.family]  what kind of change this is,
+ *   which decides the colour of its icon chip. Seven white rectangles all read
+ *   the same from two steps back; three colours make the board scannable
+ *   before a single word has been read. The label still says everything the
+ *   colour does.
+ */
+export const posTile = ({
+  icon: name, title, sub, onClick, on = false, hero = false, family,
+}) =>
+  h(`button.postile${hero ? '.postile--hero' : ''}${family ? `.postile--${family}` : ''}`
+    + `${on ? '.is-on' : ''}`,
+  { type: 'button', onclick: onClick },
+  name ? h('span.postile__ico', icon(name)) : null,
+  h('span.postile__name', title),
+  sub ? h('span.postile__sub', sub) : null);
 
 /**
  * Pick one of a few. Choosing advances the flow, because on this screen
@@ -156,7 +167,7 @@ export function posFind({ clients, value, onPick, balanceOf }) {
 
   box.oninput = paint;
   paint();
-  return h('div', h('div', { style: { marginBottom: '4px' } }, box), count, results);
+  return h('div.posfind', h('div', { style: { marginBottom: '4px' } }, box), count, results);
 }
 
 function personRow(client, { on, owes, onClick }) {
@@ -227,7 +238,10 @@ export function posMoney({ value, onChange, quick = [] }) {
     : null;
 
   paint();
-  return h('div', display, chips, pad);
+  // Its own column: a keypad stretched across a 1366px screen is three rows of
+  // slabs the hand has to travel between. A till is narrow because a till is
+  // used with one hand without looking.
+  return h('div.posmoney', display, chips, pad);
 }
 
 /* --- The week -------------------------------------------------------------- */

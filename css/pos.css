@@ -28,13 +28,24 @@
   --pos-line: #14171b;
   --pos-line-soft: #8a929c;
   --pos-fill: #ffffff;
-  --pos-sunken: #eef1f4;
+  --pos-sunken: #eceff2;
   --pos-text: #14171b;
   --pos-soft: #414a55;
   --pos-brand: #d95c05;
   --pos-brand-dark: #a54304;
+  --pos-brand-wash: #fff1e6;
   --pos-ok: #0f7a3d;
   --pos-bad: #b91c1c;
+
+  /*
+   * Three families, so seven white rectangles become a board you can read at a
+   * glance: what moves money, what changes the plan, what changes the person.
+   * The label still says everything the colour does — this only decides where
+   * the eye lands first.
+   */
+  --pos-money: #d95c05;
+  --pos-plan: #0e6a72;
+  --pos-who: #4a5568;
 
   --pos-r: 10px;
   --pos-key: 4px;              /* the hard shadow that makes a key look like one */
@@ -75,6 +86,8 @@
   flex: none;
 }
 
+.pos__mark { display: flex; color: var(--pos-brand); }
+.pos__mark svg { width: 30px; height: 30px; }
 .pos__title { font-size: 26px; font-weight: 800; letter-spacing: -0.01em; }
 .pos__day {
   margin-left: auto;
@@ -83,9 +96,11 @@
 }
 .pos__step {
   margin-left: 14px;
-  font-size: 18px; font-weight: 700;
-  padding: 6px 14px;
-  border: 2px solid #ffffff;
+  font-size: 18px; font-weight: 800;
+  padding: 7px 16px;
+  color: #ffffff;
+  background: var(--pos-brand);
+  border: 2px solid var(--pos-brand);
   border-radius: 999px;
   white-space: nowrap;
 }
@@ -101,9 +116,26 @@
 .pos__exit:hover { background: rgba(255, 255, 255, .16); }
 .pos__exit svg { width: 22px; height: 22px; }
 
-/* The scrolling middle. `min-height: 0` or the flex child refuses to scroll. */
-.pos__body { flex: 1; min-height: 0; overflow-y: auto; position: relative; }
-.pos__inner { max-width: 900px; margin: 0 auto; padding: 22px 18px 28px; }
+/* The scrolling middle. `min-height: 0` or the flex child refuses to scroll.
+   A slide with three controls on it used to sit at the top of a 768px panel
+   with three hundred pixels of nothing under it; centring costs nothing when
+   the slide is tall, because `margin: auto` on a flex child only takes up
+   space that is actually spare. */
+.pos__body {
+  flex: 1; min-height: 0; overflow-y: auto; position: relative;
+  display: flex; flex-direction: column;
+}
+.pos__inner {
+  width: 100%; max-width: 1200px;
+  margin: auto; padding: 26px 24px 30px;
+}
+
+/*
+ * The board wants the width — nine tiles read better spread out. A flow does
+ * not: it asks one question at a time, and a summary whose keys and values sit
+ * a foot apart is harder to read across, not easier.
+ */
+.pos--flow .pos__inner { max-width: 940px; }
 
 /* --- Who this is about ----------------------------------------------------
    Once somebody is chosen their name stays on screen. Losing sight of it two
@@ -130,12 +162,13 @@
 /* --- One slide ------------------------------------------------------------ */
 
 .pos__q {
-  font-size: 30px; font-weight: 800; line-height: 1.2;
-  margin: 0 0 4px;
+  font-size: 32px; font-weight: 800; line-height: 1.2;
+  letter-spacing: -0.015em;
+  margin: 0 0 6px;
 }
 .pos__hint {
   font-size: 18px; color: var(--pos-soft);
-  margin: 0 0 20px;
+  margin: 0 0 22px;
 }
 
 /* Enter from the side it came from. Short on purpose: at a counter a
@@ -240,10 +273,22 @@
 }
 .postile:active { transform: translateY(var(--pos-key)); box-shadow: 0 0 0 var(--pos-line); }
 .postile:focus-visible { outline: 4px solid var(--pos-brand); outline-offset: 3px; }
-.postile__ico { color: var(--pos-brand); }
-.postile__ico svg { width: 40px; height: 40px; stroke-width: 2.2; }
-.postile__name { font-size: 21px; font-weight: 800; line-height: 1.15; }
+/* A filled chip rather than a bare glyph: it gives the icon mass at arm's
+   length, and it is where the family colour lives. */
+.postile__ico {
+  display: grid; place-items: center;
+  width: 56px; height: 56px;
+  border-radius: 12px;
+  color: #ffffff;
+  background: var(--pos-tile, var(--pos-brand));
+}
+.postile__ico svg { width: 32px; height: 32px; stroke-width: 2.4; }
+.postile__name { font-size: 22px; font-weight: 800; line-height: 1.15; }
 .postile__sub { font-size: 16px; color: var(--pos-soft); }
+
+.postile--money { --pos-tile: var(--pos-money); }
+.postile--plan  { --pos-tile: var(--pos-plan); }
+.postile--who   { --pos-tile: var(--pos-who); }
 
 /* The one action that is most of the day. */
 .postile--hero {
@@ -253,9 +298,16 @@
   box-shadow: 0 var(--pos-key) 0 var(--pos-brand-dark);
 }
 .postile--hero:active { box-shadow: 0 0 0 var(--pos-brand-dark); }
-.postile--hero .postile__ico { color: #ffffff; }
-.postile--hero .postile__name { font-size: 30px; }
-.postile--hero .postile__sub { color: #ffeadb; font-size: 18px; }
+/* Inverted on the orange: solid white with the brand glyph, which reads at a
+   distance where a translucent panel just looks like a smudge. */
+.postile--hero .postile__ico {
+  background: #ffffff;
+  color: var(--pos-brand);
+  width: 62px; height: 62px;
+}
+.postile--hero .postile__ico svg { width: 36px; height: 36px; }
+.postile--hero .postile__name { font-size: 34px; }
+.postile--hero .postile__sub { color: #ffe4d0; font-size: 19px; }
 
 /* A pick-one tile: shorter, centred, and unmistakable once chosen. */
 .postile--pick {
@@ -264,6 +316,11 @@
   position: relative;
 }
 .postile--pick .postile__name { font-size: 26px; }
+.postile--pick .postile__ico {
+  width: auto; height: auto; background: none; color: var(--pos-brand);
+}
+.postile--pick .postile__ico svg { width: 38px; height: 38px; }
+.postile--pick.is-on .postile__ico { color: #ffffff; }
 .postile.is-on {
   background: var(--pos-brand); color: #ffffff;
   border-color: var(--pos-brand-dark);
@@ -353,6 +410,32 @@
 
 /* --- Keypad --------------------------------------------------------------- */
 
+/* The money column. Everything that builds an amount lives inside it, so the
+   keys stay close to each other and to the number they are making. */
+.posmoney { max-width: 620px; }
+
+/*
+ * A step whose whole content is a keypad does not want the board's width: the
+ * question ends up alone at the left of a wide empty field. Narrowing the
+ * column centres the question, the amount and the keys together as one block.
+ *
+ * Progressive: where `:has()` is not supported the slide simply keeps the full
+ * width, which is what it had before. Nothing breaks, it is only less composed.
+ */
+.pos__inner:has(> .posmoney) { max-width: 700px; }
+
+/*
+ * The one slide that must not be centred vertically. Its height changes with
+ * every letter typed — five results, then two, then one — and a centred block
+ * moves the search box up the screen under the hand that is typing into it.
+ */
+.pos__inner:has(> .posfind) { margin-top: 0; max-width: 860px; }
+
+/* Same reason on the finish screen: a note stretched to the full board width
+   under a centred tick and a centred button is the one thing on it that does
+   not line up with anything else. */
+.pos__inner:has(> .posdone) { max-width: 720px; }
+
 .poskeys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .poskey {
   min-height: 62px;
@@ -370,26 +453,33 @@
    a bad panel is read as "you cannot press this". */
 .poskey--wipe { background: #ffe7d3; color: var(--pos-brand-dark); font-size: 26px; }
 
+/* The one number the whole screen exists to get right, so it is the loudest
+   thing on it — louder than the keys that build it. Was 40px in near-black,
+   which the keypad under it out-weighed three to one. */
 .posamount {
-  display: flex; align-items: baseline; justify-content: flex-end; gap: 6px;
-  min-height: 74px; padding: 8px 20px; margin-bottom: 10px;
+  display: flex; align-items: baseline; justify-content: flex-end; gap: 8px;
+  min-height: 92px; padding: 10px 24px; margin-bottom: 12px;
   background: var(--pos-fill);
   border: 3px solid var(--pos-line);
   border-radius: var(--pos-r);
+  box-shadow: 0 var(--pos-key) 0 var(--pos-line);
   font-variant-numeric: tabular-nums;
 }
-.posamount__cur { font-size: 26px; font-weight: 800; color: var(--pos-soft); }
-.posamount__n { font-size: 40px; font-weight: 900; letter-spacing: -0.02em; }
+.posamount__cur { font-size: 30px; font-weight: 800; color: var(--pos-brand); }
+.posamount__n {
+  font-size: 54px; font-weight: 900; letter-spacing: -0.02em;
+  color: var(--pos-brand-dark); line-height: 1.05;
+}
 
 .poschips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
 .poschip {
-  min-height: 52px; padding: 0 16px;
+  min-height: 54px; padding: 0 18px;
   font: inherit; font-size: 19px; font-weight: 800;
-  background: var(--pos-fill); color: var(--pos-text);
-  border: 3px solid var(--pos-line); border-radius: var(--pos-r);
+  background: var(--pos-brand-wash); color: var(--pos-brand-dark);
+  border: 3px solid var(--pos-brand); border-radius: var(--pos-r);
   cursor: pointer;
 }
-.poschip:hover { background: #fff3e9; }
+.poschip:hover { background: #ffe3cd; }
 .poschip:focus-visible { outline: 4px solid var(--pos-brand); outline-offset: 3px; }
 
 /* --- Weekday toggles ------------------------------------------------------ */
@@ -428,8 +518,9 @@
 .possum__row:last-child { border-bottom: 0; }
 .possum__k { font-size: 17px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--pos-soft); }
 .possum__v { font-size: 22px; font-weight: 800; text-align: right; }
-.possum__row--total { background: var(--pos-sunken); }
-.possum__row--total .possum__v { font-size: 30px; }
+.possum__row--total { background: var(--pos-brand-wash); }
+.possum__row--total .possum__k { color: var(--pos-brand-dark); }
+.possum__row--total .possum__v { font-size: 32px; color: var(--pos-brand-dark); }
 
 .posnote {
   display: flex; gap: 12px; align-items: flex-start;
@@ -475,7 +566,7 @@
   animation: pos-pop 260ms cubic-bezier(.2, .9, .3, 1.3) both;
 }
 .posdone__mark svg { width: 56px; height: 56px; stroke-width: 3; }
-.posdone__what { font-size: 30px; font-weight: 900; margin-bottom: 6px; }
+.posdone__what { font-size: 40px; font-weight: 900; margin-bottom: 6px; letter-spacing: -0.02em; }
 .posdone__who { font-size: 20px; color: var(--pos-soft); }
 /* The one action the finish screen offers: big, because on a counter the
    receipt is what the person on the other side is waiting for. */
@@ -487,25 +578,31 @@
 
 /* --- The day's takings ---------------------------------------------------- */
 
+/* Dark, because it is the one number on this screen that is a fact rather
+   than a button — and because a board of white tiles needs something to sit
+   on. It is still a control, so it keeps the key shadow. */
 .postill {
   display: flex; align-items: center; gap: 18px;
   width: 100%;
-  margin-top: 18px; padding: 14px 18px;
-  font: inherit; text-align: left; color: var(--pos-text);
-  background: var(--pos-fill);
+  margin-top: 20px; padding: 16px 20px;
+  font: inherit; text-align: left; color: #ffffff;
+  background: var(--pos-line);
   border: 3px solid var(--pos-line);
   border-radius: var(--pos-r);
-  box-shadow: 0 var(--pos-key) 0 var(--pos-line);
+  box-shadow: 0 var(--pos-key) 0 #000000;
   cursor: pointer;
 }
-.postill:active { transform: translateY(var(--pos-key)); box-shadow: 0 0 0 var(--pos-line); }
+.postill:active { transform: translateY(var(--pos-key)); box-shadow: 0 0 0 #000000; }
 .postill:focus-visible { outline: 4px solid var(--pos-brand); outline-offset: 3px; }
 .postill__k {
   font-size: 16px; font-weight: 800; text-transform: uppercase;
-  letter-spacing: .05em; color: var(--pos-soft);
+  letter-spacing: .05em; color: #b9c1cb;
 }
-.postill__v { font-size: 30px; font-weight: 900; font-variant-numeric: tabular-nums; }
-.postill__n { margin-left: auto; font-size: 17px; font-weight: 700; color: var(--pos-soft); }
+.postill__v {
+  font-size: 34px; font-weight: 900; color: #ffb877;
+  font-variant-numeric: tabular-nums;
+}
+.postill__n { margin-left: auto; font-size: 17px; font-weight: 700; color: #b9c1cb; }
 
 /* --- Short screens ---------------------------------------------------------
    The store's panel is 768px tall and the keypad is the tightest thing here:
@@ -518,7 +615,17 @@
    whatever they plug in next. */
 
 @media (max-height: 820px) {
-  .pos__inner { padding: 14px 18px 18px; }
+  .pos__inner { padding: 16px 22px 20px; }
+
+  /* The icon chip and the strip under the board are where the last twenty
+     pixels come from: measured, the home screen ran 22px past a 768px panel
+     and took the day's takings off the bottom with it. */
+  .postile__ico { width: 48px; height: 48px; border-radius: 10px; }
+  .postile__ico svg { width: 28px; height: 28px; }
+  .postile--hero .postile__ico { width: 54px; height: 54px; }
+  .postile--hero .postile__ico svg { width: 32px; height: 32px; }
+  .postill { margin-top: 12px; padding: 12px 20px; }
+  .postill__v { font-size: 30px; }
   .pos__q { font-size: 26px; }
   .pos__hint { font-size: 16px; margin-bottom: 12px; }
 

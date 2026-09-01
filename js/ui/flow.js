@@ -82,6 +82,7 @@ export function runFlow({ title, steps, state = {}, subject, commit, done, onExi
     h('header.pos__bar',
       h('button.pos__exit', { type: 'button', onclick: leave },
         icon('x'), h('span', 'Salir')),
+      h('span.pos__mark', icon('eagle')),
       h('span.pos__title', title),
       h('span.pos__day', capitalize(formatDayLong(today()))),
       stepBadge),
