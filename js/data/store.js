@@ -16,10 +16,11 @@ import {
 } from './clients.js';
 import { watchFarms } from './farms.js';
 import { watchPricing } from './pricing.js';
+import { watchBusiness, DEFAULT_BUSINESS } from './business.js';
 import { watchOutstanding, summarizeInvoices, groupByClient } from './invoices.js';
 import { watchRecentReceipts, cancelledIds, RECENT_RECEIPTS } from './receipts.js';
 import { watchConversations, totalUnread } from './chat.js';
-import { today } from '../lib/dates.js';
+import { today, formatDay, weekdayName } from '../lib/dates.js';
 import { summarize, periodFor, payDayAfter } from '../lib/billing.js';
 import { DEFAULT_PRICING, chargeFor, tierFor } from '../lib/pricing.js';
 
@@ -28,6 +29,9 @@ const state = {
   // The price list starts at the defaults so the first render already quotes a
   // real number instead of $0 while the document loads.
   pricing: { ...DEFAULT_PRICING },
+  // What goes at the top of a printed receipt. Defaults until the document
+  // loads, so the first print of a session is never headerless.
+  business: { ...DEFAULT_BUSINESS },
   farms: [],
   clients: [],
   outstanding: [],
@@ -80,6 +84,10 @@ export function startStore() {
   state.errors = {};
 
   stops = [
+    // Not fatal if it fails: a receipt with the default header still prints,
+    // and nothing else on the panel depends on it.
+    watchBusiness((row) => { state.business = row; emit(); }, () => {}),
+
     watchPricing((pricing) => {
       state.pricing = pricing;
       state.loaded.pricing = true;
@@ -125,6 +133,7 @@ export function stopStore() {
   stops = [];
   Object.assign(state, {
     pricing: { ...DEFAULT_PRICING },
+    business: { ...DEFAULT_BUSINESS },
     farms: [], clients: [], outstanding: [], receipts: [], conversations: [],
     loaded: {
       pricing: false, farms: false, clients: false,
@@ -304,6 +313,25 @@ export function paymentsFor(clientId) {
  * something it does not know.
  */
 export const tillIsWindowed = () => state.receipts.length >= RECENT_RECEIPTS;
+
+/**
+ * What `printReceipt` needs: the header, and the client's next collection day.
+ *
+ * The next pay day is the only live figure on an otherwise frozen document, so
+ * it is looked up here rather than stored — and it is simply absent when the
+ * client is no longer in the roster, which is the honest answer.
+ */
+export function printContext(receipt) {
+  const client = state.clients.find((row) => row.id === receipt?.clientId) || null;
+  if (!client?.cycleAnchor) return { business: state.business };
+
+  const period = periodFor(client.cycleAnchor, today());
+  const day = payDayAfter(period);
+  return {
+    business: state.business,
+    nextPay: `${weekdayName(day).toUpperCase()} ${formatDay(day).toUpperCase()}`,
+  };
+}
 
 /** True once the screens have enough to render without skeletons. */
 export const isReady = () => state.loaded.farms && state.loaded.clients;

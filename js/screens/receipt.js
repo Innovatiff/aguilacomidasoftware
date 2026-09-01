@@ -16,6 +16,8 @@ import {
 import { go } from '../lib/router.js';
 import { watchReceipt, watchReversal } from '../data/receipts.js';
 import { voidReceipt } from '../data/invoices.js';
+import { printReceipt } from '../ui/print.js';
+import { printContext } from '../data/store.js';
 import { toastOk, toastBad, confirm } from '../ui/overlay.js';
 import { session } from '../data/session.js';
 import { dbMessage } from '../firebase.js';
@@ -125,6 +127,13 @@ export function renderReceipt(context) {
       receipt.note ? alert(receipt.note, 'info') : null,
 
       h('div.stack.stack-2',
+        // First, because this is what somebody opens an old receipt to do:
+        // the client lost their copy, or the till was closed by accident
+        // before it printed.
+        button('Imprimir recibo', {
+          variant: 'dark', block: true, icon: 'receipt',
+          onClick: () => printReceipt(receipt, { ...printContext(receipt), copy: true }),
+        }),
         button('Ver la ficha del cliente', {
           variant: 'ghost', block: true, icon: 'users',
           onClick: () => go(`/clients/${receipt.clientId}`),

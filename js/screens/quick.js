@@ -28,13 +28,14 @@ import {
   posTile, posPick, posFind, posMoney, posDays, posSummary, posNote, posField, posText,
 } from '../ui/pos-kit.js';
 import {
-  store, subscribe, billingFor, farmById, fortnightPrice,
+  store, subscribe, billingFor, farmById, fortnightPrice, printContext,
 } from '../data/store.js';
 import {
   createClient, updateClient, setClientStatus, setEndsOn, cycleIsSet, emptyClient,
 } from '../data/clients.js';
 import { takePayment, addCharge } from '../data/invoices.js';
 import { watchReceiptsOn, totalOf, cancelledIds } from '../data/receipts.js';
+import { printReceipt } from '../ui/print.js';
 import {
   periodFor, payDayAfter, payDayOnOrBefore, cycleFromPayment, isPayDay, payDaysInWords,
 } from '../lib/billing.js';
@@ -210,14 +211,49 @@ export function renderQuick() {
       tillStrip());
   }
 
-  /** Today's takings, net of anything cancelled today. */
+  /**
+   * Today's takings — and the way back to a receipt that never got printed.
+   *
+   * This is the case the counter actually hits: the payment went through, the
+   * operator closed the screen, and the client is still standing there wanting
+   * their paper. It is a button rather than a line for exactly that.
+   */
   function tillStrip() {
     const voided = cancelledIds(takings);
     const live = takings.filter((r) => Number(r.amount) > 0 && !voided.has(r.id));
-    return h('div.postill',
+    return h('button.postill', { type: 'button', onclick: () => live.length && showTill() },
       h('span.postill__k', 'Cobrado hoy'),
       h('span.postill__v', money(totalOf(takings), { round: true })),
-      h('span.postill__n', plural(live.length, 'pago', 'pagos')));
+      h('span.postill__n', live.length
+        ? `${plural(live.length, 'pago', 'pagos')} · tócalo para reimprimir`
+        : 'Sin pagos todavía'));
+  }
+
+  /** The day's receipts, each one a press away from the printer. */
+  function showTill() {
+    const voided = cancelledIds(takings);
+    const live = takings.filter((r) => Number(r.amount) > 0 && !voided.has(r.id));
+
+    start({
+      title: 'Recibos de hoy',
+      steps: () => [{
+        id: 'pick',
+        title: 'Reimprimir un recibo',
+        hint: 'Los pagos de hoy, del más reciente al más viejo.',
+        ready: () => false,
+        build: () => h('div.posresults', live.map((receipt) => h('button.posperson', {
+          type: 'button',
+          onclick: () => printReceipt(receipt, { ...printContext(receipt), copy: true }),
+        },
+        h('span.posperson__mark', icon('receipt')),
+        h('span.posperson__who',
+          h('span.posperson__name', receipt.clientName || '—'),
+          h('span.posperson__where', `${receipt.folio || ''} · ${money(receipt.amount)}`)),
+        h('span.posperson__owes.posperson__owes--ok', 'Imprimir')))),
+      }],
+      commit: async () => null,
+      done: () => ({ what: 'Listo' }),
+    });
   }
 
   /* --- The step everything starts with ----------------------------------- */
@@ -313,6 +349,14 @@ export function renderQuick() {
       done: (s, receipt) => ({
         what: `Cobrado ${money(s.amount)}`,
         who: `${s.client.name} · ${receipt.folio}`,
+        // The thing the person on the other side of the counter is waiting
+        // for. Offered rather than fired automatically: a print dialog that
+        // opens by itself is one nobody expects, and a browser can refuse a
+        // print that no click asked for.
+        extra: h('button.posbtn.posbtn--go', {
+          type: 'button',
+          onclick: () => printReceipt(receipt, printContext(receipt)),
+        }, icon('receipt'), h('span', 'Imprimir recibo')),
         note: s.setCycle
           ? `Su quincena queda en ${weekdayName(cycleFromPayment(today()))}.`
           : null,

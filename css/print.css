@@ -1,0 +1,130 @@
+/* ==========================================================================
+   Paper.
+
+   The counter's printer is a 3-inch thermal unit installed as an ordinary
+   Windows printer, so printing is just the browser printing — no driver, no
+   server, no extension. What this file does is make the page that comes out
+   be the receipt and nothing else.
+
+   80mm paper has about 72mm of printable width once the mechanism's own
+   margins are taken off, so the sheet is 72mm and `@page` claims the full 80
+   with no margin. Everything is monospace and laid out in characters: a
+   thermal head prints a fixed grid, and a layout that depends on proportional
+   metrics is a layout that comes out ragged.
+
+   Nothing here affects the screen. `#print-root` is hidden until the moment
+   the printer is asked for.
+   ========================================================================== */
+
+#print-root { display: none; }
+
+@media print {
+  @page {
+    size: 80mm auto;
+    margin: 0;
+  }
+
+  /*
+   * Everything the app draws is a direct child of <body> — the app root, the
+   * counter screen, the sheet scrim, the toasts — so hiding its siblings is
+   * one rule rather than a list that has to be kept up to date as screens are
+   * added.
+   */
+  body > *:not(#print-root) { display: none !important; }
+
+  html, body {
+    width: 80mm;
+    margin: 0;
+    padding: 0;
+    background: #fff;
+    /* A thermal head is black or nothing; anything grey comes out as noise. */
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  #print-root { display: block !important; }
+}
+
+/* --- The receipt itself ---------------------------------------------------
+   Outside the media query so it can be rendered on screen for a preview and
+   for the tests, which check the real layout rather than a screenshot of a
+   dialog nobody can automate. */
+
+.rcp {
+  width: 72mm;
+  padding: 3mm 2mm 0;
+  margin: 0 auto;
+  box-sizing: border-box;
+  background: #fff;
+  color: #000;
+  font-family: "Consolas", "Courier New", "DejaVu Sans Mono", monospace;
+  font-size: 11.5px;
+  line-height: 1.34;
+  letter-spacing: 0;
+}
+
+/* Boxed, the way the store's own till prints its name. It is the first thing
+   anybody looks at to know whose receipt they are holding. */
+.rcp__name {
+  text-align: center;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  border: 1px solid #000;
+  border-radius: 2px;
+  padding: 3px 4px;
+  margin: 0 0 4px;
+}
+
+.rcp__title {
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  padding: 1px 0;
+}
+
+.rcp__mid { text-align: center; }
+.rcp__line { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.rcp__who {
+  font-size: 14px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+/* A rule of dashes rather than a hairline: a 1px border on a 203dpi head is a
+   coin toss between a line and nothing. */
+.rcp__rule {
+  border-top: 1px dashed #000;
+  margin: 3px 0;
+  height: 0;
+}
+
+.rcp__pair {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+}
+.rcp__v { white-space: nowrap; }
+
+.rcp__pair--total {
+  font-size: 14px;
+  font-weight: 700;
+  padding: 1px 0;
+}
+
+.rcp__ok {
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  padding: 2px 0;
+}
+
+/* Blank paper past the last line, so the tear-off edge does not cut the text
+   and the next receipt starts clean. */
+.rcp__tail {
+  height: 14mm;
+  white-space: pre;
+}

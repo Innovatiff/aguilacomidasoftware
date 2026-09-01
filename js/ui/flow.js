@@ -50,7 +50,7 @@ import { dbMessage } from '../firebase.js';
  * @param {Function} config.steps   (state) => Step[]  — recomputed as state grows
  * @param {object} [config.state]   seed state
  * @param {Function} config.commit  async (state) => result
- * @param {Function} config.done    (state, result) => { what, who }
+ * @param {Function} config.done    (state, result) => { what, who, note, extra }
  * @param {Function} config.onExit  called when the operator leaves
  */
 export function runFlow({ title, steps, state = {}, subject, commit, done, onExit }) {
@@ -221,6 +221,9 @@ export function runFlow({ title, steps, state = {}, subject, commit, done, onExi
         h('div.posdone__mark', icon('check')),
         h('div.posdone__what', finished.what),
         finished.who ? h('div.posdone__who', finished.who) : null),
+      // Whatever the action wants offered once it is done — printing the
+      // receipt, in the only case that has one.
+      finished.extra ? h('div.posdone__extra', finished.extra) : null,
       finished.note ? h('div.posnote.posnote--ok', icon('info'), h('div', finished.note)) : null));
 
     backBtn.hidden = true;

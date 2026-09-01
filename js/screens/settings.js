@@ -22,9 +22,11 @@ import { toastOk, toastBad, confirm, sheet } from '../ui/overlay.js';
 import { session, signOutNow, updateOwnProfile } from '../data/session.js';
 import { watchStaff, addStaff, removeStaff, isValidEmail, normalizeEmail } from '../data/staff.js';
 import { savePricing } from '../data/pricing.js';
+import { saveBusiness, DEFAULT_BUSINESS } from '../data/business.js';
+import { printReceipt } from '../ui/print.js';
 import { store, subscribe, activeClients, moneyStats, unpriced } from '../data/store.js';
 import { money, number, plural } from '../lib/format.js';
-import { formatStamp } from '../lib/dates.js';
+import { formatStamp, today } from '../lib/dates.js';
 import { toDate, dbMessage } from '../firebase.js';
 
 export function renderSettings() {
@@ -43,6 +45,7 @@ export function renderSettings() {
       sunken: true,
       body: h('div.page__inner.page__inner--flow.stack.stack-4',
         pricesCard(),
+        receiptCard(),
         profileCard(),
         teamCard(),
         numbersCard(),
@@ -102,6 +105,91 @@ export function renderSettings() {
     return plural(
       store.clients.filter((client) => Number(client.mealsPerDay) === Number(mealsPerDay)).length,
       'cliente', 'clientes');
+  }
+
+  /**
+   * The heading printed on every receipt.
+   *
+   * Here rather than in the source because it is the kitchen's information,
+   * not the software's: a phone number that changes should be something
+   * somebody types on a Tuesday, not a release. The sample print is the point
+   * of the card — nobody should have to take a real payment to find out that
+   * the address has a typo.
+   */
+  function receiptCard() {
+    const info = store.business || DEFAULT_BUSINESS;
+
+    return h('div.stack.stack-3',
+      sectionLabel('Recibo impreso', h('button.btn.btn--soft.btn--sm', {
+        type: 'button', onclick: editReceipt,
+      }, icon('edit'), 'Editar')),
+      card(h('div.stack.stack-3',
+        defList([
+          defRow('Negocio', info.name),
+          info.address ? defRow('Dirección', info.address) : null,
+          info.city ? defRow('Ciudad', info.city) : null,
+          info.phone ? defRow('Teléfono', info.phone) : null,
+          info.email ? defRow('Correo', info.email) : null,
+          defRow('Pie', info.footer),
+        ].filter(Boolean)),
+        h('p.t-xs.c-faint',
+          'Es lo que se imprime arriba de cada recibo, en la impresora del mostrador '
+          + '(papel de 3 pulgadas).'),
+        button('Imprimir una prueba', {
+          variant: 'ghost', block: true, size: 'sm', icon: 'receipt', onClick: testPrint,
+        }))));
+  }
+
+  function editReceipt() {
+    const draft = { ...(store.business || DEFAULT_BUSINESS) };
+    const set = (key) => (event) => { draft[key] = event.target.value; };
+
+    sheet({
+      title: 'Recibo impreso',
+      build: (close) => h('form.stack.stack-4', {
+        onsubmit: async (event) => {
+          event.preventDefault();
+          try {
+            await saveBusiness(draft, { name: session.displayName });
+            toastOk('Recibo actualizado');
+            close(true);
+          } catch (error) { toastBad(error?.message || dbMessage(error)); }
+        },
+      },
+      field({ label: 'Nombre del negocio', control: input({ value: draft.name, oninput: set('name') }) }),
+      field({ label: 'Dirección', control: input({ value: draft.address, oninput: set('address') }) }),
+      field({ label: 'Ciudad, provincia y código', control: input({ value: draft.city, oninput: set('city') }) }),
+      field({ label: 'Teléfono', control: input({ value: draft.phone, oninput: set('phone') }) }),
+      field({
+        label: 'Correo',
+        hint: 'Déjalo vacío si no quieres que salga en el recibo.',
+        control: input({ value: draft.email, oninput: set('email') }),
+      }),
+      field({
+        label: 'Pie del recibo',
+        hint: 'La línea de despedida. Ej. GRACIAS POR SU PAGO.',
+        control: input({ value: draft.footer, oninput: set('footer') }),
+      }),
+      h('button.btn.btn--primary.btn--block.btn--lg', { type: 'submit' }, 'Guardar')),
+    });
+  }
+
+  /** A receipt with made-up numbers, so the paper can be checked for free. */
+  function testPrint() {
+    printReceipt({
+      id: 'prueba',
+      folio: 'R-PRUEBA-0000',
+      clientName: 'PRUEBA DE IMPRESION',
+      farmName: 'Rancho de prueba',
+      locationName: 'Casa 1',
+      amount: 75,
+      method: 'cash',
+      date: today(),
+      applied: [{ title: 'Quincena de prueba', amount: 75, kind: 'period' }],
+      balanceAfter: 0,
+      takenByName: session.displayName || '',
+      at: new Date(),
+    }, { business: store.business || DEFAULT_BUSINESS });
   }
 
   function profileCard() {

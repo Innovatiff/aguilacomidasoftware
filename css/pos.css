@@ -459,6 +459,11 @@
 .posdone__mark svg { width: 56px; height: 56px; stroke-width: 3; }
 .posdone__what { font-size: 30px; font-weight: 900; margin-bottom: 6px; }
 .posdone__who { font-size: 20px; color: var(--pos-soft); }
+/* The one action the finish screen offers: big, because on a counter the
+   receipt is what the person on the other side is waiting for. */
+.posdone__extra { max-width: 460px; margin: 0 auto 16px; }
+.posdone__extra .posbtn { width: 100%; min-height: 76px; font-size: 24px; }
+
 @keyframes pos-pop { from { transform: scale(.6); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .posdone__mark { animation: none; } }
 
@@ -466,11 +471,17 @@
 
 .postill {
   display: flex; align-items: center; gap: 18px;
+  width: 100%;
   margin-top: 18px; padding: 14px 18px;
+  font: inherit; text-align: left; color: var(--pos-text);
   background: var(--pos-fill);
   border: 3px solid var(--pos-line);
   border-radius: var(--pos-r);
+  box-shadow: 0 var(--pos-key) 0 var(--pos-line);
+  cursor: pointer;
 }
+.postill:active { transform: translateY(var(--pos-key)); box-shadow: 0 0 0 var(--pos-line); }
+.postill:focus-visible { outline: 4px solid var(--pos-brand); outline-offset: 3px; }
 .postill__k {
   font-size: 16px; font-weight: 800; text-transform: uppercase;
   letter-spacing: .05em; color: var(--pos-soft);
