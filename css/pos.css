@@ -213,9 +213,16 @@
 .postiles { display: grid; gap: 14px; }
 .postiles--2 { grid-template-columns: repeat(2, 1fr); }
 .postiles--3 { grid-template-columns: repeat(3, 1fr); }
+.postiles--4 { grid-template-columns: repeat(4, 1fr); }
 @media (max-width: 720px) {
-  .postiles--3 { grid-template-columns: repeat(2, 1fr); }
+  .postiles--3, .postiles--4 { grid-template-columns: repeat(2, 1fr); }
 }
+/* Four across holds all the way down to the 900px floor the counter screen
+   itself sets: a 768px-tall panel has room for two rows of tiles and the day's
+   takings under them, and no more. Three columns would push the takings off the
+   bottom of exactly the machine this screen was built for. Below 720px there is
+   no counter screen at all, so the two-column rule above is for the pick-one
+   steps inside a flow. */
 
 .postile {
   display: flex; flex-direction: column; align-items: flex-start; gap: 8px;

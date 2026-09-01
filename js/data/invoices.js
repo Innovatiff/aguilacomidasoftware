@@ -25,6 +25,7 @@ import {
 } from '../lib/billing.js';
 import { periodCharge } from '../lib/pricing.js';
 import { today, addDays } from '../lib/dates.js';
+import { money } from '../lib/format.js';
 
 /** How far ahead a single payment may buy: three months, then it is refused. */
 const MAX_PREPAID_PERIODS = 6;
@@ -176,6 +177,167 @@ export async function addCharge({ client, amount, reason, date }, author) {
 
   await setDoc(ref, record);
   return { id, ...record };
+}
+
+/* --- Correcting what somebody owes ----------------------------------------- */
+
+/**
+ * Changes the amount of one bill, with the reason attached to it.
+ *
+ * The notebook years left a lot of numbers that are simply wrong: a fortnight
+ * typed at the wrong plan, a debt entered twice, an amount somebody agreed to
+ * knock down at the counter. Until now the only tools were to add another debt
+ * — which cannot make a number smaller — or to delete a hand-written one, which
+ * loses the fact that it ever existed.
+ *
+ * So a bill's amount is editable, and every edit is kept on the bill: what it
+ * was, what it became, who changed it and why. The note is not optional for the
+ * same reason a debt's reason is not: a number that moved with no explanation is
+ * the argument this whole screen exists to prevent.
+ *
+ * What it will not do is push a bill below what has already been paid against
+ * it. That would mean the kitchen owes the client change, which is a refund —
+ * a different thing, with its own record. Cancel the payment first.
+ *
+ * In a transaction, because a payment landing at the same moment must not be
+ * lost, and because `settled` has to be recomputed from both halves.
+ */
+export async function correctAmount({ invoice, amount, note }, author) {
+  const id = invoice?.id;
+  if (!id) throw new Error('Esa factura ya no existe.');
+
+  const next = round2(amount);
+  const why = String(note || '').trim();
+  if (!(next >= 0)) throw new Error('El monto no puede ser negativo.');
+  if (!why) throw new Error('Escribe por qué cambia el monto.');
+
+  const ref = doc(db, 'invoices', id);
+
+  return runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists()) throw new Error('Esa factura ya no existe.');
+
+    const data = snap.data();
+    if (round2(data.amount || 0) === next) return { id, ...data };
+    if (next < round2(data.paid || 0)) {
+      throw new Error(`Ya pagó ${money(round2(data.paid || 0))} de esta cuenta. `
+        + 'Para bajarla de ahí hay que cancelar primero el pago.');
+    }
+
+    tx.set(ref, correction(data, next, why, author), { merge: true });
+    return { id, ...data, amount: next };
+  });
+}
+
+/**
+ * The patch that moves one bill's amount, with the reason on it.
+ *
+ * Split out because the balance correction below applies several of these in a
+ * single transaction, and the rule for what a corrected bill looks like has to
+ * be the same whether one bill is being fixed or four.
+ */
+function correction(data, next, note, author) {
+  const before = round2(data.amount || 0);
+  const paid = round2(data.paid || 0);
+  const settled = paid >= next - 0.005;
+
+  const record = {
+    amount: next,
+    settled,
+    status: settled ? 'paid' : (data.status === 'open' ? 'open' : 'due'),
+    // The whole trail, not just the last change: a bill corrected twice has to
+    // be able to answer for both times.
+    corrections: [...(data.corrections || []), {
+      from: before,
+      to: next,
+      note,
+      date: today(),
+      byName: author?.name || '',
+      byUid: author?.uid || null,
+    }],
+    updatedAt: serverTimestamp(),
+  };
+
+  if (settled && !data.paidAt) record.paidAt = serverTimestamp();
+  if (!settled) record.paidAt = null;
+  return record;
+}
+
+/**
+ * Puts somebody's balance on a number, whatever it takes to get there.
+ *
+ * This is the one the counter actually reaches for. Nobody thinks "invoice
+ * c14_2026-08-26 should be $120" — they think "he owes $140 and it should be
+ * $120". So the manager types the total and the arithmetic happens here.
+ *
+ * Down, it comes off the newest bills first. A reduction is nearly always a
+ * recent mistake, and taking it off the oldest would quietly settle a fortnight
+ * that has been overdue for a month — the age of a debt is information, and
+ * clearing it with a correction would erase it.
+ *
+ * Up, it is one new debt for the difference carrying the note as its reason,
+ * which is exactly what a hand-written debt already is.
+ *
+ * The reductions go in one transaction. Half of a correction applied is worse
+ * than none: the balance would sit on a number nobody chose, and the client
+ * would have been told a total that never existed.
+ */
+export async function adjustBalance({ client, target, note }, author) {
+  const why = String(note || '').trim();
+  if (!why) throw new Error('Escribe por qué cambia el saldo.');
+
+  const wanted = round2(target);
+  if (!(wanted >= 0)) throw new Error('El saldo no puede ser negativo.');
+
+  const snap = await getDocs(query(invoicesRef(),
+    where('clientId', '==', client.id), where('settled', '==', false)));
+  const open = listData(snap)
+    .filter((invoice) => balanceOf(invoice) > 0.005)
+    .sort((a, b) => String(b.periodStart).localeCompare(String(a.periodStart)));
+
+  const balance = round2(open.reduce((sum, invoice) => sum + balanceOf(invoice), 0));
+  const difference = round2(wanted - balance);
+  if (Math.abs(difference) < 0.005) return { changed: 0, balance, touched: [] };
+
+  if (difference > 0) {
+    const charge = await addCharge(
+      { client, amount: difference, reason: why, date: today() }, author);
+    return { changed: difference, balance: wanted, touched: [charge.id] };
+  }
+
+  const refs = open.map((invoice) => doc(db, 'invoices', invoice.id));
+
+  const touched = await runTransaction(db, async (tx) => {
+    // Every read before every write, which a Firestore transaction requires and
+    // which also means the amounts below are the ones actually stored right
+    // now — not the ones the screen was showing when the manager typed.
+    const snaps = [];
+    for (const ref of refs) snaps.push(await tx.get(ref));
+
+    let left = round2(-difference);
+    const done = [];
+
+    for (let i = 0; i < snaps.length && left > 0.005; i += 1) {
+      if (!snaps[i].exists()) continue;
+      const data = snaps[i].data();
+      const owing = round2((Number(data.amount) || 0) - (Number(data.paid) || 0));
+      if (owing <= 0.005) continue;
+
+      const give = Math.min(left, owing);
+      tx.set(refs[i], correction(data, round2((Number(data.amount) || 0) - give), why, author),
+        { merge: true });
+      done.push(refs[i].id);
+      left = round2(left - give);
+    }
+
+    if (left > 0.005) {
+      throw new Error(`Sólo se pueden bajar ${money(round2(-difference - left))}: `
+        + 'el resto ya está pagado. Para devolverlo hay que cancelar el pago.');
+    }
+    return done;
+  });
+
+  return { changed: difference, balance: wanted, touched };
 }
 
 /**

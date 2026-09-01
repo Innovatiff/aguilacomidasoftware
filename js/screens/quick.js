@@ -33,7 +33,7 @@ import {
 import {
   createClient, updateClient, setClientStatus, setEndsOn, cycleIsSet, emptyClient,
 } from '../data/clients.js';
-import { takePayment, addCharge } from '../data/invoices.js';
+import { takePayment, addCharge, adjustBalance } from '../data/invoices.js';
 import { watchReceiptsOn, totalOf, cancelledIds } from '../data/receipts.js';
 import { printReceipt } from '../ui/print.js';
 import {
@@ -177,7 +177,7 @@ export function renderQuick() {
           onClick: () => ready && flowMeals(),
         })),
 
-      h('div.postiles.postiles--3',
+      h('div.postiles.postiles--4',
         posTile({
           icon: 'calendar', title: 'Cambiar días',
           sub: 'Qué días come',
@@ -188,15 +188,23 @@ export function renderQuick() {
           sub: 'Semanal o quincenal',
           onClick: () => ready && flowCycle(),
         }),
-        posTile({
-          icon: 'userPlus', title: 'Nuevo cliente',
-          sub: 'Dar de alta',
-          onClick: () => ready && flowNew(),
-        }),
+        // The two money corrections next to each other, and the three that
+        // change who is eating next to each other. Four across, so the row
+        // break falls between the two groups rather than through one.
         posTile({
           icon: 'plus', title: 'Agregar deuda',
           sub: 'Un cargo aparte',
           onClick: () => ready && flowDebt(),
+        }),
+        posTile({
+          icon: 'edit', title: 'Corregir saldo',
+          sub: 'Dejarlo en lo correcto',
+          onClick: () => ready && flowBalance(),
+        }),
+        posTile({
+          icon: 'userPlus', title: 'Nuevo cliente',
+          sub: 'Dar de alta',
+          onClick: () => ready && flowNew(),
         }),
         posTile({
           icon: 'pause', title: 'Pausar o reactivar',
@@ -717,6 +725,94 @@ export function renderQuick() {
       commit: (s) => addCharge(
         { client: s.client, amount: s.amount, reason: s.reason.trim(), date: today() }, author()),
       done: (s) => ({ what: `Deuda de ${money(s.amount)}`, who: `${s.client.name} · ${s.reason.trim()}` }),
+    });
+  }
+
+  /* --- Corregir el saldo --------------------------------------------------- */
+
+  /**
+   * Putting what somebody owes on the right number, at the counter.
+   *
+   * The argument this settles happens here, not at the desk: "yo ya pagué esa
+   * quincena", "me cobraron doble". Adding a debt only goes up, so until now
+   * the counter could not answer it at all.
+   *
+   * The manager types the total the person should owe — not the difference,
+   * which is the arithmetic nobody wants to do with somebody waiting — and says
+   * why. Every account it touches keeps the note.
+   */
+  function flowBalance() {
+    start({
+      title: 'Corregir saldo',
+      subject: subjectOf,
+      state: { target: null, note: '' },
+      steps: (s) => [
+        whoStep('Sale primero el que más debe.'),
+        {
+          id: 'target',
+          title: '¿Cuánto debe en realidad?',
+          hint: s.client
+            ? `Ahora debe ${money(owedBy(s.client))}. Escribe el total correcto, no la diferencia.`
+            : '',
+          ready: (st) => st.target !== null && st.target >= 0,
+          build: (st, api) => h('div',
+            posMoney({
+              value: st.target ?? owedBy(st.client),
+              onChange: (v) => { st.target = v; api.revalidate(); },
+            }),
+            h('div.poschips', { style: { marginTop: '14px' } },
+              h('button.poschip', {
+                type: 'button',
+                onclick: () => { st.target = 0; api.refresh(); },
+              }, 'No debe nada'))),
+        },
+        {
+          id: 'note',
+          title: '¿Por qué?',
+          hint: 'Queda guardado en cada cuenta que se toque, con tu nombre y la fecha.',
+          ready: (st) => st.note.trim().length > 1,
+          build: (st, api) => h('div',
+            posField('Motivo', posText({
+              value: st.note,
+              placeholder: 'Ej. la quincena de agosto se cobró doble',
+              maxlength: 90,
+              onChange: (v) => { st.note = v; api.revalidate(); },
+            })),
+            h('div.poschips', { style: { marginTop: '14px' } },
+              ['Se le cobró de más', 'Corrección del cuaderno', 'Descuento acordado']
+                .map((text) => h('button.poschip', {
+                  type: 'button',
+                  onclick: () => { st.note = text; api.refresh(); },
+                }, text)))),
+        },
+        {
+          id: 'confirm',
+          title: 'Revisa el saldo',
+          last: true,
+          build: (st) => {
+            const was = owedBy(st.client);
+            const difference = round2(st.target - was);
+            return h('div',
+              posSummary([
+                ...whoRows(st.client),
+                ['Motivo', st.note.trim()],
+                ['Debía', money(was)],
+                [difference > 0 ? 'Se le suman' : 'Se le bajan', money(Math.abs(difference))],
+                ['Va a deber', money(st.target), { total: true }],
+              ]),
+              difference > 0
+                ? posNote('Se le agrega una deuda nueva por la diferencia, con ese motivo.', 'ok')
+                : posNote('Se baja de sus cuentas más recientes. Lo que ya está pagado no se '
+                  + 'toca: para devolver dinero hay que cancelar el pago.', 'ok'));
+          },
+        },
+      ],
+      commit: (s) => adjustBalance(
+        { client: s.client, target: s.target, note: s.note.trim() }, author()),
+      done: (s) => ({
+        what: `Saldo en ${money(s.target)}`,
+        who: `${s.client.name} · ${s.note.trim()}`,
+      }),
     });
   }
 

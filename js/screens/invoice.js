@@ -4,23 +4,26 @@
  * take a payment and send a reminder.
  */
 
-import { h } from '../lib/dom.js';
+import { h, mount } from '../lib/dom.js';
 import { icon } from '../lib/icons.js';
 import { screen } from '../ui/shell.js';
 import {
   card, button, badge, defList, defRow, sectionLabel, list, itemRow,
-  alert, loading, meter, chargeRows,
+  alert, loading, meter, chargeRows, field, input, moneyInput,
 } from '../ui/kit.js';
 import { toastOk, toastBad, confirm, sheet } from '../ui/overlay.js';
 import { openChargeSheet } from '../ui/charge-sheet.js';
 import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
-import { watchInvoice, reversePayment, voidReceipt, voidCharge } from '../data/invoices.js';
+import {
+  watchInvoice, reversePayment, voidReceipt, voidCharge, correctAmount,
+} from '../data/invoices.js';
 import { getReceipt } from '../data/receipts.js';
 import { store, clientById, invoicesFor } from '../data/store.js';
 import { postSystemMessage } from '../data/chat.js';
 import {
-  balanceOf, invoiceStatus, isCharge, invoiceTitle, periodWord, STATUS_LABEL, STATUS_TONE,
+  balanceOf, invoiceStatus, isCharge, invoiceTitle, periodWord, round2,
+  STATUS_LABEL, STATUS_TONE,
 } from '../lib/billing.js';
 import {
   formatDayLong, formatDay, today, humanDelta, daysBetween, formatStamp, dayKey, capitalize,
@@ -142,6 +145,19 @@ export function renderInvoice(context) {
             ]),
       ].filter(Boolean))),
 
+      // Every correction this bill has had, oldest first. On the bill itself
+      // rather than in a log somewhere: the number somebody is questioning is
+      // right here, and so is the reason it moved.
+      (invoice.corrections || []).length
+        ? h('div.stack.stack-2',
+            sectionLabel('Correcciones'),
+            list((invoice.corrections || []).map(correctionRow), { card: true }))
+        : null,
+
+      button('Corregir el monto', {
+        variant: 'ghost', block: true, icon: 'edit', onClick: fixAmount,
+      }),
+
       isCharge(invoice)
         ? alert('Esta deuda se agregó a mano'
           + (invoice.issuedByName ? ` (${invoice.issuedByName})` : '')
@@ -171,6 +187,114 @@ export function renderInvoice(context) {
       invoice.issuedByName
         ? h('p.t-xs.c-faint.center', `Emitida por ${invoice.issuedByName}`)
         : null);
+  }
+
+  /** One line of the trail: what it was, what it became, and why. */
+  function correctionRow(entry) {
+    const down = Number(entry.to) < Number(entry.from);
+    return itemRow({
+      lead: h('div.avatar.avatar--sm', {
+        style: down
+          ? { background: 'var(--ok-50)', color: 'var(--ok-600)' }
+          : { background: 'var(--warn-50)', color: 'var(--warn-600)' },
+      }, icon('edit')),
+      title: `${money(entry.from)} → ${money(entry.to)}`,
+      meta: entry.note || 'Sin motivo',
+      end: h('span.t-xs.c-faint',
+        [entry.byName, entry.date ? formatDay(entry.date) : null].filter(Boolean).join(' · ')),
+      chevron: false,
+    });
+  }
+
+  /**
+   * Changing this bill's amount.
+   *
+   * The whole point is the note, so the button stays dead until there is one —
+   * a correction nobody can explain is worse than the wrong number, because at
+   * least the wrong number gets questioned.
+   */
+  async function fixAmount() {
+    const paidHere = round2(invoice.paid || 0);
+
+    const result = await sheet({
+      title: 'Corregir el monto',
+      build: (close) => {
+        let next = String(round2(invoice.amount || 0));
+        let note = '';
+        let busy = false;
+
+        const save = h('button.btn.btn--primary.btn--block.btn--lg', { type: 'submit' });
+        const after = h('div.t-sm.c-soft');
+
+        const box = moneyInput({
+          value: round2(invoice.amount || 0),
+          autofocus: true,
+          oninput: (event) => { next = event.target.value; repaint(); },
+        });
+        const noteBox = input({
+          placeholder: 'Ej. se cobró al plan equivocado',
+          maxlength: 90,
+          oninput: (event) => { note = event.target.value; repaint(); },
+        });
+
+        function repaint() {
+          const value = round2(Number(next) || 0);
+          const moved = Math.abs(value - round2(invoice.amount || 0)) > 0.005;
+          const tooLow = value < paidHere - 0.005;
+
+          mount(save, icon('edit'), moved ? `Dejarla en ${money(value)}` : 'Corregir el monto');
+          save.disabled = busy || !moved || !note.trim() || tooLow || value < 0;
+
+          mount(after, tooLow
+            ? `Ya pagó ${money(paidHere)} de esta cuenta. Para bajarla de ahí hay que `
+              + 'cancelar primero el pago.'
+            : moved
+              ? `Queda debiendo ${money(round2(value - paidHere))} de esta cuenta.`
+              : 'Escribe el monto correcto.');
+        }
+
+        const form = h('form.stack.stack-4', {
+          onsubmit: async (event) => {
+            event.preventDefault();
+            if (busy) return;
+            busy = true;
+            save.disabled = true;
+            mount(save, h('span.spinner.spinner--light'), 'Corrigiendo…');
+            try {
+              await correctAmount(
+                { invoice, amount: round2(Number(next) || 0), note: note.trim() },
+                { uid: session.uid, name: session.displayName });
+              close(true);
+            } catch (error) {
+              busy = false;
+              repaint();
+              toastBad(error?.message || dbMessage(error));
+            }
+          },
+        },
+        card(defList([
+          defRow('Cuenta', invoiceTitle(invoice)),
+          defRow('Dice ahora', moneyFull(invoice.amount)),
+          paidHere > 0.005 ? defRow('Ya pagado', money(paidHere)) : null,
+        ].filter(Boolean))),
+
+        field({ label: 'Monto correcto', control: box }),
+        field({
+          label: '¿Por qué?',
+          hint: 'Queda guardado en la cuenta, con tu nombre y la fecha.',
+          control: noteBox,
+        }),
+        after,
+        alert('No se borra nada: la cuenta guarda lo que decía antes y lo que dice ahora.',
+          'info'),
+        save);
+
+        repaint();
+        return form;
+      },
+    });
+
+    if (result) toastOk('Monto corregido');
   }
 
   function paymentRow(payment, index) {

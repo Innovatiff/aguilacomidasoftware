@@ -14,6 +14,7 @@ import {
 import { toastOk, toastBad, sheet } from '../ui/overlay.js';
 import { openChargeSheet } from '../ui/charge-sheet.js';
 import { openDebtSheet } from '../ui/debt-sheet.js';
+import { openBalanceSheet } from '../ui/balance-sheet.js';
 import { openHistorySheet } from '../ui/history-sheet.js';
 import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
@@ -250,6 +251,14 @@ export function renderClientDetail(context) {
           button('Agregar deuda', {
             variant: 'ghost', size: 'sm', icon: 'plus', onClick: () => addDebt(model),
           }),
+          // Only where there is something to correct: on an account at zero
+          // the way to move the number up is to add a debt, which is the
+          // button right next to it.
+          billing.balance > 0.005
+            ? button('Corregir saldo', {
+                variant: 'ghost', size: 'sm', icon: 'edit', onClick: () => fixBalance(model),
+              })
+            : null,
           button('Cerrar y facturar', {
             variant: 'ghost', size: 'sm', icon: 'receipt', onClick: () => issueCycle(model),
           })))),
@@ -403,6 +412,15 @@ export function renderClientDetail(context) {
   /** A debt the billing cycle did not produce: it goes on as its own bill. */
   async function addDebt(model) {
     await openDebtSheet({
+      client: model,
+      invoices,
+      author: { uid: session.uid, name: session.displayName },
+    });
+  }
+
+  /** Puts the balance on the number it should have been all along. */
+  async function fixBalance(model) {
+    await openBalanceSheet({
       client: model,
       invoices,
       author: { uid: session.uid, name: session.displayName },
