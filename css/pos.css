@@ -445,6 +445,17 @@
 .posnote--ok   { border-color: var(--pos-ok); background: #e8f7ee; }
 .posnote svg { flex: none; width: 26px; height: 26px; }
 
+/* Said out loud rather than left to be discovered: the list is capped at what
+   fits, and a counter that cannot see the rest assumes they do not exist. Sits
+   above the results so it is on screen even when the list runs past the fold. */
+.posmore {
+  margin-top: 10px; padding: 10px 14px;
+  font-size: 17px; font-weight: 700; color: var(--pos-brand-dark);
+  border: 3px solid var(--pos-brand);
+  border-radius: var(--pos-r);
+  background: #fff6ef;
+}
+
 .posempty {
   padding: 28px 18px; text-align: center;
   font-size: 19px; font-weight: 600; color: var(--pos-soft);

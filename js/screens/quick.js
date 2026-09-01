@@ -306,7 +306,8 @@ export function renderQuick() {
         const owed = s.client ? owedBy(s.client) : 0;
         const fortnight = s.client ? periodPrice(s.client) : 0;
         return [
-          whoStep('El que debe más sale primero en la lista.'),
+          whoStep('Sin escribir nada sale primero el que más debe. Escribe su nombre '
+            + 'para buscarlo.'),
           {
             id: 'amount',
             title: `¿Cuánto te dio ${firstName(s.client)}?`,
@@ -747,7 +748,8 @@ export function renderQuick() {
       subject: subjectOf,
       state: { target: null, note: '' },
       steps: (s) => [
-        whoStep('Sale primero el que más debe.'),
+        whoStep('Sin escribir nada sale primero el que más debe. Escribe su nombre '
+          + 'para buscarlo.'),
         {
           id: 'target',
           title: '¿Cuánto debe en realidad?',

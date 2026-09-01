@@ -14,7 +14,7 @@
 
 import { h, mount } from '../lib/dom.js';
 import { icon } from '../lib/icons.js';
-import { money } from '../lib/format.js';
+import { money, fold } from '../lib/format.js';
 import { matchesSearch } from '../data/clients.js';
 import { WEEKDAYS_SHORT, today as todayKey } from '../lib/dates.js';
 
@@ -66,6 +66,36 @@ export function posPick({ options, value, onPick, columns = 3, advance }) {
  * store's screen — a sixth row half-hidden behind a button is worse than no
  * sixth row, and one more letter typed is faster than scrolling for a name.
  */
+/**
+ * How many rows fit above the footer without scrolling.
+ *
+ * Read from the same breakpoint the stylesheet tightens everything else at,
+ * rather than a second number kept in step by hand: on a 768px panel a fifth
+ * row lands under the footer, and a row you have to scroll to find is a row the
+ * counter does not know is there. The notice above the list says how many more
+ * matched, so nothing is lost by showing fewer.
+ */
+const shownCount = () =>
+  (globalThis.matchMedia?.('(max-height: 820px)')?.matches ? 4 : 5);
+
+/**
+ * How well a client answers what was typed.
+ *
+ * Lower is better. Somebody whose name *starts* with the term beats somebody
+ * who merely contains it, who in turn beats somebody matched only on their
+ * rancho or their phone — because what gets typed at the counter is a name, and
+ * the person standing there is not usually the one who owes the most.
+ */
+function rank(client, term) {
+  const needle = fold(term);
+  const name = fold(client.name);
+  if (!needle) return 3;
+  if (name.startsWith(needle)) return 0;
+  if (name.split(/\s+/).some((word) => word.startsWith(needle))) return 1;
+  if (name.includes(needle)) return 2;
+  return 3;
+}
+
 export function posFind({ clients, value, onPick, balanceOf }) {
   const box = h('input.posfield', {
     type: 'text',
@@ -74,21 +104,49 @@ export function posFind({ clients, value, onPick, balanceOf }) {
     spellcheck: 'false',
   });
   const results = h('div.posresults');
+  // Above the list, not under it. Under it, the line sits below the fold on the
+  // store's 768px screen — and a counter that has to scroll to learn there are
+  // more people is a counter that tells somebody they are not in the system.
+  const count = h('div.posmore', { hidden: true });
 
   const paint = () => {
     const term = box.value.trim();
-    const pool = clients.filter((c) => c.status !== 'inactive');
-    const rows = (term ? pool.filter((c) => matchesSearch(c, term)) : pool)
-      .sort((a, b) => (balanceOf(b) - balanceOf(a))
-        || String(a.name).localeCompare(String(b.name), 'es'))
-      .slice(0, 5);
+
+    /*
+     * With nothing typed, the list is who owes the most: that is who walks up.
+     * Once a name is typed it is a lookup, not a worklist, so the closest
+     * matches come first — five debtors called García are no help to the García
+     * standing there who is up to date.
+     *
+     * Somebody marked inactive is left out of the idle list but findable by
+     * name, flagged. They stopped eating here; they can still owe for what they
+     * ate, and the counter has to be able to take that money.
+     */
+    const pool = term ? clients : clients.filter((c) => c.status !== 'inactive');
+    const found = (term ? pool.filter((c) => matchesSearch(c, term)) : pool)
+      .sort((a, b) => (term ? rank(a, term) - rank(b, term) : 0)
+        || (balanceOf(b) - balanceOf(a))
+        || String(a.name).localeCompare(String(b.name), 'es'));
+
+    const rows = found.slice(0, shownCount());
+    const hidden = found.length - rows.length;
 
     if (!rows.length) {
+      count.hidden = true;
       mount(results, h('div.posempty', term
         ? `Nadie se llama así. Prueba con el apellido.`
         : 'Todavía no hay clientes.'));
       return;
     }
+
+    // Never drop somebody in silence. Five Garcías on screen out of nine reads
+    // as "he is not in the system", and that is how a client gets sent home.
+    count.hidden = hidden <= 0;
+    if (hidden > 0) {
+      mount(count, `${found.length} se llaman así · faltan ${hidden}, `
+        + 'escribe otra palabra de su nombre');
+    }
+
     mount(results, rows.map((client) => personRow(client, {
       on: value?.id === client.id,
       owes: balanceOf(client),
@@ -98,12 +156,13 @@ export function posFind({ clients, value, onPick, balanceOf }) {
 
   box.oninput = paint;
   paint();
-  return h('div', h('div', { style: { marginBottom: '4px' } }, box), results);
+  return h('div', h('div', { style: { marginBottom: '4px' } }, box), count, results);
 }
 
 function personRow(client, { on, owes, onClick }) {
-  const flag = client.status === 'paused' ? 'en pausa'
-    : (client.endsOn && client.endsOn < todayKey()) ? 'terminó' : null;
+  const flag = client.status === 'inactive' ? 'inactivo'
+    : client.status === 'paused' ? 'en pausa'
+      : (client.endsOn && client.endsOn < todayKey()) ? 'terminó' : null;
 
   return h(`button.posperson${on ? '.is-on' : ''}`, { type: 'button', onclick: onClick },
     h('span.posperson__mark', initials(client.name)),
