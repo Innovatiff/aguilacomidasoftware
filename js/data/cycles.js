@@ -89,8 +89,21 @@ export async function pendingBilling(clients, pricing, day = today()) {
   const unpriced = [];
   const skipped = { paid: 0, notYet: 0, ended: 0 };
 
-  for (const { period, clients: group } of periods.values()) {
-    const issued = await issuedIn(period.start);
+  /*
+   * Every period's read at once, rather than one after another.
+   *
+   * Three hundred people spread over two collection days and two cadences make
+   * dozens of distinct period starts, and each one is a round trip. Waiting for
+   * each before asking the next turned an open of the roster into several
+   * seconds of scanning — long enough that the answer routinely arrived after
+   * the manager had already tapped somebody. Asked together, it is one wait.
+   */
+  const groups = [...periods.values()];
+  const issuedBy = await Promise.all(groups.map(({ period }) => issuedIn(period.start)));
+
+  for (let i = 0; i < groups.length; i += 1) {
+    const { period, clients: group } = groups[i];
+    const issued = issuedBy[i];
 
     for (const client of group) {
       if (issued.has(invoiceId(client.id, period.start))) continue;

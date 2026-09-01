@@ -5,7 +5,7 @@
  */
 
 import { h } from '../lib/dom.js';
-import { screen, topbarButton } from '../ui/shell.js';
+import { screen, topbarButton, lifetime } from '../ui/shell.js';
 import { avatar, badge } from '../ui/kit.js';
 import { chatView } from '../ui/chat-view.js';
 import { go } from '../lib/router.js';
@@ -17,12 +17,20 @@ import { STATUS_LABEL, STATUS_TONE } from '../lib/billing.js';
 import { money } from '../lib/format.js';
 
 export function renderChat(context) {
+  const life = lifetime();
   const clientId = context.params.id;
   let client = store.clients.find((row) => row.id === clientId) || null;
   let view = null;
 
   // The store may not have loaded yet on a deep link straight into a thread.
-  if (!client) getClient(clientId).then((row) => { if (row) { client = row; draw(); } });
+  // If the read lands after they have moved on, it is not theirs to paint.
+  if (!client) {
+    getClient(clientId).then((row) => {
+      if (!row || !life.alive()) return;
+      client = row;
+      draw();
+    });
+  }
 
   function draw() {
     if (!view) {
@@ -71,7 +79,7 @@ export function renderChat(context) {
     draw();
   });
 
-  return () => { unsubscribe(); view?.destroy(); };
+  return life.ending(unsubscribe, () => view?.destroy());
 }
 
 /** A quiet reminder bar, so staff answer the payment question accurately. */

@@ -141,6 +141,39 @@ export function setTabBadge(id, count) {
 
 export const showTabs = (visible) => { tabbar.hidden = !visible; };
 
+/* --- A screen's lifetime ---------------------------------------------------- */
+
+/**
+ * Guards work that outlives the screen that started it.
+ *
+ * A promise does not know it has been abandoned. A screen that kicks off
+ * something slow — the billing scan, a one-shot read, a write somebody walked
+ * away from — and paints when it comes back will paint over whatever the reader
+ * moved on to: the address bar says one screen and the page shows another,
+ * seconds after they left. That is not a redraw anybody asked for, and from the
+ * chair it looks exactly like the app going back on its own.
+ *
+ * So every deferred callback asks `alive()` first, and the teardown the screen
+ * hands the router is built by `ending()` — which makes the two impossible to
+ * wire up separately and forget one.
+ *
+ *   const life = lifetime();
+ *   scan().then((found) => { if (!life.alive()) return; …; draw(); });
+ *   return life.ending(subscribe(draw));
+ */
+export function lifetime() {
+  let live = true;
+  return {
+    alive: () => live,
+    ending: (...stops) => () => {
+      live = false;
+      for (const stop of stops) {
+        try { stop?.(); } catch { /* one bad teardown must not block the rest */ }
+      }
+    },
+  };
+}
+
 /* --- Screens --------------------------------------------------------------- */
 
 /**

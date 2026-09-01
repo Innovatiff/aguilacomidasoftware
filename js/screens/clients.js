@@ -18,7 +18,7 @@
 
 import { h } from '../lib/dom.js';
 import { icon } from '../lib/icons.js';
-import { screen, topbarButton } from '../ui/shell.js';
+import { screen, topbarButton, lifetime } from '../ui/shell.js';
 import {
   searchInput, chips, list, avatar, badge, emptyState, button, card, select,
   sectionLabel, statGrid, stat, skeletonRows, alert, dataErrorCard, tagList,
@@ -74,6 +74,9 @@ const FILTERS = [
 const MONEY_FILTERS = new Set(['overdue', 'debt', 'pending']);
 
 export function renderClients(context) {
+  // The billing scan below outlives a quick visit, so the screen has to be able
+  // to say it is gone.
+  const life = lifetime();
   let term = '';
   let filter = context.query.filter || 'all';
   let farmId = context.query.farm || '';
@@ -314,9 +317,16 @@ export function renderClients(context) {
     if (pending === null && !scanning) {
       scanning = true;
       pendingBilling(store.clients, store.pricing)
-        .then((found) => { pending = found; draw(); })
+        .then((found) => { pending = found; })
         .catch(() => { pending = { rows: [], total: 0, periods: 0, unpriced: [], skipped: {} }; })
-        .finally(() => { scanning = false; });
+        .finally(() => {
+          scanning = false;
+          // Reading every client's periods takes a moment, and the manager does
+          // not wait for it — she taps somebody and is three screens away by
+          // the time it lands. Painting then would drag the roster back over
+          // whatever she opened.
+          if (life.alive()) draw();
+        });
       return null;
     }
     if (!pending?.rows.length) return null;
@@ -402,7 +412,9 @@ export function renderClients(context) {
       const issued = await issueAll(rows, author());
       pending = null;
       toastOk(`${plural(issued, 'factura emitida', 'facturas emitidas')}`);
-      draw();
+      // Writing a few hundred bills takes a while; the toast still belongs to
+      // her wherever she is, but the roster only paints if it is still hers.
+      if (life.alive()) draw();
     } catch (error) {
       toastBad(dbMessage(error));
     }
@@ -572,5 +584,5 @@ export function renderClients(context) {
     } catch (error) { toastBad(dbMessage(error)); }
   }
 
-  return subscribe(draw);
+  return life.ending(subscribe(draw));
 }
