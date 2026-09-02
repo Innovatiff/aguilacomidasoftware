@@ -20,8 +20,8 @@ import { watchBusiness, DEFAULT_BUSINESS } from './business.js';
 import { watchOutstanding, summarizeInvoices, groupByClient } from './invoices.js';
 import { watchRecentReceipts, cancelledIds, RECENT_RECEIPTS } from './receipts.js';
 import { watchConversations, totalUnread } from './chat.js';
-import { today, formatDay, weekdayName } from '../lib/dates.js';
-import { summarize, periodOf, payDayAfter } from '../lib/billing.js';
+import { today, formatDay, weekdayName, addDays } from '../lib/dates.js';
+import { summarize, periodOf, payDayAfter, round2 } from '../lib/billing.js';
 import { DEFAULT_PRICING, chargeFor, tierFor } from '../lib/pricing.js';
 
 const state = {
@@ -312,6 +312,48 @@ export function paymentsFor(clientId) {
  * something it does not know.
  */
 export const tillIsWindowed = () => state.receipts.length >= RECENT_RECEIPTS;
+
+/* --- What was actually collected ------------------------------------------
+   Money taken is a fact about receipts, not about invoices. The dashboard used
+   to read "Cobrado" off `summarizeInvoices`, which sums the `paid` field of the
+   bills that are *still unpaid* — a number that means "part-payments sitting on
+   open accounts" and goes down when somebody finishes paying. Nobody wants that
+   number, and it was under a label that promised a different one. */
+
+/** Receipts that still stand: cancellations, and the payments they undo, drop out. */
+function standingReceipts() {
+  const voided = cancelledIds(state.receipts);
+  return state.receipts.filter((row) => Number(row.amount) > 0 && !voided.has(row.id));
+}
+
+/** Everything taken on one day, net of anything cancelled. */
+export function collectedOn(day = today()) {
+  return round2(standingReceipts()
+    .filter((row) => row.date === day)
+    .reduce((sum, row) => sum + (Number(row.amount) || 0), 0));
+}
+
+/**
+ * The last `days` days of takings, oldest first, one entry per day including
+ * the empty ones — a chart with the quiet days missing is a chart that lies
+ * about the rhythm of a business that only collects twice a week.
+ */
+export function dailyCollections(days = 14, from = today()) {
+  const standing = standingReceipts();
+  const byDay = new Map();
+  for (const row of standing) {
+    if (!row.date) continue;
+    byDay.set(row.date, (byDay.get(row.date) || 0) + (Number(row.amount) || 0));
+  }
+
+  return Array.from({ length: days }, (unused, i) => {
+    const day = addDays(from, i - (days - 1));
+    return { day, amount: round2(byDay.get(day) || 0), count: 0 };
+  }).map((entry) => ({
+    ...entry,
+    count: standing.filter((row) => row.date === entry.day).length,
+  }));
+}
 
 /**
  * What `printReceipt` needs: the header, and the client's next collection day.

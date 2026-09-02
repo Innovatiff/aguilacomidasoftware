@@ -279,6 +279,14 @@
   .stats--3 { grid-template-columns: repeat(3, 1fr); }
 }
 
+/* The dashboard's headline row. Two across on a phone, four once there is room
+   for four labels — never four squeezed, which is how "Clientes activos" ends
+   up as three lines of two words. */
+.stats--4 { grid-template-columns: repeat(2, 1fr); }
+@media (min-width: 900px) {
+  .stats--4 { grid-template-columns: repeat(4, 1fr); }
+}
+
 .stat {
   padding: var(--s3) var(--s4);
   border: 1px solid var(--border);
@@ -597,3 +605,133 @@
 }
 
 @keyframes pop { from { transform: scale(.97); opacity: 0; } }
+
+/* --- Figures on the dashboard ---------------------------------------------
+   Two shapes, drawn to one set of rules: marks carry the colour, text never
+   does; touching fills are separated by a 2px gap in the surface colour rather
+   than by a stroke; and the grid stays recessive so the data is the only loud
+   thing.
+
+   The three states below are the app's status colours re-stepped until the
+   palette validator passed on a white surface — the shipped green (#16a34a)
+   sat 5.4 from the amber under protanopia, which is under the floor. #0f7a3d
+   moves that to 7.4 and clears the 3:1 contrast check, and the legend under the
+   bar carries the name and the number so hue is never doing the work alone. */
+
+/* On both roots: the share bar is not nested inside the column chart, and a
+   custom property that is not in scope resolves to nothing — which is how the
+   three segments first rendered as an invisible bar over a visible legend. */
+.viz, .viz__share {
+  --viz-ok:  #0f7a3d;
+  --viz-warn: var(--warn-600);
+  --viz-bad: var(--bad-600);
+}
+.viz { position: relative; }
+
+/* Columns ---------------------------------------------------------------- */
+
+.viz--cols { padding-top: 4px; }
+.viz__plot {
+  display: flex; align-items: flex-end; gap: 6px;
+  height: var(--viz-h, 168px);
+}
+.viz__col {
+  flex: 1 1 0; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+  gap: 4px; height: 100%;
+  border-radius: var(--r-sm);
+  cursor: default;
+}
+.viz__col:hover, .viz__col:focus-visible { background: var(--ink-50); outline: none; }
+
+/* Capped at 24px: a bar that fills its slot leaves no air, and the band's
+   leftover space is what makes a column read as a column. */
+.viz__bar {
+  width: 100%; max-width: 24px;
+  background: var(--ink-200);
+  border-radius: 4px 4px 0 0;
+  transition: background 120ms var(--ease);
+}
+.viz__bar.is-empty { background: var(--ink-150); border-radius: 2px; }
+/* One series, and the point is today — so today is the accent and the rest are
+   context. Emphasis, not fourteen colours. */
+.viz__bar.is-today { background: var(--brand-500); }
+
+.viz__cap {
+  font-size: var(--fs-xs); font-weight: 700; color: var(--text-soft);
+  white-space: nowrap;
+}
+.viz__col.is-today .viz__cap { color: var(--brand-700); }
+.viz__tick {
+  font-size: 11px; font-weight: 600; color: var(--text-faint);
+  text-transform: uppercase; letter-spacing: .02em;
+}
+.viz__col.is-today .viz__tick { color: var(--brand-700); font-weight: 800; }
+
+/* The narrow axis: two ends and nothing between them. */
+.viz__axis { display: none; justify-content: space-between; margin-top: 6px; }
+.viz__axis span {
+  font-size: 11px; font-weight: 600; color: var(--text-faint);
+  text-transform: uppercase; letter-spacing: .02em;
+}
+
+/* Measured, not guessed: fourteen ticks in 340px is 24px each, and "SÁB" needs
+   more than that — and a value label centred on the last column hangs off the
+   right edge. Below the breakpoint both give way to the two-ended axis. */
+@media (max-width: 700px) {
+  .viz__tick, .viz__cap { display: none; }
+  .viz__axis { display: flex; }
+}
+
+.viz__tip {
+  position: absolute; bottom: calc(100% - 6px); transform: translateX(-50%);
+  padding: 8px 12px; min-width: 132px;
+  background: var(--ink-900); color: #fff;
+  border-radius: var(--r-md);
+  pointer-events: none; z-index: 2;
+  box-shadow: var(--sh-3);
+}
+.viz__tip-k { font-size: 11px; font-weight: 700; color: var(--ink-300); text-transform: uppercase; letter-spacing: .04em; }
+.viz__tip-v { font-size: var(--fs-lg); font-weight: 800; }
+.viz__tip-n { font-size: var(--fs-xs); color: var(--ink-300); }
+
+/* One bar, three states -------------------------------------------------- */
+
+.viz__sharebar {
+  display: flex; gap: 2px;              /* the surface gap, not a stroke */
+  height: 14px; border-radius: var(--r-full);
+  overflow: hidden;
+}
+.viz__seg { display: block; min-width: 3px; }
+.viz__seg--ok   { background: var(--viz-ok); }
+.viz__seg--warn { background: var(--viz-warn); }
+.viz__seg--bad  { background: var(--viz-bad); }
+.viz__seg--none { background: var(--ink-150); }
+
+.viz__legend {
+  display: flex; flex-wrap: wrap; gap: var(--s3) var(--s4);
+  margin-top: var(--s3);
+}
+.viz__key { display: flex; align-items: baseline; gap: 6px; }
+.viz__dot {
+  width: 10px; height: 10px; border-radius: var(--r-full);
+  flex: none; transform: translateY(-1px);
+}
+.viz__dot--ok   { background: var(--viz-ok); }
+.viz__dot--warn { background: var(--viz-warn); }
+.viz__dot--bad  { background: var(--viz-bad); }
+.viz__key-n { font-size: var(--fs-md); font-weight: 800; }
+.viz__key-l { font-size: var(--fs-xs); color: var(--text-soft); }
+
+@media (prefers-reduced-motion: reduce) {
+  .viz__bar { transition: none; }
+}
+
+/* Alerts sit side by side once there is room: stacked full-width they pushed
+   the dashboard's own numbers below the fold, and there are never more than
+   three of them. */
+.alertgrid { display: grid; gap: var(--s3); }
+@media (min-width: 900px) {
+  .alertgrid { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .alertgrid .card { height: 100%; }
+}

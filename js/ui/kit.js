@@ -108,7 +108,7 @@ export function stat({ label, value, foot, tone, onClick }) {
 }
 
 export const statGrid = (tiles, cols = 2) =>
-  h(`div.stats${cols === 3 ? '.stats--3' : ''}`, tiles);
+  h(`div.stats${cols === 3 ? '.stats--3' : ''}${cols === 4 ? '.stats--4' : ''}`, tiles);
 
 export function defRow(key, value, { total = false } = {}) {
   return h('div.dl__row',

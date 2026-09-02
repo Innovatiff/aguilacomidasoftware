@@ -55,6 +55,16 @@ const FILTERS = [
   { value: 'all',      label: 'Todos',      match: () => true },
   { value: 'overdue',  label: 'Vencidos',   match: (row) => row.state === 'overdue' },
   { value: 'debt',     label: 'Deben',      match: (row) => row.owed > 0 },
+  /*
+   * "Al corriente" is owing nothing, which is not the same as "Pagados" below —
+   * that one is the narrower "the period in progress is already paid for".
+   * Somebody with no debt whose current period has not been billed yet is up to
+   * date and is not covered, and the kitchen means the first when it asks who
+   * is square. Inicio's tile counts this one and links here; when the two
+   * disagreed, the number on the dashboard opened a list that contradicted it.
+   */
+  { value: 'current',  label: 'Al corriente',
+    match: (row) => row.serving === 'active' && row.owed <= 0.005 },
   { value: 'pending',  label: 'Falta este periodo',
     match: (row) => row.serving === 'active' && !row.covered },
   { value: 'covered',  label: 'Pagados',    match: (row) => row.covered },
