@@ -188,7 +188,13 @@ export function renderSettings() {
     });
   }
 
-  /** A receipt with made-up numbers, so the paper can be checked for free. */
+  /**
+   * A receipt with made-up numbers, so the paper can be checked for free.
+   *
+   * One slip, not the pair a real payment prints: this is here to see whether
+   * the printer is on and the header is right, and it should not cost twice the
+   * paper to find that out.
+   */
   function testPrint() {
     printReceipt({
       id: 'prueba',
@@ -203,7 +209,7 @@ export function renderSettings() {
       balanceAfter: 0,
       takenByName: session.displayName || '',
       at: new Date(),
-    }, { business: store.business || DEFAULT_BUSINESS });
+    }, { business: store.business || DEFAULT_BUSINESS, copies: 1 });
   }
 
   function profileCard() {

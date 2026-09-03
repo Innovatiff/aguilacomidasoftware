@@ -48,8 +48,11 @@ const pair = (k, v, className = '') =>
  * @param {object} [options.client]  live client, only for the next pay day
  * @param {string} [options.nextPay] pre-formatted next collection day
  * @param {boolean} [options.copy]   mark it as a reprint
+ * @param {'client'|'store'} [options.forWhom]  which of the two copies this is
  */
-export function receiptSheet(receipt, { business, nextPay, copy = false } = {}) {
+export function receiptSheet(receipt, {
+  business, nextPay, copy = false, forWhom = null,
+} = {}) {
   const reversal = Number(receipt.amount) < 0;
   const amount = Math.abs(Number(receipt.amount) || 0);
   const method = paymentMethodMeta(receipt.method).label;
@@ -67,6 +70,10 @@ export function receiptSheet(receipt, { business, nextPay, copy = false } = {}) 
     rule(),
     h('div.rcp__title', reversal ? 'CANCELACION DE PAGO' : 'RECIBO DE PAGO'),
     copy ? mid('- COPIA -') : null,
+    // Which of the two this is, boxed, directly under the title: the moment
+    // that matters is the one where somebody tears off two identical-looking
+    // slips and has to hand over the right one without reading either.
+    forWhom ? h('div.rcp__for', forWhom === 'store' ? 'PARA LA TIENDA' : 'PARA EL CLIENTE') : null,
     rule(),
 
     /* Which receipt this is, and who took it. */
@@ -169,15 +176,37 @@ function printRoot() {
 }
 
 /**
- * Prints one receipt.
+ * Prints a payment: two copies by default, on one length of paper.
  *
- * The browser's print dialog is a modal the operator has to confirm, which on
- * a counter is one click per receipt. Chrome started with `--kiosk-printing`
- * skips it and prints straight to the default printer; that is a shortcut on
- * the store's machine, not something this code can decide.
+ * One for the person who paid and one the store keeps. Both go into a *single*
+ * print job rather than two, for two reasons that both matter at a counter: the
+ * browser's print dialog is a modal somebody has to confirm, and two jobs is
+ * two confirmations for one payment; and a second job can be sent while the
+ * first is still spooling, which is how a printer ends up producing them out of
+ * order or not at all.
+ *
+ * The roll is continuous, so the two are simply printed one after the other with
+ * a cut line between them. Each carries the whole header — a store copy that
+ * only makes sense next to the client's is not a record of anything.
+ *
+ * Chrome started with `--kiosk-printing` skips the dialog and prints straight to
+ * the default printer; that is a shortcut on the store's machine, not something
+ * this code can decide.
+ *
+ * @param {number} [options.copies]  2 for a payment, 1 for a printer test
  */
 export function printReceipt(receipt, options = {}) {
-  mount(printRoot(), receiptSheet(receipt, options));
+  const { copies = 2, ...sheet } = options;
+  const wanted = Math.max(1, Math.min(3, Number(copies) || 1));
+
+  // The client's first: it is the one being handed over, so it comes off the
+  // roll first and the store's stays attached until it is torn.
+  const order = wanted === 1 ? [null] : ['client', 'store'];
+
+  mount(printRoot(), order.map((forWhom, i) => h('div.rcp__copy',
+    i > 0 ? h('div.rcp__cut', '- - - - - -  CORTAR AQUI  - - - - - -') : null,
+    receiptSheet(receipt, { ...sheet, forWhom }))));
+
   // A frame, so the layout is done before the dialog freezes the page.
   requestAnimationFrame(() => window.print());
 }

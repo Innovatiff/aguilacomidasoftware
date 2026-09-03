@@ -122,9 +122,43 @@
   padding: 2px 0;
 }
 
+/* Which of the two copies this is. Boxed like the shop's own name, because the
+   one thing the operator does with this slip is decide which half to hand over,
+   and two identical receipts in one hand is how the store's copy walks out of
+   the door. */
+.rcp__for {
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .10em;
+  border: 1px solid #000;
+  border-radius: 2px;
+  padding: 2px 4px;
+  margin: 3px 0 1px;
+}
+
+/* Where to tear, on a roll that does not cut itself. Printed rather than left
+   to the tail's blank space: on 80mm paper the gap between two receipts and the
+   gap inside one look the same from above. */
+.rcp__cut {
+  width: 72mm;
+  margin: 0 auto;
+  padding: 2mm 0 3mm;
+  text-align: center;
+  font-family: "Consolas", "Courier New", "DejaVu Sans Mono", monospace;
+  font-size: 10px;
+  letter-spacing: .04em;
+  color: #000;
+}
+
 /* Blank paper past the last line, so the tear-off edge does not cut the text
    and the next receipt starts clean. */
 .rcp__tail {
   height: 14mm;
   white-space: pre;
 }
+
+/* The client's copy ends where the cut line begins, so it needs less blank
+   paper under it than the last one on the roll. Keyed off the wrapper, since
+   each copy is the only `.rcp` inside its own. */
+.rcp__copy:not(:last-child) .rcp__tail { height: 4mm; }
