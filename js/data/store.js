@@ -132,6 +132,10 @@ export function startStore() {
 export function stopStore() {
   for (const stop of stops) { try { stop(); } catch { /* already detached */ } }
   stops = [];
+  // The scan belongs to the account that asked for it. Leaving it behind means
+  // the next person to sign in gets the last one's bills — and, because a
+  // finished scan never runs again on its own, gets them for good.
+  forgetPendingBills();
   Object.assign(state, {
     pricing: { ...DEFAULT_PRICING },
     business: { ...DEFAULT_BUSINESS },

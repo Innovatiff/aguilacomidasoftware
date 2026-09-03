@@ -176,7 +176,7 @@ export function renderNoAccess(host, { name, email, onSignOut }) {
       claimed = true;
       error = err?.code === 'permission-denied'
         ? 'Alguien más creó la primera cuenta hace un momento. Pídele que te agregue al equipo.'
-        : (err?.message || errorText(err));
+        : errorText(err);
       draw();
     }
   }
