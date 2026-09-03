@@ -15,7 +15,7 @@ import {
   watchMessages, watchConversation, sendMessage, markRead, groupMessages, isReadByOther,
 } from '../data/chat.js';
 import { formatTime, relativeDay, dayKey } from '../lib/dates.js';
-import { dbMessage } from '../firebase.js';
+import { errorText } from '../firebase.js';
 
 /**
  * @param {object} config
@@ -141,7 +141,7 @@ export function chatView({ clientId, role, sender, client, quickReplies = [], em
       } catch (error) {
         box.value = text;         // never lose what someone typed
         autosizeNow(box);
-        toastBad(dbMessage(error));
+        toastBad(errorText(error));
       } finally {
         sending = false;
         send.disabled = !box.value.trim();

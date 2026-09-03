@@ -30,7 +30,7 @@ import {
 } from '../lib/billing.js';
 import { WEEKDAYS_SHORT, today, formatRange } from '../lib/dates.js';
 import { plural } from '../lib/format.js';
-import { dbMessage } from '../firebase.js';
+import { errorText } from '../firebase.js';
 
 export async function renderFarmForm(context) {
   const farmId = context.params.id;
@@ -108,7 +108,7 @@ export async function renderFarmForm(context) {
       }
     } catch (error) {
       saving = false; draw();
-      toastBad(error?.message || dbMessage(error));
+      toastBad(errorText(error));
     }
   }
 
@@ -313,7 +313,7 @@ export async function renderFarmForm(context) {
             toastOk('Rancho eliminado');
             go('/farms', { replace: true });
           } catch (error) {
-            toastBad(error?.message || dbMessage(error));
+            toastBad(errorText(error));
           }
         },
       }));

@@ -96,11 +96,35 @@ export function authMessage(error) {
   return messages[code] || 'Algo salió mal. Inténtalo de nuevo.';
 }
 
-/** Firestore errors, same idea. */
+/**
+ * What to show somebody when a write fails.
+ *
+ * Our own guards throw plain `Error`s already written in Spanish for the person
+ * reading them — "El monto debe ser mayor a cero." — and those should be shown
+ * as they are. Firestore's errors also carry a `message`, in English, written
+ * for a developer: "Quota exceeded." A cashier saw that one over a customer's
+ * cash. The `code` is what tells the two apart: only the SDK sets it.
+ */
+export const errorText = (error) =>
+  (error?.code ? dbMessage(error) : (error?.message || dbMessage(error)));
+
+/** Firestore errors, in words for the person who hit them. */
+
 export function dbMessage(error) {
   const code = String(error?.code || '');
   if (code === 'permission-denied') return 'No tienes permiso para hacer esto.';
   if (code === 'unavailable') return 'Sin conexión. Los cambios se guardarán al reconectar.';
   if (code === 'not-found') return 'El registro ya no existe.';
+  /*
+   * Firestore's daily free allowance, spent. It reads as a bug at the counter —
+   * "quota exceeded" over somebody's cash — when it is the base de datos
+   * refusing everybody until midnight, and nothing about the payment is wrong.
+   * Saying which it is decides whether the cashier retries or takes the money
+   * and writes it down.
+   */
+  if (code === 'resource-exhausted') {
+    return 'La base de datos llegó a su límite diario. Anota el pago en papel y '
+      + 'regístralo cuando se restablezca (a medianoche). No se cobró nada.';
+  }
   return 'No se pudo guardar. Inténtalo de nuevo.';
 }

@@ -28,7 +28,7 @@ import { store, subscribe, activeClients, moneyStats, unpriced } from '../data/s
 import { money, number, plural } from '../lib/format.js';
 import { formatStamp, today } from '../lib/dates.js';
 import { PAY_EVERY, payEveryOf } from '../lib/billing.js';
-import { toDate, dbMessage } from '../firebase.js';
+import { errorText, toDate } from '../firebase.js';
 
 export function renderSettings() {
   let team = [];
@@ -167,7 +167,7 @@ export function renderSettings() {
             await saveBusiness(draft, { name: session.displayName });
             toastOk('Recibo actualizado');
             close(true);
-          } catch (error) { toastBad(error?.message || dbMessage(error)); }
+          } catch (error) { toastBad(errorText(error)); }
         },
       },
       field({ label: 'Nombre del negocio', control: input({ value: draft.name, oninput: set('name') }) }),
@@ -262,7 +262,7 @@ export function renderSettings() {
               try {
                 await removeStaff(person.email);
                 toastOk('Acceso retirado');
-              } catch (error) { toastBad(dbMessage(error)); }
+              } catch (error) { toastBad(errorText(error)); }
             },
           }, 'Quitar'),
       chevron: false,
@@ -406,7 +406,7 @@ export function renderSettings() {
     try {
       const saved = await savePricing(result, { name: session.displayName });
       toastOk(`${plural(saved.tiers.length, 'plan guardado', 'planes guardados')}`);
-    } catch (error) { toastBad(error?.message || dbMessage(error)); }
+    } catch (error) { toastBad(errorText(error)); }
   }
 
   async function addMember() {
@@ -454,7 +454,7 @@ export function renderSettings() {
     try {
       await addStaff(result.email, result.name, { name: session.displayName });
       toastOk('Agregado al equipo');
-    } catch (error) { toastBad(error?.message || dbMessage(error)); }
+    } catch (error) { toastBad(errorText(error)); }
   }
 
   async function editProfile() {
@@ -482,7 +482,7 @@ export function renderSettings() {
     try {
       await updateOwnProfile(result);
       toastOk('Perfil actualizado');
-    } catch (error) { toastBad(dbMessage(error)); }
+    } catch (error) { toastBad(errorText(error)); }
   }
 
   async function leave() {

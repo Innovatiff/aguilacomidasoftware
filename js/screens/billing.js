@@ -28,7 +28,7 @@ import {
 } from '../lib/billing.js';
 import { today, humanDelta, daysBetween } from '../lib/dates.js';
 import { money, moneyFull, number, plural } from '../lib/format.js';
-import { dbMessage } from '../firebase.js';
+import { errorText } from '../firebase.js';
 
 export function renderBilling(context) {
   let filter = context.query.filter || 'all';
@@ -220,7 +220,7 @@ export function renderBilling(context) {
     try {
       pending = await pendingBilling(store.clients, store.pricing);
     } catch (error) {
-      toastBad(dbMessage(error));
+      toastBad(errorText(error));
       return;
     }
 
@@ -252,7 +252,7 @@ export function renderBilling(context) {
       const issued = await issueAll(pending.rows, { uid: session.uid, name: session.displayName });
       toastOk(`${plural(issued, 'factura emitida', 'facturas emitidas')}`);
     } catch (error) {
-      toastBad(dbMessage(error));
+      toastBad(errorText(error));
     }
   }
 

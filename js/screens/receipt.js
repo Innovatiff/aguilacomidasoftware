@@ -20,7 +20,7 @@ import { printReceipt } from '../ui/print.js';
 import { printContext } from '../data/store.js';
 import { toastOk, toastBad, confirm } from '../ui/overlay.js';
 import { session } from '../data/session.js';
-import { dbMessage } from '../firebase.js';
+import { errorText } from '../firebase.js';
 import { money } from '../lib/format.js';
 import { formatStamp, formatDayLong } from '../lib/dates.js';
 import { appliedTitle } from '../lib/billing.js';
@@ -181,7 +181,7 @@ export function renderReceipt(context) {
       const counter = await voidReceipt(receipt, { uid: session.uid, name: session.displayName });
       toastOk(`Pago cancelado · ${counter.folio}`);
     } catch (error) {
-      toastBad(error?.message || dbMessage(error));
+      toastBad(errorText(error));
     }
   }
 

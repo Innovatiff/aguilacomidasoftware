@@ -25,7 +25,7 @@ import { adjustBalance } from '../data/invoices.js';
 import { postSystemMessage } from '../data/chat.js';
 import { balanceOf, invoiceTitle, isCharge, round2 } from '../lib/billing.js';
 import { money, moneyFull } from '../lib/format.js';
-import { dbMessage } from '../firebase.js';
+import { errorText } from '../firebase.js';
 
 /**
  * Reasons that save typing, not reasons that stand in for it.
@@ -162,7 +162,7 @@ export function openBalanceSheet({ client, invoices = [], author }) {
           } catch (error) {
             busy = false;
             repaint();
-            toastBad(error?.message || dbMessage(error));
+            toastBad(errorText(error));
           }
         },
       },

@@ -20,6 +20,7 @@ import { watchBusiness, DEFAULT_BUSINESS } from './business.js';
 import { watchOutstanding, summarizeInvoices, groupByClient } from './invoices.js';
 import { watchRecentReceipts, cancelledIds, RECENT_RECEIPTS } from './receipts.js';
 import { watchConversations, totalUnread } from './chat.js';
+import { pendingBilling } from './cycles.js';
 import { today, formatDay, weekdayName, addDays } from '../lib/dates.js';
 import { summarize, periodOf, payDayAfter, round2 } from '../lib/billing.js';
 import { DEFAULT_PRICING, chargeFor, tierFor } from '../lib/pricing.js';
@@ -312,6 +313,49 @@ export function paymentsFor(clientId) {
  * something it does not know.
  */
 export const tillIsWindowed = () => state.receipts.length >= RECENT_RECEIPTS;
+
+/* --- The billing scan, once ------------------------------------------------
+   `pendingBilling` reads every recent period of every client to find the ones
+   that closed without a bill. At three hundred and fifty people with a few
+   months of history behind them that is upwards of a thousand document reads,
+   measured — and the roster used to start it again on *every* mount. Twenty
+   visits to Clientes in a working day was the whole of Firestore's free daily
+   allowance, and once it is gone nothing works: not the roster, not the
+   dashboard, and not taking a payment, because a payment reads before it
+   writes. The kitchen found that out at the counter with somebody's cash in
+   their hand.
+
+   So it is asked once, kept here, and thrown away only when something could
+   have changed the answer — which is bills being issued, and nothing else. A
+   reload asks again. */
+
+let scan = { rows: [], total: 0, periods: 0, unpriced: [], skipped: {} };
+let scanState = 'idle';     // idle | running | done
+
+/** The last scan, or null while nobody has asked yet. */
+export const pendingBills = () => (scanState === 'done' ? scan : null);
+
+/**
+ * Runs the scan if it has not run this session. Safe to call on every render:
+ * the second call while one is in flight joins the first rather than starting
+ * a second.
+ */
+export function ensurePendingBills() {
+  if (scanState !== 'idle') return;
+  if (!state.loaded.clients || !state.loaded.pricing) return;
+
+  scanState = 'running';
+  pendingBilling(state.clients, state.pricing)
+    .then((found) => { scan = found; })
+    .catch(() => { scan = { rows: [], total: 0, periods: 0, unpriced: [], skipped: {} }; })
+    .finally(() => { scanState = 'done'; emit(); });
+}
+
+/** Issuing bills is the one thing that makes the answer stale. */
+export function forgetPendingBills() {
+  scanState = 'idle';
+  scan = { rows: [], total: 0, periods: 0, unpriced: [], skipped: {} };
+}
 
 /* --- What was actually collected ------------------------------------------
    Money taken is a fact about receipts, not about invoices. The dashboard used

@@ -30,7 +30,7 @@ import {
 } from '../lib/dates.js';
 import { money, moneyFull, number, percent } from '../lib/format.js';
 import { paymentMethodMeta } from '../lib/model.js';
-import { toDate, dbMessage } from '../firebase.js';
+import { errorText, toDate } from '../firebase.js';
 
 export function renderInvoice(context) {
   const id = context.params.id;
@@ -268,7 +268,7 @@ export function renderInvoice(context) {
             } catch (error) {
               busy = false;
               repaint();
-              toastBad(error?.message || dbMessage(error));
+              toastBad(errorText(error));
             }
           },
         },
@@ -367,7 +367,7 @@ export function renderInvoice(context) {
       if (receipt) await voidReceipt(receipt, author());
       else await reversePayment(id, index, author());
       toastOk('Pago cancelado');
-    } catch (error) { toastBad(error?.message || dbMessage(error)); }
+    } catch (error) { toastBad(errorText(error)); }
   }
 
   /**
@@ -397,7 +397,7 @@ export function renderInvoice(context) {
       await voidCharge(doomed);
       toastOk('Deuda quitada');
       go(`/clients/${doomed.clientId}`);
-    } catch (error) { toastBad(error?.message || dbMessage(error)); }
+    } catch (error) { toastBad(errorText(error)); }
   }
 
   /**
@@ -441,7 +441,7 @@ export function renderInvoice(context) {
       });
       toastOk('Recordatorio enviado');
       go(`/chat/${invoice.clientId}`);
-    } catch (error) { toastBad(dbMessage(error)); }
+    } catch (error) { toastBad(errorText(error)); }
   }
 
   const author = () => ({ uid: session.uid, name: session.displayName });

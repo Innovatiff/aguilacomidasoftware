@@ -23,7 +23,7 @@ import { watchFarm, addLocation, renameLocation, removeLocation } from '../data/
 import { clientStatusMeta } from '../lib/model.js';
 import { money, number, plural, phone as fmtPhone, telHref } from '../lib/format.js';
 import { formatDayLong, today } from '../lib/dates.js';
-import { dbMessage } from '../firebase.js';
+import { errorText } from '../firebase.js';
 
 export function renderFarmDetail(context) {
   const farmId = context.params.id;
@@ -228,7 +228,7 @@ export function renderFarmDetail(context) {
     try {
       await addLocation(farm, name);
       toastOk('Ubicación agregada');
-    } catch (error) { toastBad(error?.message || dbMessage(error)); }
+    } catch (error) { toastBad(errorText(error)); }
   }
 
   async function locationMenu(place, here) {
@@ -254,7 +254,7 @@ export function renderFarmDetail(context) {
             try {
               await renameLocation(farm, place.id, name);
               toastOk('Ubicación actualizada');
-            } catch (error) { toastBad(error?.message || dbMessage(error)); }
+            } catch (error) { toastBad(errorText(error)); }
           },
         }),
         button('Eliminar ubicación', {
@@ -273,7 +273,7 @@ export function renderFarmDetail(context) {
             try {
               await removeLocation(farm, place.id);
               toastOk('Ubicación eliminada');
-            } catch (error) { toastBad(error?.message || dbMessage(error)); }
+            } catch (error) { toastBad(errorText(error)); }
           },
         })),
     });

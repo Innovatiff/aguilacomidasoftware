@@ -30,7 +30,7 @@ import {
 import { money } from '../lib/format.js';
 import { formatDay, formatDayLong, weekdayName, today } from '../lib/dates.js';
 import { PAYMENT_METHODS } from '../lib/model.js';
-import { dbMessage } from '../firebase.js';
+import { errorText } from '../firebase.js';
 
 /**
  * @param {object} options
@@ -101,7 +101,7 @@ export function openHistorySheet({ client, author }) {
           } catch (error) {
             busy = false;
             repaint();
-            toastBad(error?.message || dbMessage(error));
+            toastBad(errorText(error));
           }
         },
       },

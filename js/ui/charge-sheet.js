@@ -28,7 +28,7 @@ import { chargeFor } from '../lib/pricing.js';
 import { money, moneyFull, plural } from '../lib/format.js';
 import { formatRange, formatDay, weekdayName, today } from '../lib/dates.js';
 import { PAYMENT_METHODS } from '../lib/model.js';
-import { dbMessage } from '../firebase.js';
+import { errorText } from '../firebase.js';
 
 /**
  * @param {object} options
@@ -138,7 +138,7 @@ export function openChargeSheet({ client, invoices = [], pricing, author }) {
             busy = false;
             submit.disabled = false;
             repaint();
-            toastBad(error?.message || dbMessage(error));
+            toastBad(errorText(error));
           }
         },
       },

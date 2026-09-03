@@ -30,16 +30,17 @@ import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
 import {
   store, subscribe, roster, invoicesFor, firstError, startStore,
+  pendingBills, ensurePendingBills, forgetPendingBills,
 } from '../data/store.js';
 import { matchesSearch, setClientStatus, setEndsOn } from '../data/clients.js';
-import { pendingBilling, issueAll, byFarm } from '../data/cycles.js';
+import { issueAll, byFarm } from '../data/cycles.js';
 import { postSystemMessage } from '../data/chat.js';
 import { owedBreakdown } from '../lib/billing.js';
 import { money, moneyFull, number, plural } from '../lib/format.js';
 import {
   formatDay, formatDayLong, today, addDays, humanDelta, daysBetween,
 } from '../lib/dates.js';
-import { dbMessage } from '../firebase.js';
+import { errorText } from '../firebase.js';
 
 /** What each state looks like on a row, and what to call it. */
 const STATE = {
@@ -90,8 +91,6 @@ export function renderClients(context) {
   let term = '';
   let filter = context.query.filter || 'all';
   let farmId = context.query.farm || '';
-  let pending = null;          // closed fortnights waiting to be billed
-  let scanning = false;
 
   const author = () => ({ uid: session.uid, name: session.displayName });
 
@@ -317,29 +316,21 @@ export function renderClients(context) {
   /**
    * Fortnights that ended without a bill.
    *
-   * Looked for once when the roster opens rather than waiting to be asked:
-   * this is the money most easily lost, and the only reason it was ever lost
-   * is that pressing the button was somebody's job to remember.
+   * Looked for when the roster opens rather than waiting to be asked: this is
+   * the money most easily lost, and the only reason it was ever lost is that
+   * pressing the button was somebody's job to remember.
+   *
+   * The scan itself lives in the store and runs once a session, because it is
+   * expensive — over a thousand document reads at this kitchen's size — and
+   * re-running it on every visit to this screen is what exhausted Firestore's
+   * daily quota and stopped the counter taking payments.
    */
   function billingBanner() {
     if (!store.loaded.clients || !store.loaded.pricing) return null;
 
-    if (pending === null && !scanning) {
-      scanning = true;
-      pendingBilling(store.clients, store.pricing)
-        .then((found) => { pending = found; })
-        .catch(() => { pending = { rows: [], total: 0, periods: 0, unpriced: [], skipped: {} }; })
-        .finally(() => {
-          scanning = false;
-          // Reading every client's periods takes a moment, and the manager does
-          // not wait for it — she taps somebody and is three screens away by
-          // the time it lands. Painting then would drag the roster back over
-          // whatever she opened.
-          if (life.alive()) draw();
-        });
-      return null;
-    }
-    if (!pending?.rows.length) return null;
+    const pending = pendingBills();
+    if (!pending) { ensurePendingBills(); return null; }
+    if (!pending.rows.length) return null;
 
     return actionBanner({
       tone: 'brand', icon: 'receipt',
@@ -375,7 +366,8 @@ export function renderClients(context) {
 
   /** Shows the whole run before writing a single bill. */
   async function reviewPending() {
-    const { rows, total, unpriced, skipped } = pending;
+    const { rows, total, unpriced, skipped } = pendingBills() || {};
+    if (!rows) return;
     const left = (skipped?.paid || 0) + (skipped?.notYet || 0) + (skipped?.ended || 0);
 
     const ok = await sheet({
@@ -420,13 +412,15 @@ export function renderClients(context) {
 
     try {
       const issued = await issueAll(rows, author());
-      pending = null;
+      // Issuing is the one thing that makes the scan's answer stale, so it is
+      // the one thing that asks for it again.
+      forgetPendingBills();
       toastOk(`${plural(issued, 'factura emitida', 'facturas emitidas')}`);
       // Writing a few hundred bills takes a while; the toast still belongs to
       // her wherever she is, but the roster only paints if it is still hers.
       if (life.alive()) draw();
     } catch (error) {
-      toastBad(dbMessage(error));
+      toastBad(errorText(error));
     }
   }
 
@@ -549,7 +543,7 @@ export function renderClients(context) {
       toastOk(endsOn
         ? `${client.name} termina el ${formatDayLong(endsOn)}`
         : `${client.name} sigue sin fecha de término`);
-    } catch (error) { toastBad(dbMessage(error)); }
+    } catch (error) { toastBad(errorText(error)); }
   }
 
   /**
@@ -591,7 +585,7 @@ export function renderClients(context) {
     try {
       await setClientStatus(client.id, status);
       toastOk(message);
-    } catch (error) { toastBad(dbMessage(error)); }
+    } catch (error) { toastBad(errorText(error)); }
   }
 
   return life.ending(subscribe(draw));

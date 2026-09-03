@@ -29,7 +29,7 @@ import { h, mount } from '../lib/dom.js';
 import { icon } from '../lib/icons.js';
 import { toastBad } from './overlay.js';
 import { today, formatDayLong, capitalize } from '../lib/dates.js';
-import { dbMessage } from '../firebase.js';
+import { errorText } from '../firebase.js';
 
 /**
  * @typedef {object} Step
@@ -207,7 +207,7 @@ export function runFlow({ title, steps, state = {}, subject, commit, done, onExi
     } catch (error) {
       busy = false;
       revalidate();
-      toastBad(error?.message || dbMessage(error));
+      toastBad(errorText(error));
     }
   }
 

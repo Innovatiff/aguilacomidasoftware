@@ -41,7 +41,7 @@ import {
   today, addDays, formatRange, formatDayLong, formatDay, weekdayOf, WEEKDAYS, capitalize,
 } from '../lib/dates.js';
 import { money, plural } from '../lib/format.js';
-import { dbMessage } from '../firebase.js';
+import { errorText } from '../firebase.js';
 
 export async function renderClientForm(context) {
   const clientId = context.params.id;
@@ -165,7 +165,7 @@ export async function renderClientForm(context) {
       }
     } catch (error) {
       saving = false; draw();
-      toastBad(error?.message || dbMessage(error));
+      toastBad(errorText(error));
     }
   }
 
@@ -695,7 +695,7 @@ export async function renderClientForm(context) {
             toastOk('Cliente eliminado');
             go(model.farmId ? `/farms/${model.farmId}` : '/clients', { replace: true });
           } catch (error) {
-            toastBad(dbMessage(error));
+            toastBad(errorText(error));
           }
         },
       }));

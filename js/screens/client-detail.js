@@ -39,7 +39,7 @@ import {
 } from '../lib/dates.js';
 import { money, moneyFull, plural, phone as fmtPhone, telHref, number } from '../lib/format.js';
 import { clientStatusMeta, paymentMethodMeta } from '../lib/model.js';
-import { dbMessage } from '../firebase.js';
+import { errorText } from '../firebase.js';
 
 export function renderClientDetail(context) {
   const clientId = context.params.id;
@@ -406,7 +406,7 @@ export function renderClientDetail(context) {
     try {
       await setEndsOn(model.id, endsOn);
       toastOk(endsOn ? `Termina el ${formatDay(endsOn)}` : 'Sin fecha de término');
-    } catch (error) { toastBad(error?.message || dbMessage(error)); }
+    } catch (error) { toastBad(errorText(error)); }
   }
 
   /** A debt the billing cycle did not produce: it goes on as its own bill. */
@@ -575,7 +575,7 @@ export function renderClientDetail(context) {
       toastOk('Factura generada');
       go(`/invoices/${invoiceId(model.id, choice.start)}`);
     } catch (error) {
-      toastBad(dbMessage(error));
+      toastBad(errorText(error));
     }
   }
 
@@ -621,7 +621,7 @@ export function renderClientDetail(context) {
     try {
       await updateClient(model.id, { email: next, name: model.name }, model.email);
       toastOk(next ? 'Correo de acceso actualizado' : 'Acceso retirado');
-    } catch (error) { toastBad(error?.message || dbMessage(error)); }
+    } catch (error) { toastBad(errorText(error)); }
   }
 
   /**
@@ -671,7 +671,7 @@ export function renderClientDetail(context) {
     try {
       await moveClient(model.id, picked.farm, picked.locationId);
       toastOk('Ubicación actualizada');
-    } catch (error) { toastBad(error?.message || dbMessage(error)); }
+    } catch (error) { toastBad(errorText(error)); }
   }
 
   draw();

@@ -16,7 +16,7 @@ import { button, field, input, alert, avatar } from '../ui/kit.js';
 import { toastOk } from '../ui/overlay.js';
 import { signIn, resetPassword, session } from '../data/session.js';
 import { isClaimed, claimFirstAdmin } from '../data/staff.js';
-import { authMessage, dbMessage } from '../firebase.js';
+import { authMessage, errorText } from '../firebase.js';
 
 export function renderAuth(host) {
   let mode = 'signin';   // 'signin' | 'reset'
@@ -176,7 +176,7 @@ export function renderNoAccess(host, { name, email, onSignOut }) {
       claimed = true;
       error = err?.code === 'permission-denied'
         ? 'Alguien más creó la primera cuenta hace un momento. Pídele que te agregue al equipo.'
-        : (err?.message || dbMessage(err));
+        : (err?.message || errorText(err));
       draw();
     }
   }

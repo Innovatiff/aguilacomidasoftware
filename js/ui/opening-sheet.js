@@ -24,7 +24,7 @@ import { setPaidThrough } from '../data/clients.js';
 import { money, moneyFull } from '../lib/format.js';
 import { formatRange, formatDayLong, today, addDays, capitalize } from '../lib/dates.js';
 import { periodWord, periodWordPlural, payEveryOf } from '../lib/billing.js';
-import { dbMessage } from '../firebase.js';
+import { errorText } from '../firebase.js';
 
 /**
  * @param {object} options
@@ -119,7 +119,7 @@ export function openOpeningSheet({ client, pricing, author }) {
         } catch (error) {
           busy = false;
           paint();
-          toastBad(error?.message || dbMessage(error));
+          toastBad(errorText(error));
         }
       };
 
