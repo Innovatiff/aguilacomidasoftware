@@ -18,8 +18,15 @@ export const clientStatusMeta = (status) => CLIENT_STATUS[status] || CLIENT_STAT
 
 /* --- Payments ------------------------------------------------------------- */
 
+/*
+ * How money arrives. `debit` is the Interac card everybody at this counter
+ * carries and is a different thing from `card`, which is credit: the fee is
+ * different, the money lands on a different day, and the kitchen wants to know
+ * which one it was — so it gets its own entry rather than being folded in.
+ */
 export const PAYMENT_METHODS = {
   cash:     { label: 'Efectivo',       icon: 'cash' },
+  debit:    { label: 'Débito',         icon: 'card' },
   transfer: { label: 'Transferencia',  icon: 'card' },
   cheque:   { label: 'Cheque',         icon: 'note' },
   card:     { label: 'Tarjeta',        icon: 'card' },

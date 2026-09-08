@@ -42,6 +42,7 @@ import {
 } from '../lib/billing.js';
 import { periodCharge, tierFor } from '../lib/pricing.js';
 import { money, plural } from '../lib/format.js';
+import { paymentMethodMeta } from '../lib/model.js';
 import {
   today, addDays, formatDay, formatDayLong, weekdayName, capitalize, WEEKDAYS_SHORT,
 } from '../lib/dates.js';
@@ -231,9 +232,22 @@ export function renderQuick() {
   function tillStrip() {
     const voided = cancelledIds(takings);
     const live = takings.filter((r) => Number(r.amount) > 0 && !voided.has(r.id));
+    // Split, because the number that has to match the drawer at closing time is
+    // the cash one — the rest of the day's takings are in the bank, not in the
+    // till. This is the whole reason the counter is asked how somebody paid.
+    const cash = totalOf(live.filter((r) => (r.method || 'cash') === 'cash'));
+    const rest = round2(totalOf(live) - cash);
+
     return h('button.postill', { type: 'button', onclick: () => live.length && showTill() },
       h('span.postill__k', 'Cobrado hoy'),
       h('span.postill__v', money(totalOf(takings), { round: true })),
+      live.length
+        ? h('span.postill__split',
+            h('span.postill__part', `Efectivo ${money(cash, { round: true })}`),
+            rest > 0.005
+              ? h('span.postill__part', `Otros ${money(rest, { round: true })}`)
+              : null)
+        : null,
       h('span.postill__n', live.length
         ? `${plural(live.length, 'pago', 'pagos')} · tócalo para reimprimir`
         : 'Sin pagos todavía'));
@@ -302,7 +316,7 @@ export function renderQuick() {
     start({
       title: 'Cobrar',
       subject: subjectOf,
-      state: { amount: 0, setCycle: false },
+      state: { amount: 0, method: null, setCycle: false },
       steps: (s) => {
         const owed = s.client ? owedBy(s.client) : 0;
         const fortnight = s.client ? periodPrice(s.client) : 0;
@@ -332,6 +346,22 @@ export function renderQuick() {
             }),
           },
           {
+            id: 'method',
+            title: '¿Cómo pagó?',
+            hint: 'Queda en el recibo y en su historial.',
+            ready: (st) => !!st.method,
+            build: (st, api) => posPick({
+              columns: 2,
+              value: st.method,
+              onPick: (v) => { st.method = v; api.revalidate(); },
+              advance: api.next,
+              options: [
+                { value: 'cash', label: 'Efectivo', sub: 'Billetes en mano', icon: 'cash' },
+                { value: 'debit', label: 'Débito', sub: 'Tarjeta de débito', icon: 'card' },
+              ],
+            }),
+          },
+          {
             id: 'confirm',
             title: 'Revisa antes de cobrar',
             hint: 'Si algo está mal, regresa con Atrás.',
@@ -341,6 +371,7 @@ export function renderQuick() {
               posSummary([
                 ...whoRows(st.client),
                 ['Debía', owed > 0.005 ? money(owed) : 'Nada'],
+                ['Cómo pagó', paymentMethodMeta(st.method).label],
                 ['Recibes', money(st.amount)],
                 // The question asked back across the counter, answered before
                 // the money is taken rather than after.
@@ -355,13 +386,13 @@ export function renderQuick() {
         client: s.client,
         pricing: store.pricing,
         amount: s.amount,
-        method: 'cash',
+        method: s.method || 'cash',
         date: today(),
         setCycle: s.setCycle,
       }, author()),
       done: (s, receipt) => ({
         what: `Cobrado ${money(s.amount)}`,
-        who: `${s.client.name} · ${receipt.folio}`,
+        who: `${s.client.name} · ${paymentMethodMeta(s.method).label} · ${receipt.folio}`,
         // The thing the person on the other side of the counter is waiting
         // for. Offered rather than fired automatically: a print dialog that
         // opens by itself is one nobody expects, and a browser can refuse a

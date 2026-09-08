@@ -687,3 +687,11 @@
 @media (max-width: 899px) {
   .quickcta { display: none; }
 }
+
+/* What is actually in the drawer, next to what came in altogether. The cash
+   figure is the one a till is counted against; the rest went to the bank. */
+.postill__split { display: flex; gap: 16px; margin-left: 20px; }
+.postill__part {
+  font-size: 17px; font-weight: 700; color: #dfe4ea;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
