@@ -137,19 +137,19 @@
   margin: 3px 0 1px;
 }
 
-/* Where to tear, on a roll that does not cut itself. Printed rather than left
-   to the tail's blank space: on 80mm paper the gap between two receipts and the
-   gap inside one look the same from above. */
-.rcp__cut {
-  width: 72mm;
-  margin: 0 auto;
-  padding: 2mm 0 3mm;
-  text-align: center;
-  font-family: "Consolas", "Courier New", "DejaVu Sans Mono", monospace;
-  font-size: 10px;
-  letter-spacing: .04em;
-  color: #000;
-}
+/*
+ * Each copy is its own page.
+ *
+ * With `@page { size: 80mm auto }` a page break is where a thermal printer
+ * ends one receipt and starts the next — it feeds the paper through, and a unit
+ * with a cutter cuts there. Which is the difference between two receipts and
+ * one long strip with a dotted line printed across it.
+ *
+ * `break-after` on the last copy would feed a whole blank receipt's worth of
+ * paper after the job, so only the ones with something following them break.
+ */
+.rcp__copy { break-after: page; page-break-after: always; }
+.rcp__copy:last-child { break-after: auto; page-break-after: auto; }
 
 /* Blank paper past the last line, so the tear-off edge does not cut the text
    and the next receipt starts clean. */
@@ -158,7 +158,6 @@
   white-space: pre;
 }
 
-/* The client's copy ends where the cut line begins, so it needs less blank
-   paper under it than the last one on the roll. Keyed off the wrapper, since
-   each copy is the only `.rcp` inside its own. */
-.rcp__copy:not(:last-child) .rcp__tail { height: 4mm; }
+/* Every copy now ends a page of its own, so every copy gets the full tail:
+   the blank strip is what keeps the tear — or the cutter — off the last line
+   of print. */

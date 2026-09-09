@@ -176,18 +176,22 @@ function printRoot() {
 }
 
 /**
- * Prints a payment: two copies by default, on one length of paper.
+ * Prints a payment: two copies by default, one after the other.
  *
- * One for the person who paid and one the store keeps. Both go into a *single*
- * print job rather than two, for two reasons that both matter at a counter: the
- * browser's print dialog is a modal somebody has to confirm, and two jobs is
- * two confirmations for one payment; and a second job can be sent while the
- * first is still spooling, which is how a printer ends up producing them out of
- * order or not at all.
+ * One for the person who paid and one the store keeps, and they come out as two
+ * separate receipts — not one long strip with a tear line drawn on it. That is
+ * a **page break** between them rather than two print jobs, which is what makes
+ * them separate on the paper while keeping them a single confirmation at the
+ * counter.
  *
- * The roll is continuous, so the two are simply printed one after the other with
- * a cut line between them. Each carries the whole header — a store copy that
- * only makes sense next to the client's is not a record of anything.
+ * Two jobs would be worse in two ways that both bite at a till: the browser's
+ * print dialog is a modal somebody has to confirm, so two jobs is two
+ * confirmations for one payment; and the second can be sent while the first is
+ * still spooling, which is how a printer ends up producing them out of order or
+ * not at all. One job, two pages, gets separate paper without either problem.
+ *
+ * Each carries the whole header — a store copy that only makes sense next to the
+ * client's is not a record of anything.
  *
  * Chrome started with `--kiosk-printing` skips the dialog and prints straight to
  * the default printer; that is a shortcut on the store's machine, not something
@@ -199,12 +203,11 @@ export function printReceipt(receipt, options = {}) {
   const { copies = 2, ...sheet } = options;
   const wanted = Math.max(1, Math.min(3, Number(copies) || 1));
 
-  // The client's first: it is the one being handed over, so it comes off the
-  // roll first and the store's stays attached until it is torn.
+  // The client's first: it is the one being handed over, so it is the one that
+  // comes out first and is already in hand while the store's is still printing.
   const order = wanted === 1 ? [null] : ['client', 'store'];
 
-  mount(printRoot(), order.map((forWhom, i) => h('div.rcp__copy',
-    i > 0 ? h('div.rcp__cut', '- - - - - -  CORTAR AQUI  - - - - - -') : null,
+  mount(printRoot(), order.map((forWhom) => h('div.rcp__copy',
     receiptSheet(receipt, { ...sheet, forWhom }))));
 
   // A frame, so the layout is done before the dialog freezes the page.
