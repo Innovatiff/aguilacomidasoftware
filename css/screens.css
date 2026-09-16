@@ -734,3 +734,65 @@
   .auth__hero { padding: var(--s7) var(--s6) var(--s6); border-radius: 0; }
   .auth__body { padding: var(--s6); flex: none; }
 }
+
+/* ==========================================================================
+   Reportes — the period picker.
+
+   Three controls in one line: back, the period itself, forward. The middle one
+   is a button as well, and it returns to the period we are living in — walking
+   six months back and having to press the other arrow six times is what makes
+   people stop opening a screen.
+   ========================================================================== */
+
+.rper {
+  display: flex;
+  align-items: stretch;
+  gap: var(--s2);
+}
+
+.rper__nav {
+  flex: 0 0 auto;
+  width: 44px;
+  display: grid;
+  place-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  color: var(--text);
+  cursor: pointer;
+}
+.rper__nav:hover:not(:disabled) { background: var(--surface-alt); }
+/* Nothing has happened yet in a period that has not started, so the arrow into
+   it is dead rather than hidden — a control that disappears moves the two
+   beside it, and the reader loses their place. */
+.rper__nav:disabled { opacity: .32; cursor: default; }
+
+.rper__now {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  padding: var(--s2) var(--s3);
+  text-align: center;
+  cursor: pointer;
+}
+.rper__now:hover { background: var(--surface-alt); }
+
+.rper__t {
+  display: block;
+  font-weight: 700;
+  font-size: var(--fs-base);
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rper__s {
+  display: block;
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

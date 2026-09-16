@@ -14,8 +14,20 @@ import { normalizePricing, normalizeTiers } from '../lib/pricing.js';
 
 const pricingRef = () => doc(db, 'config', 'pricing');
 
-/** The stored list, or the starting one while the document does not exist. */
-const read = (data) => normalizePricing(data);
+/**
+ * The stored list, or the starting one while the document does not exist.
+ *
+ * `normalizePricing` answers "what are the prices" and deliberately says
+ * nothing else, so when it was last changed and by whom are carried alongside
+ * rather than folded into it. The report asks: a month that does not look like
+ * the one before it is usually a month the price list moved in, and that is
+ * worth saying on the page instead of leaving somebody to remember it.
+ */
+const read = (data) => ({
+  ...normalizePricing(data),
+  updatedAt: data?.updatedAt || null,
+  updatedByName: data?.updatedByName || '',
+});
 
 export function watchPricing(onData, onError) {
   return onSnapshot(pricingRef(), (snap) => onData(read(docData(snap))), onError);

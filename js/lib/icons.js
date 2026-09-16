@@ -53,6 +53,8 @@ export const PATHS = {
   pause:     '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>',
   play:      '<path d="M6 4.5 20 12 6 19.5z"/>',
   trend:     '<path d="M22 7 13.5 15.5 9 11l-7 7"/><path d="M16 7h6v6"/>',
+  printer:   '<path d="M7 8V3h10v5"/><path d="M5 8h14a2 2 0 0 1 2 2v6h-4"/><path d="M7 16H3v-6a2 2 0 0 1 2-2"/><path d="M7 13h10v8H7z"/>',
+  chart:     '<path d="M3 3v18h18"/><path d="M7 15v3M12 10v8M17 6v12"/>',
   eagle:     '<path d="M12 3.2 5.5 6.4v4.3c0 4.3 2.7 8.2 6.5 9.6 3.8-1.4 6.5-5.3 6.5-9.6V6.4z"/><path d="M9.2 11.2 12 13.6l2.8-2.4M12 8.4v5.2"/>',
   note:      '<path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H15l5 5v11.5A1.5 1.5 0 0 1 18.5 21h-13A1.5 1.5 0 0 1 4 19.5z"/><path d="M14.5 3v5.5H20"/>',
   download:  '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7.5 10.5 4.5 4.5 4.5-4.5M12 15V3"/>',

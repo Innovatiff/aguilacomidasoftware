@@ -362,6 +362,11 @@ export function dataErrorCard(error, { onRetry } = {}) {
     'permission-denied': 'Las reglas publicadas en Firestore no permiten esta consulta. Vuelve a pegar firestore.rules completo en la consola y publícalas.',
     unavailable: 'Sin conexión con Firestore. Revisa tu internet.',
     unauthenticated: 'La sesión caducó. Cierra sesión y vuelve a entrar.',
+    // Not a bug and not a thing to retry: the day's allowance is spent and
+    // nothing will read until midnight. Saying so is the difference between
+    // somebody waiting it out and somebody reinstalling the panel.
+    'resource-exhausted': 'La base de datos llegó a su límite diario de lecturas. '
+      + 'Se restablece a medianoche; hasta entonces no se puede consultar.',
   }[code] || 'Firestore rechazó una consulta.';
 
   return h('div.card', { style: { borderColor: 'var(--bad-500)', borderLeftWidth: '4px' } },

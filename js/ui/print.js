@@ -176,6 +176,49 @@ function printRoot() {
 }
 
 /**
+ * Which paper the next job goes on.
+ *
+ * `@page` is the only way to tell a browser what size the sheet is, and it
+ * cannot be aimed at part of a document — there is no selector for it, so a
+ * stylesheet can hold exactly one answer and this app needs two: a 3-inch roll
+ * for the counter, a Letter page for the owner's report. So the rule is written
+ * at the moment of printing, by whichever printer is running, into a style tag
+ * kept for the purpose. It sits after `print.css` in the head, so it wins.
+ *
+ * `data-paper` on the body is the same decision expressed where CSS *can* see
+ * it, for the things that are ordinary rules — the body width, mainly, which on
+ * the roll is pinned to 80mm and on a report must be left alone.
+ */
+const PAPER = {
+  receipt: 'size: 80mm auto; margin: 0;',
+  report: 'size: Letter; margin: 13mm 12mm 15mm;',
+};
+
+function paper(kind) {
+  document.body.dataset.paper = kind;
+  let tag = document.getElementById('print-paper');
+  if (!tag) {
+    tag = h('style', { id: 'print-paper' });
+    document.head.append(tag);
+  }
+  tag.textContent = `@media print { @page { ${PAPER[kind] || PAPER.receipt} } }`;
+}
+
+/**
+ * Prints a document — the period report, today, and whatever else is a page
+ * rather than a slip.
+ *
+ * Same mechanism as a receipt and deliberately so: no driver, no server, no
+ * extension, and the browser's own dialog offers "Guardar como PDF" for free,
+ * which is how this one mostly leaves the building.
+ */
+export function printSheet(node, { paper: kind = 'report' } = {}) {
+  paper(kind);
+  mount(printRoot(), node);
+  requestAnimationFrame(() => window.print());
+}
+
+/**
  * Prints a payment: two copies by default, one after the other.
  *
  * One for the person who paid and one the store keeps, and they come out as two
@@ -207,6 +250,7 @@ export function printReceipt(receipt, options = {}) {
   // comes out first and is already in hand while the store's is still printing.
   const order = wanted === 1 ? [null] : ['client', 'store'];
 
+  paper('receipt');
   mount(printRoot(), order.map((forWhom) => h('div.rcp__copy',
     receiptSheet(receipt, { ...sheet, forWhom }))));
 

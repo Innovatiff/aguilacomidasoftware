@@ -19,6 +19,16 @@
 #print-root { display: none; }
 
 @media print {
+  /*
+   * The roll, and the default.
+   *
+   * There is no selector for `@page`, so a stylesheet can only hold one answer
+   * and this app prints two things: receipts on a 3-inch roll and the owner's
+   * report on Letter. The one that is about to print writes its own rule into
+   * a style tag at the end of the head (see `paper()` in js/ui/print.js), which
+   * lands after this file and therefore wins. This stays as what a stray Ctrl+P
+   * gets, which is the counter's paper.
+   */
   @page {
     size: 80mm auto;
     margin: 0;
@@ -33,7 +43,6 @@
   body > *:not(#print-root) { display: none !important; }
 
   html, body {
-    width: 80mm;
     margin: 0;
     padding: 0;
     background: #fff;
@@ -41,6 +50,10 @@
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
+
+  /* Pinned to the roll — except when a report says otherwise, and then the
+     page box from `@page` is the only width there is. */
+  body:not([data-paper="report"]) { width: 80mm; }
 
   #print-root { display: block !important; }
 }
@@ -161,3 +174,180 @@
 /* Every copy now ends a page of its own, so every copy gets the full tail:
    the blank strip is what keeps the tear — or the cutter — off the last line
    of print. */
+
+
+/* ==========================================================================
+   The period report.
+
+   A document, not a slip: Letter, laid out in tables, printed on whatever
+   ordinary printer the office has — or saved as a PDF from the same dialog,
+   which is how most of these will actually leave the building.
+
+   Set in the app's own face rather than the receipt's monospace. A receipt is
+   monospace because a thermal head prints a fixed grid and columns have to be
+   built out of spaces; a laser page has real typography available, and a table
+   of two hundred names is far easier to read down in a proportional face with
+   the figures aligned by the table.
+   ========================================================================== */
+
+.rep {
+  background: #fff;
+  color: #000;
+  font-family: var(--font, "Inter", system-ui, sans-serif);
+  font-size: 9.5pt;
+  line-height: 1.38;
+  /* Only on screen: on paper the page box is the width. Tests render the sheet
+     in the page, and an unconstrained one would lay out at window width and
+     prove nothing about what comes out. */
+  max-width: 186mm;
+  margin: 0 auto;
+}
+
+/* --- Masthead -------------------------------------------------------------- */
+
+.rep__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10mm;
+}
+
+.rep__brand { font-size: 15pt; font-weight: 800; letter-spacing: -.01em; }
+.rep__sub   { font-size: 8pt; color: #333; }
+.rep__stamp { text-align: right; }
+
+.rep__kind {
+  font-size: 7.5pt;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: #444;
+}
+.rep__period { font-size: 13pt; font-weight: 700; }
+
+.rep__line { border-top: 1.5px solid #000; margin: 3mm 0 0; }
+
+/* --- Sections -------------------------------------------------------------- */
+
+.rep__block { margin-top: 6mm; }
+
+/*
+ * A heading never ends a page.
+ *
+ * `break-inside: avoid` on the whole block would be wrong here: "quién pagó"
+ * can be two hundred rows and forcing it to stay whole would push a page and a
+ * half of white paper ahead of it. What has to hold together is the heading and
+ * the start of what it names.
+ */
+.rep__h {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6mm;
+  font-size: 8pt;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  border-bottom: 1px solid #000;
+  padding-bottom: 1.2mm;
+  margin-bottom: 2.5mm;
+  break-after: avoid;
+  page-break-after: avoid;
+}
+.rep__h-note {
+  font-weight: 500;
+  letter-spacing: .02em;
+  text-transform: none;
+  font-size: 8pt;
+  color: #444;
+}
+
+.rep__note { font-size: 8pt; color: #444; margin: -1mm 0 2.5mm; }
+.rep__none { font-size: 9pt; color: #444; font-style: italic; }
+
+/* --- Figures in two columns ------------------------------------------------ */
+
+.rep__cols { display: flex; gap: 10mm; break-inside: avoid; }
+.rep__col  { flex: 1 1 0; min-width: 0; }
+
+.rep__pair {
+  display: flex;
+  justify-content: space-between;
+  gap: 5mm;
+  padding: 1.1mm 0;
+  border-bottom: 1px dotted #bbb;
+}
+.rep__pair--total { font-size: 11pt; font-weight: 700; border-bottom-color: #000; }
+.rep__pair--sub   { font-size: 8.5pt; color: #333; padding-left: 3mm; }
+.rep__pair--soft  { font-size: 8.5pt; color: #333; border-bottom: 0; }
+
+/* --- Tables ---------------------------------------------------------------- */
+
+.rep__t {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 8.5pt;
+}
+
+.rep__t th {
+  text-align: left;
+  font-size: 7pt;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: #333;
+  border-bottom: 1px solid #000;
+  padding: 0 0 1mm;
+}
+
+/* `.rep__t th` is one class and one element, so it outranks `.rep__num` on its
+   own and a header sat left above a column of right-aligned figures. Said here
+   at the same weight, later, so the two ends of a money column line up. */
+.rep__t th.rep__num { text-align: right; }
+
+.rep__t td {
+  padding: 1.1mm 0;
+  border-bottom: 1px solid #ddd;
+  vertical-align: top;
+}
+
+/* A long note must not push the money column off the page. */
+.rep__t td:first-child, .rep__t th:first-child { padding-right: 4mm; overflow-wrap: anywhere; }
+
+/* Words are read from the left even when they sit between two columns of
+   figures — a right-aligned "Mucci Farms" is a farm name pretending to be an
+   amount. */
+.rep__t .rep__text, .rep__t th.rep__text { text-align: left; padding-right: 4mm; overflow-wrap: anywhere; }
+
+.rep__t tfoot td {
+  font-weight: 700;
+  border-top: 1.5px solid #000;
+  border-bottom: 0;
+  padding-top: 1.4mm;
+}
+
+/* Figures line up by digit, which is the whole reason a column of money is
+   worth reading down at all. */
+.rep__num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* A row is never split across two pages, and a header repeats on every page it
+   carries on to — otherwise page three is a column of numbers with no names. */
+.rep__t tr { break-inside: avoid; page-break-inside: avoid; }
+.rep__t thead { display: table-header-group; }
+.rep__t tfoot { display: table-footer-group; }
+
+/* --- Footer ---------------------------------------------------------------- */
+
+.rep__foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 8mm;
+  font-size: 7.5pt;
+  color: #444;
+  padding-top: 1.5mm;
+}

@@ -117,6 +117,20 @@ function asDate(value) {
   return null;
 }
 
+/**
+ * The day a stamp fell on, as a "YYYY-MM-DD" key, or null.
+ *
+ * Firestore stores "when this client was registered" as a Timestamp — an
+ * instant — while everything that asks about it ("was anybody registered in
+ * September?") is asking about a calendar day. This is the one place that
+ * conversion happens, so it happens in the reader's timezone once rather than
+ * in three screens slightly differently.
+ */
+export function dayOf(value) {
+  const date = asDate(value);
+  return date ? dayKey(date) : null;
+}
+
 /** Chat stamp: time today, "Ayer", weekday this week, date beyond. */
 export function formatStamp(value) {
   const date = asDate(value);

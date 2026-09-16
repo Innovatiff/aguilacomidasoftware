@@ -653,6 +653,10 @@
   transition: background 120ms var(--ease);
 }
 .viz__bar.is-empty { background: var(--ink-150); border-radius: 2px; }
+/* A period that ended down — more money given back than taken. A stub like an
+   empty one, because it has no height to draw, but never the same colour: the
+   two mean opposite things and the tooltip is a hover away. */
+.viz__bar.is-back { background: var(--bad-500); border-radius: 2px; }
 /* One series, and the point is today — so today is the accent and the rest are
    context. Emphasis, not fourteen colours. */
 .viz__bar.is-today { background: var(--brand-500); }

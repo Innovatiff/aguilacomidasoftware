@@ -31,10 +31,24 @@ import { weekdayName, formatDay } from '../lib/dates.js';
 /* --- Columns: what came in, day by day ------------------------------------ */
 
 /**
- * @param {object[]} rows   `{ day, amount, count }`, oldest first
- * @param {string} [today]  the day to emphasise
+ * @param {object[]} rows      `{ day, amount, count }`, oldest first
+ * @param {string}  [today]    the day to emphasise
+ * @param {Function}[tick]     the label under a column
+ * @param {Function}[label]    what a column is called in its tooltip
+ * @param {string[]}[axis]     the two ends of the axis line
+ *
+ * The three functions are what let the report reuse this. A fortnight of
+ * takings is one column per day and the tick is the weekday; a year is one
+ * column per month and it is not. The shape of the chart — one hue, today
+ * emphasised, a caption only on the extremes — is the same either way, and is
+ * the part worth having in one place.
  */
-export function columnChart(rows, { today: todayKey, height = 168 } = {}) {
+export function columnChart(rows, {
+  today: todayKey, height = 168,
+  tick = (row) => weekdayName(row.day).slice(0, 3),
+  label = (row) => `${weekdayName(row.day)} ${formatDay(row.day)}`,
+  axis = [`Hace ${rows.length} días`, 'Hoy'],
+} = {}) {
   const top = Math.max(...rows.map((r) => r.amount), 1);
   const best = rows.reduce((a, b) => (b.amount > a.amount ? b : a), rows[0]);
 
@@ -44,10 +58,14 @@ export function columnChart(rows, { today: todayKey, height = 168 } = {}) {
     const isToday = row.day === todayKey;
     const tall = Math.round((row.amount / top) * (height - 26));
     // An empty day is still a day: a 3px stub keeps the rhythm of the week
-    // visible instead of leaving a hole the eye reads as missing data.
+    // visible instead of leaving a hole the eye reads as missing data. A day
+    // that ended *down* — more given back than taken — gets the same stub in a
+    // different colour, because a bar hanging below the line would need an axis
+    // this chart does not have, and the tooltip says the figure anyway.
     const barHeight = row.amount > 0 ? Math.max(tall, 6) : 3;
+    const state = row.amount > 0 ? '' : (row.amount < 0 ? '.is-back' : '.is-empty');
 
-    const bar = h(`span.viz__bar${isToday ? '.is-today' : ''}${row.amount > 0 ? '' : '.is-empty'}`,
+    const bar = h(`span.viz__bar${isToday ? '.is-today' : ''}${state}`,
       { style: { height: `${barHeight}px` } });
 
     return h(`div.viz__col${isToday ? '.is-today' : ''}`, {
@@ -63,7 +81,7 @@ export function columnChart(rows, { today: todayKey, height = 168 } = {}) {
       ? h('span.viz__cap', money(row.amount, { round: true }))
       : null,
     bar,
-    h('span.viz__tick', weekdayName(row.day).slice(0, 3)));
+    h('span.viz__tick', tick(row)));
   };
 
   const wrap = h('div.viz.viz--cols', { style: { '--viz-h': `${height}px` } },
@@ -73,8 +91,8 @@ export function columnChart(rows, { today: todayKey, height = 168 } = {}) {
     // the right edge — the narrow layout drops both and says what the axis is
     // instead. The bars still carry the rhythm and every value is a tap away.
     h('div.viz__axis',
-      h('span', `Hace ${rows.length} días`),
-      h('span', 'Hoy')),
+      h('span', axis[0]),
+      h('span', axis[1])),
     tip);
 
   // Declarations, not consts: the columns above are built before this point in
@@ -85,11 +103,13 @@ export function columnChart(rows, { today: todayKey, height = 168 } = {}) {
 
   function show(node, row) {
     mount(tip,
-      h('div.viz__tip-k', `${weekdayName(row.day)} ${formatDay(row.day)}`),
+      h('div.viz__tip-k', label(row)),
       h('div.viz__tip-v', money(row.amount)),
-      h('div.viz__tip-n', row.count
-        ? `${number(row.count)} ${row.count === 1 ? 'pago' : 'pagos'}`
-        : 'Sin pagos'));
+      h('div.viz__tip-n', row.amount < 0
+        ? 'Se regresó más de lo que entró'
+        : row.count
+          ? `${number(row.count)} ${row.count === 1 ? 'pago' : 'pagos'}`
+          : 'Sin pagos'));
     tip.hidden = false;
     const box = node.getBoundingClientRect();
     const host = wrap.getBoundingClientRect();

@@ -23,6 +23,7 @@ import { renderClients } from './screens/clients.js';
 import { renderClientForm } from './screens/client-form.js';
 import { renderClientDetail } from './screens/client-detail.js';
 import { renderBilling } from './screens/billing.js';
+import { renderReport } from './screens/report.js';
 import { renderCheckout } from './screens/checkout.js';
 import { renderQuick } from './screens/quick.js';
 import { renderInvoice } from './screens/invoice.js';
@@ -128,6 +129,8 @@ function registerRoutes() {
   register('/clients/:id', renderClientDetail);
   register('/clients/:id/edit', renderClientForm);
   register('/billing', renderBilling);
+  // What the business did over a span somebody chooses, and can print.
+  register('/reportes', renderReport);
   // The counter: find somebody and take their money.
   register('/cobrar', renderCheckout);
   register('/rapido', renderQuick);

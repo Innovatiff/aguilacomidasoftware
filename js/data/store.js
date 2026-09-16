@@ -21,6 +21,7 @@ import { watchOutstanding, summarizeInvoices, groupByClient } from './invoices.j
 import { watchRecentReceipts, cancelledIds, RECENT_RECEIPTS } from './receipts.js';
 import { watchConversations, totalUnread } from './chat.js';
 import { pendingBilling } from './cycles.js';
+import { forgetPeriods } from './reports.js';
 import { today, formatDay, weekdayName, addDays } from '../lib/dates.js';
 import { summarize, periodOf, payDayAfter, round2 } from '../lib/billing.js';
 import { DEFAULT_PRICING, chargeFor, tierFor } from '../lib/pricing.js';
@@ -134,8 +135,10 @@ export function stopStore() {
   stops = [];
   // The scan belongs to the account that asked for it. Leaving it behind means
   // the next person to sign in gets the last one's bills — and, because a
-  // finished scan never runs again on its own, gets them for good.
+  // finished scan never runs again on its own, gets them for good. The report's
+  // periods are the same kind of borrowed answer.
   forgetPendingBills();
+  forgetPeriods();
   Object.assign(state, {
     pricing: { ...DEFAULT_PRICING },
     business: { ...DEFAULT_BUSINESS },
@@ -366,17 +369,28 @@ export function forgetPendingBills() {
    to read "Cobrado" off `summarizeInvoices`, which sums the `paid` field of the
    bills that are *still unpaid* — a number that means "part-payments sitting on
    open accounts" and goes down when somebody finishes paying. Nobody wants that
-   number, and it was under a label that promised a different one. */
+   number, and it was under a label that promised a different one.
 
-/** Receipts that still stand: cancellations, and the payments they undo, drop out. */
-function standingReceipts() {
-  const voided = cancelledIds(state.receipts);
-  return state.receipts.filter((row) => Number(row.amount) > 0 && !voided.has(row.id));
-}
+   **A day's takings are the receipts dated that day, added up, negatives and
+   all.** The kitchen undoes a payment by writing a second, negative receipt
+   against it rather than by editing the first, so the arithmetic of a cash book
+   is already the arithmetic of this collection: a payment taken on Wednesday
+   and given back on Saturday is $140 in on Wednesday and $140 out on Saturday.
 
-/** Everything taken on one day, net of anything cancelled. */
+   The alternative — striking both halves off the day the money first came in —
+   sounds tidier and is worse in two ways. It rewrites a day that has already
+   been read, closed and in one case printed; and it is not the rule the report
+   screen can use, because that screen shows spans the till window does not
+   reach and would have no way of knowing a cancellation existed. One rule, so
+   Inicio and the report can never quote different numbers for the same day.
+
+   Lists are a different question and keep a different rule: `paymentsFor` still
+   hides a cancelled payment, because "when did this person last pay?" must not
+   answer with a payment that was undone. */
+
+/** Everything taken on one day, less anything given back that day. */
 export function collectedOn(day = today()) {
-  return round2(standingReceipts()
+  return round2(state.receipts
     .filter((row) => row.date === day)
     .reduce((sum, row) => sum + (Number(row.amount) || 0), 0));
 }
@@ -387,20 +401,21 @@ export function collectedOn(day = today()) {
  * about the rhythm of a business that only collects twice a week.
  */
 export function dailyCollections(days = 14, from = today()) {
-  const standing = standingReceipts();
   const byDay = new Map();
-  for (const row of standing) {
+  const paidOn = new Map();
+  for (const row of state.receipts) {
     if (!row.date) continue;
     byDay.set(row.date, (byDay.get(row.date) || 0) + (Number(row.amount) || 0));
+    // The count is payments, not movements: a cancellation is not somebody
+    // walking up to the counter, and counting it as one would overstate how
+    // busy the day was.
+    if (Number(row.amount) > 0) paidOn.set(row.date, (paidOn.get(row.date) || 0) + 1);
   }
 
   return Array.from({ length: days }, (unused, i) => {
     const day = addDays(from, i - (days - 1));
-    return { day, amount: round2(byDay.get(day) || 0), count: 0 };
-  }).map((entry) => ({
-    ...entry,
-    count: standing.filter((row) => row.date === entry.day).length,
-  }));
+    return { day, amount: round2(byDay.get(day) || 0), count: paidOn.get(day) || 0 };
+  });
 }
 
 /**
