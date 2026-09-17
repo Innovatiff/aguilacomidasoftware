@@ -156,8 +156,9 @@ function drawSummary(view) {
   screen({
     title: 'Reportes',
     subtitle: rangeTitle(view.range),
-    backTo: '/',
-    tab: 'home',
+    // No back chevron: it is a tab now, like Inicio or Clientes, and the way
+    // out of a tab is another tab.
+    tab: 'reports',
     sunken: true,
     actions: [topbarButton('refresh', { label: 'Volver a leer', onClick: view.reload })],
     body: h('div.page__inner.rbig.stack.stack-5',
@@ -560,7 +561,7 @@ function drawList(view) {
     // The way back is the report on the same period, so the chevron out of a
     // list never loses the span somebody chose to get here.
     backTo: urlFor(view.range),
-    tab: 'home',
+    tab: 'reports',
     sunken: true,
     body: h('div.page__inner.rbig.stack.stack-4',
       !spec

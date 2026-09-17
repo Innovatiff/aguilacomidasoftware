@@ -303,6 +303,7 @@ function paintFab(fab) {
 
 let renderedPath = null;
 let lastPath = '/';
+let lastHref = '/';
 
 /**
  * Where each screen was reached from, so the chevron goes back the way the
@@ -320,11 +321,14 @@ const cameFrom = new Map();
  * The way back from `here`, or null to use the screen's own fallback.
  *
  * A screen underneath this one is never the way back — coming out of a client's
- * edit form must not send the chevron into the edit form again.
+ * edit form must not send the chevron into the edit form again. That comparison
+ * is made on the bare path, because what is remembered is the whole address.
  */
 function origin(here) {
   const from = cameFrom.get(here);
-  if (!from || from === here || from.startsWith(`${here}/`)) return null;
+  if (!from) return null;
+  const bare = from.split('?')[0];
+  if (bare === here || bare.startsWith(`${here}/`)) return null;
   return from;
 }
 
@@ -333,16 +337,22 @@ function origin(here) {
  * position of the route being left, so going back lands where you were, and
  * remembers which screen led here.
  */
-export function notePath(path) {
+export function notePath(path, href = path) {
   if (page && page.scrollTop > 0) scrollMemory.set(lastPath, page.scrollTop);
 
   // Coming back up out of a screen's own form does not rewrite where the
   // screen was reached from: somebody who opened a client from the roster,
   // edited them and saved still wants the chevron to return to the roster.
   const up = lastPath.startsWith(`${path}/`);
-  if (path !== lastPath && !up) cameFrom.set(path, lastPath);
+  // The whole address, query and all. A route's query is part of where it was —
+  // the roster filtered to who is overdue, the report on a particular month —
+  // and a chevron that dropped it landed somewhere the reader had not been.
+  // Only the bare path is the key, because "which screen led here" is a fact
+  // about screens.
+  if (path !== lastPath && !up) cameFrom.set(path, lastHref);
 
   lastPath = path;
+  lastHref = href;
 }
 
 /** Swap only the page body — used when a listener pushes fresh data. */

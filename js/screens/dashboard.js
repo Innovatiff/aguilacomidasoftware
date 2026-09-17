@@ -47,10 +47,9 @@ export function renderDashboard() {
       title: greeting(),
       subtitle: formatDayLong(today()),
       tab: 'home',
-      actions: [
-        topbarButton('chart', { label: 'Reportes', onClick: () => go('/reportes') }),
-        topbarButton('settings', { label: 'Ajustes', onClick: () => go('/settings') }),
-      ],
+      // Reportes has its own tab now, so the icon that used to sit here would be
+      // a second door to one room.
+      actions: [topbarButton('settings', { label: 'Ajustes', onClick: () => go('/settings') })],
       body: failure()
         ? h('div.page__inner', dataErrorCard(failure().error, { onRetry: () => startStore() }))
         : isReady() ? body() : skeletonRows(5),

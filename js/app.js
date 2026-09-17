@@ -39,6 +39,10 @@ const TABS = [
   { id: 'farms',    path: '/farms',    label: 'Ranchos',  icon: 'farm' },
   { id: 'clients',  path: '/clients',  label: 'Clientes', icon: 'users' },
   { id: 'messages', path: '/messages', label: 'Mensajes', icon: 'chat' },
+  // Last, so nothing above it moves. The counter's staff reach for the same
+  // four places a hundred times a day and know where they are by position;
+  // Reportes is opened by one person, sitting down, who will read the labels.
+  { id: 'reports',  path: '/reportes', label: 'Reportes', icon: 'chart' },
 ];
 
 const host = $('#app');
@@ -104,7 +108,9 @@ function enter(next) {
 
   if (!routerStarted) {
     registerRoutes();
-    onNavigate((context) => notePath(context.path));
+    // The full address, not just the path: the chevron has to come back to the
+    // roster's filter and the report's period, not to their bare screens.
+    onNavigate((context) => notePath(context.path, location.hash.slice(1) || '/'));
     routerStarted = true;
     start();
   } else {
