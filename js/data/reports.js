@@ -24,6 +24,7 @@
  */
 
 import { db, collection, query, where, getDocs, listData } from '../firebase.js';
+import { today } from '../lib/dates.js';
 
 /** "2026-09-01|2026-09-30" -> the documents behind that span. */
 const cache = new Map();
@@ -40,8 +41,19 @@ const inFlight = new Map();
 
 const keyOf = (range) => `${range.start}|${range.end}`;
 
-/** The period, if it has already been read this session. */
-export const cachedPeriod = (range) => cache.get(keyOf(range)) || null;
+/**
+ * Whether a period is over, and therefore safe to remember.
+ *
+ * A period that still has today inside it is not a fact yet — every payment
+ * taken this afternoon changes it. Keeping one was how the report came to show
+ * $0 for a day the counter had already taken $140 on, with Inicio saying $140
+ * on the next screen along. So only finished periods are remembered; the one we
+ * are living in is asked again every time somebody opens it.
+ */
+const settled = (range) => range.end < today();
+
+/** The period, if it is over and has already been read this session. */
+export const cachedPeriod = (range) => (settled(range) ? cache.get(keyOf(range)) || null : null);
 
 /** Forgets one period, so the next look asks Firestore again. */
 export const forgetPeriod = (range) => { cache.delete(keyOf(range)); inFlight.delete(keyOf(range)); };
@@ -65,7 +77,7 @@ export const forgetPeriods = () => { cache.clear(); inFlight.clear(); };
 export function loadPeriod(range, { fresh = false } = {}) {
   const key = keyOf(range);
   if (fresh) { cache.delete(key); inFlight.delete(key); }
-  if (cache.has(key)) return Promise.resolve(cache.get(key));
+  if (!fresh && settled(range) && cache.has(key)) return Promise.resolve(cache.get(key));
   if (inFlight.has(key)) return inFlight.get(key);
 
   const reading = Promise.all([
@@ -81,7 +93,7 @@ export function loadPeriod(range, { fresh = false } = {}) {
       where('periodStart', '>=', range.start), where('periodStart', '<=', range.end))).then(listData),
   ]).then(([receipts, invoices]) => {
     const found = { receipts, invoices, readAt: new Date() };
-    cache.set(key, found);
+    if (settled(range)) cache.set(key, found);
     return found;
   }).finally(() => inFlight.delete(key));
 

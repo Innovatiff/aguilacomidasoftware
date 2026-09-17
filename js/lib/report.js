@@ -35,6 +35,37 @@ import { today, dayOf, daysBetween } from './dates.js';
 
 const sum = (rows, pick) => round2(rows.reduce((total, row) => total + (Number(pick(row)) || 0), 0));
 
+/**
+ * The period as read, brought up to date with what the panel is watching live.
+ *
+ * The one-shot read is a photograph taken the moment the screen opened. The
+ * store, meanwhile, holds a live subscription to the newest receipts and to
+ * every unpaid bill — so a payment taken thirty seconds ago is already in
+ * memory while the photograph still shows the counter empty. That is not a
+ * hypothetical: the report said $0 for a day Inicio was already reporting $140
+ * on, because both were right about different instants.
+ *
+ * So the live rows win, by id. Anything the store knows about that falls inside
+ * the period replaces its older copy or joins it, and everything outside the
+ * period is ignored — the till reaches back further than most reports do.
+ */
+export function freshen(loaded, live, range) {
+  return {
+    receipts: overlay(loaded?.receipts, live?.receipts, range, (row) => row.date),
+    invoices: overlay(loaded?.invoices, live?.invoices, range, (row) => row.periodStart),
+  };
+}
+
+function overlay(loaded = [], live = [], range, dayOf) {
+  const rows = new Map(loaded.map((row) => [row.id, row]));
+  for (const row of live) {
+    if (!row?.id) continue;
+    if (!inRange(dayOf(row), range)) continue;
+    rows.set(row.id, row);
+  }
+  return [...rows.values()];
+}
+
 const inRange = (day, range) => !!day && day >= range.start && day <= range.end;
 
 /**
@@ -131,6 +162,22 @@ function spanOf(range, day) {
   return { span, elapsed, running };
 }
 
+/**
+ * Which way the book moved over the period, in words.
+ *
+ * Exported because the screen and the printed sheet both say it, and a sheet
+ * that reads "la deuda bajó" beside a screen reading "la deuda subió" is worse
+ * than either being wrong on its own.
+ */
+export const debtWord = (change) => (Math.abs(change) <= 0.005
+  ? 'La deuda quedó igual'
+  : (change > 0 ? 'La deuda subió' : 'La deuda bajó'));
+
+/** The same movement, explained: which side of it was bigger. */
+export const debtWhy = (change) => (Math.abs(change) <= 0.005
+  ? 'Entró justo lo que se emitió'
+  : (change > 0 ? 'Se emitió más de lo que entró' : 'Entró más de lo que se emitió'));
+
 /** What a bill says it fed. Falls back to the plan when nobody recorded it. */
 const mealsOn = (invoice) => Number(invoice.meals) || Number(invoice.plannedMeals) || 0;
 
@@ -223,31 +270,40 @@ function fill(buckets, receipts, invoices) {
 }
 
 /**
- * Everybody who paid, with their total for the period.
+ * Everybody who handed money over, and how much.
  *
- * Netted per person, so somebody whose payment was taken and given back inside
- * the same period does not appear as having paid — they did not. The
- * cancellation is still counted in `refunds` and still listed on the screen's
- * movements, so nothing has gone quiet; it is only this list, which answers
- * "who paid?", that declines to say yes about a payment that was undone.
+ * `amount` is what they paid, not what they paid net of anything given back.
+ * The netted version was wrong in a way that only showed up with real data: a
+ * client who paid $140 this month and had a $300 payment *from last month*
+ * refunded in it nets to −$160, and the netted list dropped them — so a person
+ * who walked in and paid was missing from "quién pagó". Two different facts had
+ * been folded into one number.
+ *
+ * So the list answers exactly what its name asks — who paid, and how much they
+ * handed over — and anything given back rides alongside as its own figure, said
+ * out loud on the row rather than quietly subtracted. The column then adds up to
+ * "pagos recibidos", which is a figure on the printed sheet.
  */
 function byPayer(receipts) {
   const found = new Map();
   for (const row of receipts) {
     const key = row.clientId || `sin-cliente:${row.id}`;
+    const amount = Number(row.amount) || 0;
     const entry = found.get(key) || {
       clientId: row.clientId || '', name: row.clientName || 'Sin cliente',
-      farmName: row.farmName || '', amount: 0, count: 0, last: '',
+      farmName: row.farmName || '', amount: 0, refunds: 0, count: 0, last: '',
     };
-    entry.amount = round2(entry.amount + (Number(row.amount) || 0));
-    if (Number(row.amount) > 0) {
+    if (amount > 0) {
+      entry.amount = round2(entry.amount + amount);
       entry.count += 1;
       if (row.date > entry.last) entry.last = row.date;
+    } else {
+      entry.refunds = round2(entry.refunds + amount);
     }
     found.set(key, entry);
   }
   return [...found.values()]
-    .filter((entry) => entry.amount > 0.005)
+    .filter((entry) => entry.count > 0)
     .sort((a, b) => b.amount - a.amount || a.name.localeCompare(b.name));
 }
 
@@ -320,10 +376,22 @@ function standingOf(outstanding, day) {
       overdue = round2(overdue + balance);
       overdueCount += 1;
     }
-    const entry = owing.get(invoice.clientId)
-      || { clientId: invoice.clientId, name: invoice.clientName || '', farmName: invoice.farmName || '', balance: 0, bills: 0 };
+    const entry = owing.get(invoice.clientId) || {
+      clientId: invoice.clientId, name: invoice.clientName || '',
+      farmName: invoice.farmName || '', balance: 0, bills: 0, late: 0, lateBalance: 0,
+      oldest: invoice.dueDate || '',
+    };
     entry.balance = round2(entry.balance + balance);
     entry.bills += 1;
+    // Late is its own count, not a filter applied later: "who is behind" is a
+    // list the kitchen chases, and it is a different list from "who owes".
+    if (invoiceStatus(invoice, day) === 'overdue') {
+      entry.late += 1;
+      entry.lateBalance = round2(entry.lateBalance + balance);
+    }
+    if (invoice.dueDate && (!entry.oldest || invoice.dueDate < entry.oldest)) {
+      entry.oldest = invoice.dueDate;
+    }
     owing.set(invoice.clientId, entry);
   }
 
@@ -333,6 +401,8 @@ function standingOf(outstanding, day) {
     overdueCount,
     dueSoon: round2(owed - overdue),
     debtors: [...owing.values()].sort((a, b) => b.balance - a.balance),
+    late: [...owing.values()].filter((row) => row.late > 0)
+      .sort((a, b) => String(a.oldest).localeCompare(String(b.oldest)) || b.lateBalance - a.lateBalance),
   };
 }
 

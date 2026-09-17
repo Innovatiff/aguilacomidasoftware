@@ -177,29 +177,28 @@
 
 
 /* ==========================================================================
-   The period report.
+   The report, on paper.
 
-   A document, not a slip: Letter, laid out in tables, printed on whatever
-   ordinary printer the office has — or saved as a PDF from the same dialog,
-   which is how most of these will actually leave the building.
+   One Letter page and always one: nothing printed here repeats per client, so
+   the height of the sheet does not depend on how many people the kitchen
+   serves. With 13mm at the top and 15mm at the bottom there are about 251mm of
+   usable height, and what follows measures around 220mm — room to spare, so a
+   long business name or a footnote cannot push anything onto a second sheet.
 
-   Set in the app's own face rather than the receipt's monospace. A receipt is
-   monospace because a thermal head prints a fixed grid and columns have to be
-   built out of spaces; a laser page has real typography available, and a table
-   of two hundred names is far easier to read down in a proportional face with
-   the figures aligned by the table.
+   Set larger than the screen on purpose. Whoever reads this reads it on paper,
+   with their glasses on, at arm's length.
    ========================================================================== */
 
 .rep {
   background: #fff;
   color: #000;
   font-family: var(--font, "Inter", system-ui, sans-serif);
-  font-size: 9.5pt;
-  line-height: 1.38;
-  /* Only on screen: on paper the page box is the width. Tests render the sheet
-     in the page, and an unconstrained one would lay out at window width and
-     prove nothing about what comes out. */
-  max-width: 186mm;
+  font-size: 10.5pt;
+  line-height: 1.4;
+  /* Only on screen: on paper the page box is the width. The tests render the
+     sheet inside the document, and without this it would lay out at window
+     width and prove nothing about what comes out of the printer. */
+  max-width: 191mm;
   margin: 0 auto;
 }
 
@@ -210,124 +209,112 @@
   justify-content: space-between;
   align-items: flex-start;
   gap: 10mm;
+  border-bottom: 2px solid #000;
+  padding-bottom: 2.5mm;
 }
 
-.rep__brand { font-size: 15pt; font-weight: 800; letter-spacing: -.01em; }
-.rep__sub   { font-size: 8pt; color: #333; }
+.rep__brand { font-size: 16pt; font-weight: 800; letter-spacing: -.01em; line-height: 1.15; }
+.rep__sub   { font-size: 8.5pt; color: #333; }
 .rep__stamp { text-align: right; }
 
 .rep__kind {
-  font-size: 7.5pt;
+  font-size: 8pt;
   font-weight: 700;
-  letter-spacing: .14em;
+  letter-spacing: .16em;
   text-transform: uppercase;
   color: #444;
 }
-.rep__period { font-size: 13pt; font-weight: 700; }
+.rep__period { font-size: 15pt; font-weight: 700; line-height: 1.2; }
 
-.rep__line { border-top: 1.5px solid #000; margin: 3mm 0 0; }
+/* --- The big figure -------------------------------------------------------- */
+
+.rep__hero {
+  text-align: center;
+  padding: 5mm 0 4mm;
+  border-bottom: 1px solid #000;
+}
+.rep__hero-k {
+  font-size: 10pt;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: #333;
+}
+/* Genuinely large: it is the figure the sheet gets printed for. */
+.rep__hero-v { font-size: 33pt; font-weight: 800; line-height: 1.1; letter-spacing: -.02em; }
+.rep__hero-n { font-size: 10pt; color: #333; }
+
+/* --- Three even cells ------------------------------------------------------ */
+
+.rep__till {
+  display: flex;
+  gap: 0;
+  break-inside: avoid;
+}
+.rep__fig {
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: center;
+  padding: 3mm 2.5mm;
+  border-right: 1px solid #bbb;
+}
+.rep__fig:last-child { border-right: 0; }
+
+.rep__fig-k {
+  font-size: 8pt;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: #444;
+}
+.rep__fig-v { font-size: 15.5pt; font-weight: 700; line-height: 1.25; }
+.rep__fig-n { font-size: 8pt; color: #444; }
 
 /* --- Sections -------------------------------------------------------------- */
 
-.rep__block { margin-top: 6mm; }
+.rep__block { margin-top: 4mm; break-inside: avoid; }
 
-/*
- * A heading never ends a page.
- *
- * `break-inside: avoid` on the whole block would be wrong here: "quién pagó"
- * can be two hundred rows and forcing it to stay whole would push a page and a
- * half of white paper ahead of it. What has to hold together is the heading and
- * the start of what it names.
- */
-.rep__h {
+.rep__band {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
   gap: 6mm;
-  font-size: 8pt;
+  font-size: 9pt;
   font-weight: 700;
   letter-spacing: .12em;
   text-transform: uppercase;
   border-bottom: 1px solid #000;
   padding-bottom: 1.2mm;
-  margin-bottom: 2.5mm;
-  break-after: avoid;
-  page-break-after: avoid;
+  margin-bottom: 2mm;
 }
-.rep__h-note {
+.rep__band-n {
   font-weight: 500;
   letter-spacing: .02em;
   text-transform: none;
-  font-size: 8pt;
+  font-size: 9pt;
   color: #444;
 }
 
-.rep__note { font-size: 8pt; color: #444; margin: -1mm 0 2.5mm; }
-.rep__none { font-size: 9pt; color: #444; font-style: italic; }
+.rep__note { font-size: 8.5pt; color: #444; margin: 0 0 2mm; }
 
-/* --- Figures in two columns ------------------------------------------------ */
+/* --- Rows, in columns ------------------------------------------------------ */
 
-.rep__cols { display: flex; gap: 10mm; break-inside: avoid; }
+.rep__cols { display: flex; gap: 8mm; }
 .rep__col  { flex: 1 1 0; min-width: 0; }
 
-.rep__pair {
+.rep__row {
   display: flex;
   justify-content: space-between;
-  gap: 5mm;
+  align-items: baseline;
+  gap: 4mm;
   padding: 1.1mm 0;
   border-bottom: 1px dotted #bbb;
+  font-size: 10pt;
 }
-.rep__pair--total { font-size: 11pt; font-weight: 700; border-bottom-color: #000; }
-.rep__pair--sub   { font-size: 8.5pt; color: #333; padding-left: 3mm; }
-.rep__pair--soft  { font-size: 8.5pt; color: #333; border-bottom: 0; }
+.rep__row--strong { font-size: 11.5pt; font-weight: 700; border-bottom-color: #000; }
 
-/* --- Tables ---------------------------------------------------------------- */
-
-.rep__t {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 8.5pt;
-}
-
-.rep__t th {
-  text-align: left;
-  font-size: 7pt;
-  font-weight: 700;
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  color: #333;
-  border-bottom: 1px solid #000;
-  padding: 0 0 1mm;
-}
-
-/* `.rep__t th` is one class and one element, so it outranks `.rep__num` on its
-   own and a header sat left above a column of right-aligned figures. Said here
-   at the same weight, later, so the two ends of a money column line up. */
-.rep__t th.rep__num { text-align: right; }
-
-.rep__t td {
-  padding: 1.1mm 0;
-  border-bottom: 1px solid #ddd;
-  vertical-align: top;
-}
-
-/* A long note must not push the money column off the page. */
-.rep__t td:first-child, .rep__t th:first-child { padding-right: 4mm; overflow-wrap: anywhere; }
-
-/* Words are read from the left even when they sit between two columns of
-   figures — a right-aligned "Mucci Farms" is a farm name pretending to be an
-   amount. */
-.rep__t .rep__text, .rep__t th.rep__text { text-align: left; padding-right: 4mm; overflow-wrap: anywhere; }
-
-.rep__t tfoot td {
-  font-weight: 700;
-  border-top: 1.5px solid #000;
-  border-bottom: 0;
-  padding-top: 1.4mm;
-}
-
-/* Figures line up by digit, which is the whole reason a column of money is
-   worth reading down at all. */
+/* Figures line up by digit, which is the only thing that makes a column of
+   money worth reading down. */
 .rep__num {
   text-align: right;
   white-space: nowrap;
@@ -335,19 +322,15 @@
   font-feature-settings: "tnum" 1;
 }
 
-/* A row is never split across two pages, and a header repeats on every page it
-   carries on to — otherwise page three is a column of numbers with no names. */
-.rep__t tr { break-inside: avoid; page-break-inside: avoid; }
-.rep__t thead { display: table-header-group; }
-.rep__t tfoot { display: table-footer-group; }
-
 /* --- Footer ---------------------------------------------------------------- */
 
 .rep__foot {
   display: flex;
   justify-content: space-between;
   gap: 8mm;
-  font-size: 7.5pt;
+  font-size: 8pt;
   color: #444;
+  border-top: 1px solid #000;
+  margin-top: 4mm;
   padding-top: 1.5mm;
 }

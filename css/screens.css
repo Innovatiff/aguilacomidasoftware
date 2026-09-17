@@ -736,42 +736,84 @@
 }
 
 /* ==========================================================================
-   Reportes — the period picker.
+   Reportes.
 
-   Three controls in one line: back, the period itself, forward. The middle one
-   is a button as well, and it returns to the period we are living in — walking
-   six months back and having to press the other arrow six times is what makes
-   people stop opening a screen.
+   Set larger than the rest of the panel, on purpose. The person this screen is
+   for reads it with her glasses on, across a desk, and the rest of the app is
+   sized for a phone held at arm's length in a kitchen. Everything here is one
+   step up: the questions, the rows, the figures and the targets.
+
+   The screen is a summary and a menu. Every list it names is its own screen,
+   so nothing on this one has to be scrolled past to reach something else.
    ========================================================================== */
 
-.rper {
+.rbig { font-size: var(--fs-md); }
+
+/* A heading that asks a question, because that is what the thing under it
+   answers. */
+.rhead {
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+/* --- Picking the span ------------------------------------------------------ */
+
+.rwhen { display: flex; flex-direction: column; gap: var(--s3); }
+
+.rwhen__opts {
   display: flex;
-  align-items: stretch;
+  flex-wrap: wrap;
   gap: var(--s2);
 }
 
+/* Big enough to hit without aiming, and plainly labelled: "Hoy", not "Día". */
+.ropt {
+  min-height: 48px;
+  padding: 0 var(--s4);
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms var(--ease), border-color 120ms var(--ease);
+}
+.ropt:hover { background: var(--surface-alt); }
+.ropt.is-active {
+  background: var(--ink-800);
+  border-color: var(--ink-800);
+  color: var(--white);
+}
+
+.rper { display: flex; align-items: stretch; gap: var(--s2); }
+
 .rper__nav {
   flex: 0 0 auto;
-  width: 44px;
+  width: 56px;
   display: grid;
   place-items: center;
   background: var(--surface);
-  border: 1px solid var(--border-strong);
+  border: 1.5px solid var(--border-strong);
   border-radius: var(--r-md);
   color: var(--text);
   cursor: pointer;
 }
+.rper__nav svg { width: 26px; height: 26px; }
 .rper__nav:hover:not(:disabled) { background: var(--surface-alt); }
 /* Nothing has happened yet in a period that has not started, so the arrow into
-   it is dead rather than hidden — a control that disappears moves the two
-   beside it, and the reader loses their place. */
-.rper__nav:disabled { opacity: .32; cursor: default; }
+   it goes dead rather than disappearing — a control that vanishes moves the two
+   beside it and the reader loses their place. */
+.rper__nav:disabled { opacity: .3; cursor: default; }
 
 .rper__now {
   flex: 1 1 auto;
   min-width: 0;
   background: var(--surface);
-  border: 1px solid var(--border-strong);
+  border: 1.5px solid var(--border-strong);
   border-radius: var(--r-md);
   padding: var(--s2) var(--s3);
   text-align: center;
@@ -782,17 +824,163 @@
 .rper__t {
   display: block;
   font-weight: 700;
-  font-size: var(--fs-base);
+  font-size: var(--fs-lg);
   color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .rper__s {
   display: block;
-  font-size: var(--fs-xs);
-  color: var(--text-faint);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: var(--fs-sm);
+  color: var(--text-soft);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+
+/* --- The money ------------------------------------------------------------- */
+
+.rmoney {
+  background: linear-gradient(135deg, var(--ink-850), var(--ink-900) 55%, #3a2410);
+  color: var(--text-on-dark);
+  border-radius: var(--r-lg);
+  padding: var(--s6) var(--s5);
+  text-align: center;
+  box-shadow: var(--sh-2);
+}
+
+.rmoney__k {
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--brand-300);
+}
+/* The number the screen exists for. `clamp` so it fills a desk monitor without
+   wrapping on the phone in somebody's apron. */
+.rmoney__v {
+  font-size: clamp(2.6rem, 9vw, 4rem);
+  font-weight: 800;
+  letter-spacing: -.03em;
+  line-height: 1.05;
+  margin: var(--s1) 0;
+}
+.rmoney__n { font-size: var(--fs-md); color: var(--ink-300); }
+
+.rmoney__split {
+  display: flex;
+  margin-top: var(--s5);
+  border-top: 1px solid rgba(255, 255, 255, .16);
+  padding-top: var(--s4);
+}
+.rcell {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0 var(--s2);
+  border-right: 1px solid rgba(255, 255, 255, .16);
+}
+.rcell:last-child { border-right: 0; }
+.rcell__k {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink-300);
+}
+.rcell__v { font-size: var(--fs-xl); font-weight: 700; }
+.rcell__n { font-size: var(--fs-xs); color: var(--ink-400); }
+
+/* --- Three figures beside the money ---------------------------------------- */
+
+.rgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--s3);
+}
+
+.rbox {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--ink-300);
+  border-radius: var(--r-md);
+  padding: var(--s4);
+  box-shadow: var(--sh-1);
+}
+.rbox--warn { border-left-color: var(--warn-500); }
+
+.rbox__k {
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+.rbox__v { font-size: var(--fs-2xl); font-weight: 800; letter-spacing: -.02em; }
+.rbox__n { font-size: var(--fs-sm); color: var(--text-soft); }
+
+/* --- The menu of lists ----------------------------------------------------- */
+
+.rmenu { display: flex; flex-direction: column; gap: var(--s2); }
+
+.rmenu__item {
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+  min-height: 72px;
+  padding: var(--s3) var(--s4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--sh-1);
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+.rmenu__item:hover { background: var(--surface-alt); border-color: var(--border-strong); }
+
+.rmenu__ico {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 44px; height: 44px;
+  border-radius: var(--r-md);
+  background: var(--brand-50);
+  color: var(--brand-600);
+}
+.rmenu__ico svg { width: 22px; height: 22px; }
+
+.rmenu__main { flex: 1 1 auto; min-width: 0; }
+.rmenu__t { display: block; font-size: var(--fs-lg); font-weight: 700; }
+.rmenu__s { display: block; font-size: var(--fs-sm); color: var(--text-soft); }
+.rmenu__chev { flex: 0 0 auto; color: var(--text-faint); width: 22px; height: 22px; }
+
+/* --- Inside a list --------------------------------------------------------- */
+
+.rnote {
+  font-size: var(--fs-base);
+  color: var(--text-soft);
+  line-height: 1.5;
+  margin: 0;
+}
+.rcount {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin: 0;
+}
+.rfoot {
+  font-size: var(--fs-sm);
+  color: var(--text-faint);
+  line-height: 1.5;
+  text-align: center;
+  margin: 0;
+}
+
+.rlist__money { font-size: var(--fs-lg); font-weight: 700; white-space: nowrap; }
+
+/* Rows one step up from the rest of the panel, to match everything else here. */
+.rbig .item { min-height: 68px; }
+.rbig .item__title { font-size: var(--fs-md); }
+.rbig .item__meta  { font-size: var(--fs-base); }
+.rbig .input { min-height: 52px; font-size: var(--fs-md); }
+
+.input--big { min-height: 52px; font-size: var(--fs-md); }

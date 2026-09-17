@@ -1,36 +1,39 @@
 /**
- * Reportes — what the business did, over a span you choose.
+ * Reportes — how the business did, over a span you pick.
  *
- * Everywhere else the panel answers "what do I do next": who owes, who eats
- * today, who is at the counter. This screen answers the other question, the one
- * that only gets asked sitting down — *how did last month go* — and it is the
- * only screen that can, because it is the only one that reads outside the
- * window of documents the app keeps live.
+ * Everywhere else the panel answers "what do I do next". This screen answers
+ * the question that only gets asked sitting down: *how did last month go.*
  *
- * Three things shape it:
+ * It is built for one person in particular — the manager, who is not young,
+ * reads it with her glasses on, and wants an answer rather than a dashboard.
+ * Three rules follow from that, and they are worth stating because the first
+ * version of this screen broke all three:
  *
- *   **The period is the control.** Day, week, month, year, or two dates typed
- *   in. Everything on the page is that span and nothing else, so there is never
- *   a figure on screen whose period the reader has to work out.
+ *   **One screen, one job.** The summary is the period, five figures and a way
+ *   in to each list. Every list — who paid, who owes, who is behind, day by day
+ *   — is its own screen, reached by a big row and left by the back chevron. A
+ *   page with ten sections on it is a page nobody reads to the bottom.
  *
- *   **Flow and stock are kept apart.** What came in, what was billed, what was
- *   written off — those belong to the period. What is owed right now does not;
- *   it is today's photograph, it sits in its own section at the bottom, and it
- *   says so. Putting them in the same row of tiles is how a report ends up
- *   claiming a month collected money that arrived in a different one.
+ *   **Big.** Larger type than the rest of the panel, more space between the
+ *   rows, figures set at a size that is legible across a desk.
  *
- *   **Paper is the point.** Half of why this exists is to be printed and filed,
- *   so the printed sheet is not a screenshot of this screen — it is its own
- *   document, in `ui/report-sheet.js`, and it leaves out the payment-by-payment
- *   ledger that is useful to scroll and useless to carry.
+ *   **Paper is one page.** The printed sheet is a different document — totals
+ *   only, no list of anybody — so it is one sheet whether the kitchen serves
+ *   seven people or seven hundred. The lists live here, on screen, for whoever
+ *   wants to look.
+ *
+ * The period lives in the address, so the browser's own back button walks out
+ * of a list to the summary and out of the summary to Inicio. It is written with
+ * `replace` when only the period changes, so stepping back through a year does
+ * not leave a year of history to press back through.
  */
 
 import { h } from '../lib/dom.js';
 import { icon } from '../lib/icons.js';
 import { screen, topbarButton, lifetime } from '../ui/shell.js';
 import {
-  card, stat, statGrid, button, badge, avatar, itemRow, list, chips, meter,
-  sectionLabel, emptyState, skeletonRows, alert, dataErrorCard, defList, defRow, field,
+  card, button, avatar, itemRow, list, badge, searchInput,
+  emptyState, skeletonRows, alert, dataErrorCard, field,
 } from '../ui/kit.js';
 import { sheet, toastBad } from '../ui/overlay.js';
 import { columnChart } from '../ui/viz.js';
@@ -40,82 +43,86 @@ import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
 import { store, subscribe, activeClients, isReady } from '../data/store.js';
 import { loadPeriod, forgetPeriod, cachedPeriod } from '../data/reports.js';
-import { buildReport } from '../lib/report.js';
+import { buildReport, freshen, debtWord, debtWhy } from '../lib/report.js';
 import {
-  GRAINS, GRAIN_LABEL, rangeFor, shiftRange, customRange, rangeTitle, rangeSpan,
+  GRAINS, rangeFor, shiftRange, customRange, rangeTitle, rangeSpan,
   bucketsOf, spanOf, rangeHolds, isFuture,
 } from '../lib/periods.js';
-import { today, addDays, formatDayShort } from '../lib/dates.js';
-import { money, number, plural, percent } from '../lib/format.js';
+import { today, addDays, formatDayShort, formatDay, humanDelta, daysBetween } from '../lib/dates.js';
+import { money, number, plural, percent, matches } from '../lib/format.js';
 import { paymentMethodMeta } from '../lib/model.js';
 
-/** How many rows a long list shows before it asks to be opened. */
-const PREVIEW = 12;
+/** Plain words for the spans, in the order somebody actually asks for them. */
+const WHEN = [
+  { grain: 'day', label: 'Hoy' },
+  { grain: 'week', label: 'Esta semana' },
+  { grain: 'month', label: 'Este mes' },
+  { grain: 'year', label: 'Este año' },
+];
 
-export function renderReport(context) {
+const BUCKET_WORD = { day: 'día', week: 'semana', month: 'mes' };
+
+/* --- The period, read and kept current ------------------------------------- */
+
+/**
+ * What both screens need: the span, the documents behind it, and a report.
+ *
+ * Split out because the summary and every list are separate routes rendering
+ * the same numbers, and two copies of "read the period" is two places for them
+ * to disagree about what a month is.
+ *
+ * `paint` is handed the view rather than reaching for it through a variable of
+ * the caller's. The first paint happens inside this call — `subscribe` fires
+ * immediately — so a caller writing `const view = periodView(…, () => draw())`
+ * would be painting a screen whose `view` is still in its dead zone. That has
+ * been the shape of three separate bugs in this codebase; making it impossible
+ * costs one parameter.
+ *
+ * @param {object} [state] a bag the caller keeps across paints — a search term.
+ */
+function periodView(context, paint, state = {}) {
   const life = lifetime();
-
-  // The period is held here rather than in the address bar. A screen whose
-  // state lives in the hash re-mounts on every change — twelve teardowns to
-  // walk back through a year — and this one has an async read behind it that
-  // must not be started twice. A link *in* may still choose the period, which
-  // is how the dashboard's "cobrado hoy" arrives asking for today.
-  let range = fromQuery(context.query);
+  const range = fromQuery(context.query);
   let docs = cachedPeriod(range);
   let failure = null;
   let loading = !docs;
-  let showAllPayers = false;
-  let showAllMoves = false;
 
-  read();
-
-  /** Reads the period, unless it is already in hand. */
   function read({ fresh = false } = {}) {
-    const wanted = range;
-    if (fresh) forgetPeriod(wanted);
-
-    const held = fresh ? null : cachedPeriod(wanted);
+    if (fresh) forgetPeriod(range);
+    const held = fresh ? null : cachedPeriod(range);
     if (held) { docs = held; loading = false; failure = null; return; }
 
     docs = null;
     loading = true;
     failure = null;
 
-    loadPeriod(wanted, { fresh })
+    loadPeriod(range, { fresh })
       .then((found) => {
-        // Two guards, and both have bitten this project before: the screen may
-        // be gone by the time Firestore answers, and the reader may have moved
-        // to another period while this one was in flight. Either way the answer
-        // is stale and painting it would overwrite what is actually on screen.
-        if (!life.alive() || wanted !== range) return;
+        // The screen may be gone by the time Firestore answers; painting then
+        // would write over whatever the reader moved on to.
+        if (!life.alive()) return;
         docs = found;
         loading = false;
-        draw();
+        paint(api);
       })
       .catch((error) => {
-        if (!life.alive() || wanted !== range) return;
+        if (!life.alive()) return;
         failure = error;
         loading = false;
-        draw();
+        paint(api);
       });
   }
 
-  function setRange(next) {
-    range = next;
-    showAllPayers = false;
-    showAllMoves = false;
-    read();
-    draw();
-  }
-
-  /* --- The report, from the documents plus what is already in memory ------ */
-
-  function compute() {
+  function report() {
     if (!docs) return null;
+    // What was read, plus everything the panel has seen since — a payment taken
+    // while this screen is open is already in the store's live till.
+    const now = freshen(docs, { receipts: store.receipts, invoices: store.outstanding }, range);
+
     return buildReport({
       range,
-      receipts: docs.receipts,
-      invoices: docs.invoices,
+      receipts: now.receipts,
+      invoices: now.invoices,
       clients: store.clients,
       outstanding: store.outstanding,
       buckets: bucketsOf(range),
@@ -125,468 +132,537 @@ export function renderReport(context) {
     });
   }
 
-  function draw() {
-    const report = compute();
+  const api = {
+    range,
+    state,
+    report,
+    ready: () => !loading && !!docs && isReady(),
+    failure: () => failure,
+    reload: () => { read({ fresh: true }); paint(api); },
+    repaint: () => paint(api),
+  };
 
-    screen({
-      title: 'Reportes',
-      subtitle: rangeTitle(range),
-      backTo: '/',
-      tab: 'home',
-      sunken: true,
-      actions: [
-        topbarButton('refresh', { label: 'Volver a leer', onClick: () => { read({ fresh: true }); draw(); } }),
-        topbarButton('printer', { label: 'Imprimir', onClick: () => print(report) }),
+  read();
+  return life.ending(subscribe(() => paint(api)));
+}
+
+/* --- The summary ------------------------------------------------------------ */
+
+export const renderReport = (context) => periodView(context, drawSummary);
+
+function drawSummary(view) {
+  const report = view.report();
+
+  screen({
+    title: 'Reportes',
+    subtitle: rangeTitle(view.range),
+    backTo: '/',
+    tab: 'home',
+    sunken: true,
+    actions: [topbarButton('refresh', { label: 'Volver a leer', onClick: view.reload })],
+    body: h('div.page__inner.rbig.stack.stack-5',
+      picker(view.range),
+      view.failure()
+        ? dataErrorCard(view.failure(), { onRetry: view.reload })
+        : view.ready() && report ? summary(report) : skeletonRows(4)),
+  });
+}
+
+/** The money, the lists, and the print button. Nothing else. */
+function summary(report) {
+  const { money: cash, counts, standing, range } = report;
+
+  return h('div.stack.stack-5',
+    takings(report),
+
+    h('div.rgrid',
+      smallBox('Se facturó', money(cash.billed, { round: true }),
+        `${plural(counts.bills, 'factura', 'facturas')} de este periodo`),
+      smallBox(debtWord(cash.change), money(Math.abs(cash.change), { round: true }),
+        debtWhy(cash.change)),
+      smallBox('Deben hoy', money(standing.owed, { round: true }),
+        `${plural(standing.debtors.length, 'cliente', 'clientes')} · `
+        + `${money(standing.overdue, { round: true })} vencido`, 'warn')),
+
+    counts.refunds
+      ? alert(`${counts.refunds === 1 ? 'Se canceló' : 'Se cancelaron'} `
+        + `${plural(counts.refunds, 'pago', 'pagos')} por ${money(Math.abs(cash.refunds))}. `
+        + 'Ya está descontado de lo que se cobró.', 'warn', 'alert')
+      : null,
+
+    report.pricingChanged
+      ? alert(`Los precios cambiaron el ${formatDayShort(report.pricingChanged.date)}`
+        + `${report.pricingChanged.byName ? `, los cambió ${report.pricingChanged.byName}` : ''}. `
+        + 'Las facturas de antes de ese día conservan el precio que tenían.', 'info', 'info')
+      : null,
+
+    h('div.stack.stack-3',
+      h('h2.rhead', 'Ver las listas'),
+      h('div.rmenu', LIST_ORDER
+        .map((key) => ({ key, ...LISTS[key] }))
+        .filter((entry) => entry.count(report) > 0 || !entry.onlyWhenSome)
+        .map((entry) => h('a.rmenu__item', { href: `#${urlFor(range, entry.key)}` },
+          h('span.rmenu__ico', icon(entry.icon)),
+          h('span.rmenu__main',
+            h('span.rmenu__t', entry.title),
+            h('span.rmenu__s', entry.note(report))),
+          icon('chevronR', 'rmenu__chev'))))),
+
+    h('div.stack.stack-2',
+      button('Imprimir esta hoja', {
+        variant: 'primary', size: 'lg', block: true, icon: 'printer',
+        onClick: () => printReport(report),
+      }),
+      h('p.rfoot',
+        'Sale en una sola hoja tamaño carta, con los totales de este periodo. '
+        + 'Las listas de personas se quedan aquí en la pantalla.')));
+}
+
+/** The one figure the screen exists for, set as large as it deserves. */
+function takings(report) {
+  const { money: cash, counts } = report;
+  const of = (key) => report.methods.find((m) => m.key === key)?.takings || 0;
+  const others = report.methods
+    .filter((m) => m.key !== 'cash' && m.key !== 'debit')
+    .reduce((total, m) => total + m.takings, 0);
+
+  return h('div.rmoney',
+    h('div.rmoney__k', rangeHolds(report.range) ? 'Se ha cobrado' : 'Se cobró'),
+    h('div.rmoney__v', money(cash.collected, { round: true })),
+    h('div.rmoney__n', counts.payments
+      ? `${plural(counts.payments, 'pago', 'pagos')} de ${plural(counts.payers, 'persona', 'personas')}`
+      : 'No se recibió ningún pago'),
+
+    // Cash against card: the two figures the counter is squared with at the end
+    // of the day, and the reason the kitchen started recording how people pay.
+    cash.takings > 0
+      ? h('div.rmoney__split',
+          tillCell('Efectivo', of('cash'), cash.takings),
+          tillCell('Débito', of('debit'), cash.takings),
+          others ? tillCell('Otras formas', others, cash.takings) : null)
+      : null);
+}
+
+const tillCell = (label, amount, whole) => h('div.rcell',
+  h('div.rcell__k', label),
+  h('div.rcell__v', money(amount, { round: true })),
+  h('div.rcell__n', `${percent(amount, whole)}% de lo que entró`));
+
+const smallBox = (label, value, note, tone) =>
+  h(`div.rbox${tone ? `.rbox--${tone}` : ''}`,
+    h('div.rbox__k', label),
+    h('div.rbox__v', value),
+    h('div.rbox__n', note));
+
+/* --- Choosing the span ------------------------------------------------------ */
+
+function picker(range) {
+  const ahead = isFuture(shiftRange(range, 1));
+  // Changing the span keeps the day you are looking at, so "este mes" from a
+  // week in March is March, not today.
+  const anchor = () => (rangeHolds(range) ? today() : range.start);
+
+  return h('div.rwhen',
+    h('h2.rhead', '¿Qué quieres ver?'),
+    h('div.rwhen__opts',
+      WHEN.map((option) => h(
+        `button.ropt${range.grain === option.grain ? '.is-active' : ''}`,
+        { type: 'button', onclick: () => open(rangeFor(option.grain, anchor())) },
+        option.label)),
+      h(`button.ropt${range.grain === 'custom' ? '.is-active' : ''}`,
+        { type: 'button', onclick: () => pickDates(range) }, 'Otras fechas')),
+
+    h('div.rper',
+      h('button.rper__nav', {
+        type: 'button', 'aria-label': 'El periodo anterior',
+        onclick: () => open(shiftRange(range, -1)),
+      }, icon('chevronL')),
+
+      h('button.rper__now', {
+        type: 'button',
+        'aria-label': 'Regresar al periodo de ahora',
+        onclick: () => open(nowLike(range)),
+      },
+        h('span.rper__t', rangeTitle(range)),
+        h('span.rper__s', `${rangeSpan(range)}${rangeHolds(range) ? ' · en curso' : ''}`)),
+
+      h('button.rper__nav', {
+        type: 'button', 'aria-label': 'El periodo siguiente',
+        disabled: ahead,
+        onclick: () => open(shiftRange(range, 1)),
+      }, icon('chevronR'))));
+}
+
+/**
+ * Moves to another period.
+ *
+ * `replace`, so walking six months back leaves one history entry rather than
+ * six — the back button has to mean "salir del reporte", not "deshacer el
+ * último clic seis veces".
+ */
+const open = (range) => go(urlFor(range), { replace: true });
+
+/** The same shape of span, ending now. */
+function nowLike(range) {
+  if (range.grain !== 'custom') return rangeFor(range.grain);
+  return customRange(addDays(today(), -(spanOf(range) - 1)), today());
+}
+
+async function pickDates(range) {
+  const from = h('input.input.input--big', { type: 'date', value: range.start, max: today() });
+  const to = h('input.input.input--big', { type: 'date', value: range.end, max: today() });
+  const note = h('p.t-sm.c-soft');
+
+  /*
+   * How long a span they have chosen, live.
+   *
+   * Not a limit: every period read here reads the payments and bills inside it,
+   * and only the reader knows whether they meant three years. Saying the size
+   * of the question before it is asked is what lets somebody notice they typed
+   * 2020 instead of 2026.
+   */
+  const measure = () => {
+    if (!from.value || !to.value) { note.textContent = ''; return; }
+    const picked = customRange(from.value, to.value);
+    note.textContent = `Son ${plural(spanOf(picked), 'día', 'días')}: ${rangeSpan(picked)}.`;
+  };
+  from.addEventListener('change', measure);
+  to.addEventListener('change', measure);
+  measure();
+
+  const picked = await sheet({
+    title: 'Escoge las fechas',
+    build: (close) => h('div.stack.stack-4',
+      field({ label: 'Desde el día', control: from }),
+      field({ label: 'Hasta el día', control: to }),
+      note,
+      button('Ver este periodo', {
+        variant: 'primary', size: 'lg', block: true, onClick: () => close([from.value, to.value]),
+      })),
+  });
+
+  if (!picked) return;
+  const [start, end] = picked;
+  if (!start || !end) { toastBad('Faltan las fechas.'); return; }
+  open(customRange(start, end));
+}
+
+/* --- Paper ------------------------------------------------------------------ */
+
+function printReport(report) {
+  if (!report) { toastBad('Todavía se está leyendo el periodo.'); return; }
+  printSheet(reportSheet(report, {
+    business: store.business,
+    by: session.displayName || session.email || '',
+  }));
+}
+
+/* --- The lists -------------------------------------------------------------- */
+
+/**
+ * Each list is its own screen.
+ *
+ * Which means each one gets the whole width, a search box when it needs one,
+ * and a back chevron that goes exactly one place. On the summary they are seven
+ * rows with a count on each, which is a menu — and a menu is the one long thing
+ * that is easy to read.
+ */
+const LISTS = {
+  pagaron: {
+    title: 'Quién pagó',
+    unit: ['persona', 'personas'],
+    icon: 'wallet',
+    count: (r) => r.payers.length,
+    note: (r) => (r.payers.length
+      ? `${plural(r.payers.length, 'persona pagó', 'personas pagaron')} en este periodo`
+      : 'Nadie pagó en este periodo'),
+    empty: { icon: 'wallet', title: 'Nadie pagó en este periodo', text: 'Prueba con otro periodo arriba.' },
+    search: (row) => [row.name, row.farmName],
+    rows: (r) => r.payers,
+    render: (row) => itemRow({
+      lead: avatar(row.name, { size: 'sm' }),
+      title: row.name,
+      meta: [row.farmName, row.count > 1 ? plural(row.count, 'pago', 'pagos') : null,
+        row.last ? `el ${formatDay(row.last)}` : null,
+        // Said on the row rather than taken off the figure beside it: money
+        // given back is a different event from money handed over.
+        row.refunds ? `se le regresaron ${money(Math.abs(row.refunds))}` : null,
+      ].filter(Boolean).join(' · '),
+      end: h('div.rlist__money', money(row.amount, { round: true })),
+      chevron: !!row.clientId,
+      onClick: () => row.clientId && go(`/clients/${row.clientId}`),
+    }),
+  },
+
+  deben: {
+    title: 'Quién debe',
+    unit: ['cliente', 'clientes'],
+    icon: 'users',
+    count: (r) => r.standing.debtors.length,
+    note: (r) => (r.standing.debtors.length
+      ? `${plural(r.standing.debtors.length, 'cliente debe', 'clientes deben')} `
+        + `${money(r.standing.owed, { round: true })} al día de hoy`
+      : 'Nadie debe nada'),
+    empty: { icon: 'shield', title: 'Nadie debe nada', text: 'Todas las facturas emitidas están pagadas.' },
+    head: () => 'Esto no es del periodo: es lo que se debe en este momento, de cualquier fecha.',
+    search: (row) => [row.name, row.farmName],
+    rows: (r) => r.standing.debtors,
+    render: (row) => itemRow({
+      lead: avatar(row.name, { size: 'sm' }),
+      title: row.name,
+      meta: [row.farmName, plural(row.bills, 'factura', 'facturas')].filter(Boolean).join(' · '),
+      end: [
+        h('div.rlist__money', money(row.balance, { round: true })),
+        row.late ? badge('Atrasado', 'bad') : null,
       ],
-      sticky: picker(),
-      body: failure
-        ? h('div.page__inner', dataErrorCard(failure, { onRetry: () => { read({ fresh: true }); draw(); } }))
-        : (loading || !report || !isReady())
-          ? h('div.page__inner', skeletonRows(6))
-          : body(report),
-    });
-  }
+      onClick: () => go(`/clients/${row.clientId}`),
+    }),
+  },
 
-  /* --- Choosing the span --------------------------------------------------- */
+  atrasados: {
+    title: 'Quién está atrasado',
+    unit: ['cliente', 'clientes'],
+    icon: 'alert',
+    count: (r) => r.standing.late.length,
+    note: (r) => (r.standing.late.length
+      ? `${plural(r.standing.late.length, 'cliente pasó', 'clientes pasaron')} su fecha de pago`
+      : 'Nadie está atrasado'),
+    empty: { icon: 'shield', title: 'Nadie está atrasado', text: 'Nadie ha pasado su fecha de pago.' },
+    head: () => 'Al día de hoy. Los más viejos primero.',
+    search: (row) => [row.name, row.farmName],
+    rows: (r) => r.standing.late,
+    render: (row) => itemRow({
+      lead: avatar(row.name, { size: 'sm' }),
+      title: row.name,
+      meta: [row.farmName, `venció ${humanDelta(daysBetween(today(), row.oldest))}`]
+        .filter(Boolean).join(' · '),
+      end: h('div.rlist__money.c-bad', money(row.lateBalance, { round: true })),
+      onClick: () => go(`/clients/${row.clientId}`),
+    }),
+  },
 
-  function picker() {
-    const ahead = isFuture(shiftRange(range, 1));
-
-    return h('div.searchbar.searchbar--sunken.stack.stack-2',
-      chips(
-        [...GRAINS.map((grain) => ({ value: grain, label: GRAIN_LABEL[grain] })),
-          { value: 'custom', label: GRAIN_LABEL.custom }],
-        range.grain,
-        (value) => (value === 'custom' ? pickDates() : setRange(rangeFor(value, anchorFor()))),
-      ),
-
-      h('div.rper',
-        h('button.rper__nav', {
-          type: 'button', 'aria-label': 'Periodo anterior',
-          onclick: () => setRange(shiftRange(range, -1)),
-        }, icon('chevronL')),
-
-        // The middle is a button too: pressed, it comes back to the period we
-        // are living in. Walking six months back and then having to press the
-        // other arrow six times is the kind of small cruelty that makes people
-        // stop using a screen.
-        h('button.rper__now', {
-          type: 'button',
-          onclick: () => setRange(nowRange()),
-        },
-          h('span.rper__t', rangeTitle(range)),
-          h('span.rper__s', `${rangeSpan(range)} · ${plural(spanOf(range), 'día', 'días')}`
-            + (rangeHolds(range) ? ' · en curso' : ''))),
-
-        h('button.rper__nav', {
-          type: 'button', 'aria-label': 'Periodo siguiente',
-          disabled: ahead,
-          onclick: () => setRange(shiftRange(range, 1)),
-        }, icon('chevronR'))));
-  }
-
-  /** Keeps the day you are looking at when you change the size of the window. */
-  function anchorFor() {
-    return rangeHolds(range) ? today() : range.start;
-  }
-
-  /**
-   * The same shape of period, ending now.
-   *
-   * A hand-picked span slides up to today keeping its length rather than
-   * turning back into a month: somebody looking at an eighty-day stretch and
-   * pressing "come back" means the last eighty days, not September.
-   */
-  function nowRange() {
-    if (range.grain !== 'custom') return rangeFor(range.grain);
-    return customRange(addDays(today(), -(spanOf(range) - 1)), today());
-  }
-
-  async function pickDates() {
-    const from = h('input.input', { type: 'date', value: range.start, max: today() });
-    const to = h('input.input', { type: 'date', value: range.end, max: today() });
-    const note = h('p.t-xs.c-faint');
-
-    /*
-     * How long a span they have chosen, live.
-     *
-     * Not a limit and not a warning: every period on this screen reads the
-     * payments and bills inside it, and the reader is the only one who knows
-     * whether they meant three years. Saying the size of the question before it
-     * is asked is what lets somebody notice they typed 2020 instead of 2026 —
-     * this panel has been taken off the air for a day by a read nobody intended.
-     */
-    const measure = () => {
-      if (!from.value || !to.value) { note.textContent = ''; return; }
-      const picked = customRange(from.value, to.value);
-      const days = spanOf(picked);
-      note.textContent = `${rangeSpan(picked)} · ${plural(days, 'día', 'días')}`
-        + (days > 400 ? '. Es un periodo largo: se leen todos los pagos y facturas de esos días.' : '.');
-    };
-    from.addEventListener('change', measure);
-    to.addEventListener('change', measure);
-    measure();
-
-    const picked = await sheet({
-      title: 'Periodo personalizado',
-      build: (close) => h('div.stack.stack-4',
-        field({ label: 'Desde', control: from }),
-        field({ label: 'Hasta', control: to }),
-        note,
-        h('p.t-xs.c-faint', 'Cualquier par de fechas. Las flechas después mueven el periodo '
-          + 'completo hacia atrás o hacia adelante, del mismo tamaño.'),
-        button('Ver el periodo', {
-          variant: 'primary', block: true, onClick: () => close([from.value, to.value]),
-        })),
-    });
-
-    if (!picked) return;
-    const [start, end] = picked;
-    if (!start || !end) { toastBad('Faltan las fechas.'); return; }
-    setRange(customRange(start, end));
-  }
-
-  /* --- Paper --------------------------------------------------------------- */
-
-  function print(report) {
-    if (!report) { toastBad('Todavía se está leyendo el periodo.'); return; }
-    printSheet(reportSheet(report, {
-      business: store.business,
-      by: session.displayName || session.email || '',
-    }));
-  }
-
-  /* --- The page ------------------------------------------------------------ */
-
-  function body(report) {
-    const { money: cash, counts, standing, people, days } = report;
-
-    return h('div.page__inner.page__inner--flow.stack.stack-4',
-      h('div.span-all', hero(cash, report)),
-
-      h('div.span-all.stack.stack-3',
-        sectionLabel('Cómo entró el dinero'),
-        methodCard(report)),
-
-      h('div.span-all.stack.stack-3',
-        sectionLabel('El periodo en números'),
-        statGrid([
-          stat({
-            label: 'Pagos recibidos',
-            value: number(counts.payments),
-            foot: counts.payers
-              ? `${plural(counts.payers, 'persona', 'personas')}`
-              : 'Nadie pagó',
-          }),
-          stat({
-            label: 'Facturas emitidas',
-            value: number(counts.bills),
-            foot: counts.billedClients
-              ? `${plural(counts.billedClients, 'cliente', 'clientes')}`
-              : 'Ninguna',
-          }),
-          stat({
-            label: 'Comidas facturadas',
-            value: number(counts.meals),
-            foot: `${plural(people.active, 'cliente activo', 'clientes activos')} hoy`,
-          }),
-          stat({
-            label: 'Promedio por día',
-            value: money(days.elapsed ? cash.collected / days.elapsed : 0, { round: true }),
-            foot: days.running
-              ? `${plural(days.elapsed, 'día', 'días')} de ${days.span}`
-              : `${plural(days.span, 'día', 'días')} en el periodo`,
-          }),
-        ], 4)),
-
-      report.pricingChanged
-        ? h('div.span-all', alert(
-            `Los precios cambiaron el ${formatDayShort(report.pricingChanged.date)}`
-            + `${report.pricingChanged.byName ? `, los cambió ${report.pricingChanged.byName}` : ''}. `
-            + 'Las facturas de antes de ese día conservan el precio que tenían.',
-            'info', 'info'))
-        : null,
-
-      counts.refunds
-        ? h('div.span-all', alert(
-            `${plural(counts.refunds, 'pago cancelado', 'pagos cancelados')} en este periodo, `
-            + `por ${money(Math.abs(cash.refunds))}. Ya está descontado de lo cobrado.`,
-            'warn', 'alert'))
-        : null,
-
-      report.buckets.length > 1
-        ? h('div.span-all.stack.stack-3',
-            sectionLabel('Cobrado por ' + BUCKET_WORD[report.buckets[0].grain],
-              h('span.t-xs.c-faint', rangeSpan(range))),
-            card(h('div.stack.stack-2',
-              columnChart(report.buckets, {
-                today: rangeHolds(range) ? today() : null,
-                tick: (row) => row.short,
-                label: (row) => row.label,
-                axis: [report.buckets[0].label, report.buckets[report.buckets.length - 1].label],
-              }),
-              h('p.t-xs.c-faint',
-                `Pasa el dedo o el ratón por una barra para ver ese ${BUCKET_WORD[report.buckets[0].grain]}.`))))
-        : null,
-
-      report.farms.length
-        ? h('div.stack.stack-3', sectionLabel('Por rancho'), farmTable(report))
-        : null,
-
-      h('div.stack.stack-3',
-        sectionLabel('Quién pagó', report.payers.length > PREVIEW
-          ? h('button.btn.btn--quiet.btn--sm', {
-              type: 'button', onclick: () => { showAllPayers = !showAllPayers; draw(); },
-            }, showAllPayers ? 'Ver menos' : `Ver los ${report.payers.length}`)
-          : null),
-        payerList(report)),
-
-      report.cashiers.length > 1
-        ? h('div.stack.stack-3', sectionLabel('Quién cobró'), cashierCard(report))
-        : null,
-
-      report.corrections.length
-        ? h('div.span-all.stack.stack-3',
-            sectionLabel('Ajustes de saldo',
-              h('span.t-xs.c-faint', 'Facturas de este periodo')),
-            correctionList(report))
-        : null,
-
-      /* The ledger. On screen only — the printed sheet leaves it out. */
-      report.movements.length
-        ? h('div.span-all.stack.stack-3',
-            sectionLabel('Movimientos', report.movements.length > 20
-              ? h('button.btn.btn--quiet.btn--sm', {
-                  type: 'button', onclick: () => { showAllMoves = !showAllMoves; draw(); },
-                }, showAllMoves ? 'Ver menos' : `Ver los ${report.movements.length}`)
-              : null),
-            movementList(report),
-            h('p.t-xs.c-faint', 'Los pagos uno por uno se quedan en esta pantalla: '
-              + 'la hoja impresa lleva los totales y la lista de quién pagó.'))
-        : null,
-
-      /* --- Today, and said so ---------------------------------------------- */
-      h('div.span-all.stack.stack-3',
-        sectionLabel('Al día de hoy', h('span.t-xs.c-faint', formatDayShort(today()))),
-        h('p.t-xs.c-faint', { style: { marginTop: '-4px' } },
-          'Esto no es del periodo: es lo que se debe en este momento, de cualquier fecha.'),
-        statGrid([
-          stat({
-            label: 'Por cobrar',
-            value: money(standing.owed, { round: true }),
-            foot: `${plural(standing.debtors.length, 'cliente debe', 'clientes deben')}`,
-            tone: standing.owed > 0 ? 'accent' : 'ok',
-            onClick: () => go('/billing'),
-          }),
-          stat({
-            label: 'Vencido',
-            value: money(standing.overdue, { round: true }),
-            foot: standing.overdueCount
-              ? `${plural(standing.overdueCount, 'factura', 'facturas')}`
-              : 'Ninguna',
-            tone: standing.overdue > 0 ? 'bad' : 'ok',
-            onClick: () => go('/clients?filter=overdue'),
-          }),
-        ]),
-        standing.debtors.length
-          ? h('div.stack.stack-2',
-              debtorList(standing.debtors.slice(0, 5)),
-              standing.debtors.length > 5
-                ? h('button.btn.btn--quiet.btn--sm.btn--block', {
-                    type: 'button', onclick: () => go('/clients?filter=debt'),
-                  }, `Ver los ${standing.debtors.length} que deben`)
-                : null,
-              h('p.t-xs.c-faint.center',
-                'La hoja impresa trae la lista completa de quién debe.'))
-          : null),
-
-      h('div.span-all',
-        button('Imprimir el reporte', {
-          variant: 'primary', block: true, icon: 'printer', onClick: () => print(report),
-        })),
-      h('div.span-all',
-        h('p.t-xs.c-faint.center',
-          `Se imprime en hoja tamaño carta. Desde el mismo cuadro de diálogo se puede `
-          + `guardar como PDF.`)));
-  }
-
-  /* --- Pieces -------------------------------------------------------------- */
-
-  function hero(cash, report) {
-    const up = cash.change > 0.005;
-    const flat = Math.abs(cash.change) <= 0.005;
-
-    return h('div.hero',
-      h('div.hero__eyebrow', rangeHolds(range) ? 'Cobrado en el periodo (en curso)' : 'Cobrado en el periodo'),
-      h('div.hero__title', money(cash.collected, { round: true })),
-      h('div.hero__stats',
-        heroStat(money(cash.billed, { round: true }), 'Facturado'),
-        heroStat(money(Math.abs(cash.change), { round: true }),
-          flat ? 'La deuda quedó igual' : up ? 'La deuda subió' : 'La deuda bajó')),
-      report.counts.payments
-        ? h('div.t-xs', { style: { marginTop: '12px', opacity: '.8' } },
-            `${plural(report.counts.payments, 'pago', 'pagos')} de `
-            + `${plural(report.counts.payers, 'persona', 'personas')}`)
-        : null);
-  }
-
-  /**
-   * Cash against card, with the bar the counter is actually reconciled by.
-   *
-   * The kitchen started recording this a fortnight ago precisely so it could be
-   * asked over a span: the cash line is what should have been in the drawer,
-   * the debit line is what should have reached the bank.
-   */
-  function methodCard(report) {
-    if (!report.methods.length) {
-      return card(h('div.t-sm.c-soft.center', { style: { padding: '12px 0' } },
-        'No se recibió ningún pago en este periodo.'));
-    }
-    const cash = report.money;
-
-    return card(h('div.stack.stack-3',
-      report.methods.map((row) => h('div.stack.stack-1',
-        h('div.row.row--between',
-          h('div.row',
-            h('span.c-faint', icon(paymentMethodMeta(row.key).icon)),
-            h('span.w-600', row.label),
-            h('span.t-xs.c-faint', plural(row.count, 'pago', 'pagos'))),
-          h('div.row', { style: { gap: '8px' } },
-            h('span.t-xs.c-faint', `${percent(row.takings, cash.takings)}%`),
-            h('span.w-700', money(row.takings)))),
-        // The bar is the same percentage as the figure beside it — its share of
-        // everything that came in. A bar scaled to the biggest row instead would
-        // put a full-width bar next to the number 53%, which is two different
-        // answers to one question on one line.
-        meter(percent(row.takings, cash.takings)),
-        // Only when there is something to explain: a way of paying that also
-        // gave money back this period does not reconcile from one figure.
-        row.refunds
-          ? h('div.t-xs.c-faint',
-              `menos ${money(Math.abs(row.refunds))} devueltos · quedan ${money(row.amount)}`)
-          : null)),
-
-      // The card has to arrive at the number in the hero, or the two disagree
-      // on the same screen. This is that arithmetic, written out.
-      cash.refunds
-        ? defList([
-            defRow('Pagos recibidos', money(cash.takings)),
-            defRow('Cancelaciones', `−${money(Math.abs(cash.refunds))}`),
-            defRow('Cobrado', money(cash.collected), { total: true }),
-          ])
-        : null));
-  }
-
-  function farmTable(report) {
-    return list(report.farms.map((row) => itemRow({
+  ranchos: {
+    title: 'Por rancho',
+    unit: ['rancho', 'ranchos'],
+    icon: 'farm',
+    count: (r) => r.farms.length,
+    note: (r) => `Cuánto entró de cada uno de los ${number(r.farms.length)} ranchos`,
+    empty: { icon: 'farm', title: 'Sin movimiento por rancho', text: 'No hubo pagos ni facturas en este periodo.' },
+    rows: (r) => r.farms,
+    render: (row) => itemRow({
       lead: h('span.c-faint', icon('farm')),
       title: row.name,
       meta: `${plural(row.payers, 'persona pagó', 'personas pagaron')} · `
         + `${money(row.billed, { round: true })} facturado`,
-      end: h('div.w-700', money(row.collected, { round: true })),
+      end: h('div.rlist__money', money(row.collected, { round: true })),
       chevron: !!row.farmId,
       onClick: () => row.farmId && go(`/farms/${row.farmId}`),
-    })), { card: true });
-  }
+    }),
+  },
 
-  function payerList(report) {
-    if (!report.payers.length) {
-      return emptyState({
-        icon: 'wallet',
-        title: 'Nadie pagó en este periodo',
-        text: 'Prueba con un periodo más amplio, o con las flechas de arriba.',
-      });
-    }
-    const rows = showAllPayers ? report.payers : report.payers.slice(0, PREVIEW);
+  dias: {
+    title: 'Día por día',
+    // Named after whatever the period is cut into, which is days for a month
+    // and months for a year.
+    unit: (r) => (BUCKET_WORD[r.buckets[0]?.grain] === 'mes'
+      ? ['mes', 'meses']
+      : [BUCKET_WORD[r.buckets[0]?.grain] || 'día', `${BUCKET_WORD[r.buckets[0]?.grain] || 'día'}s`]),
+    icon: 'chart',
+    // A single day has nothing to compare against itself, so the row does not
+    // appear on the menu at all rather than opening an empty list.
+    count: (r) => (r.buckets.length > 1 ? r.buckets.length : 0),
+    onlyWhenSome: true,
+    note: (r) => `Cómo fue cada ${BUCKET_WORD[r.buckets[0]?.grain] || 'día'} del periodo`,
+    empty: { icon: 'chart', title: 'Un solo día', text: 'Este periodo es un día; no hay nada que comparar.' },
+    chart: true,
+    rows: (r) => (r.buckets.length > 1
+      ? r.buckets.filter((row) => row.amount || row.billed || row.count)
+      : []),
+    render: (row) => itemRow({
+      title: row.label,
+      meta: row.count
+        ? `${plural(row.count, 'pago', 'pagos')}${row.billed ? ` · ${money(row.billed, { round: true })} facturado` : ''}`
+        : (row.billed ? `${money(row.billed, { round: true })} facturado` : 'Sin pagos'),
+      end: h('div.rlist__money', money(row.amount, { round: true })),
+      chevron: false,
+    }),
+  },
 
-    return h('div.stack.stack-2',
-      list(rows.map((row) => itemRow({
-        lead: avatar(row.name, { size: 'sm' }),
-        title: row.name,
-        meta: [row.farmName, row.count > 1 ? plural(row.count, 'pago', 'pagos') : null,
-          row.last ? `último ${formatDayShort(row.last)}` : null].filter(Boolean).join(' · '),
-        end: h('div.w-700', money(row.amount, { round: true })),
-        chevron: !!row.clientId,
-        onClick: () => row.clientId && go(`/clients/${row.clientId}`),
-      })), { card: true }),
-      !showAllPayers && report.payers.length > PREVIEW
-        ? h('p.t-xs.c-faint.center',
-            `y ${report.payers.length - PREVIEW} más. Todas salen en la hoja impresa.`)
-        : null);
-  }
-
-  function cashierCard(report) {
-    return card(defList(report.cashiers.map((row) => defRow(
-      `${row.name} · ${plural(row.count, 'pago', 'pagos')}`,
-      money(row.amount),
-    ))));
-  }
-
-  function correctionList(report) {
-    return list(report.corrections.map((row) => itemRow({
-      lead: avatar(row.clientName, { size: 'sm' }),
-      title: row.clientName,
-      meta: `${row.note || 'Sin motivo'} · ${row.byName || 'sin registrar'} · ${formatDayShort(row.date)}`,
-      end: [
-        h('div.w-700', `${row.delta > 0 ? '+' : '−'}${money(Math.abs(row.delta), { round: true })}`),
-        badge(`${money(row.from, { round: true })} → ${money(row.to, { round: true })}`,
-          row.delta > 0 ? 'warn' : 'ok'),
-      ],
-      onClick: () => go(`/invoices/${row.invoiceId}`),
-    })), { card: true });
-  }
-
-  function movementList(report) {
-    const rows = showAllMoves ? report.movements : report.movements.slice(0, 20);
-
-    return list(rows.map((row) => {
+  movimientos: {
+    title: 'Todos los movimientos',
+    unit: ['movimiento', 'movimientos'],
+    icon: 'receipt',
+    count: (r) => r.movements.length,
+    note: (r) => (r.movements.length
+      ? `${plural(r.movements.length, 'pago', 'pagos')} uno por uno, con su folio`
+      : 'No hubo movimientos'),
+    empty: { icon: 'receipt', title: 'No hubo movimientos', text: 'No se registró ningún pago en este periodo.' },
+    search: (row) => [row.clientName, row.folio, row.takenByName, row.farmName],
+    rows: (r) => r.movements,
+    render: (row) => {
       const back = Number(row.amount) < 0;
       return itemRow({
         lead: avatar(row.clientName || '—', { size: 'sm' }),
         title: row.clientName || 'Sin cliente',
-        meta: `${formatDayShort(row.date)} · ${paymentMethodMeta(row.method).label}`
-          + `${row.takenByName ? ` · ${row.takenByName}` : ''}`
+        meta: `${formatDay(row.date)} · ${paymentMethodMeta(row.method).label}`
+          + `${row.takenByName ? ` · cobró ${row.takenByName}` : ''}`
           + `${row.folio ? ` · ${row.folio}` : ''}`,
         end: [
-          h(`div.w-700${back ? '.c-bad' : ''}`,
+          h(`div.rlist__money${back ? '.c-bad' : ''}`,
             `${back ? '−' : ''}${money(Math.abs(Number(row.amount) || 0), { round: true })}`),
-          back ? badge('Cancelación', 'bad') : null,
+          back ? badge('Cancelado', 'bad') : null,
         ],
         onClick: () => go(`/receipts/${row.id}`),
       });
-    }), { card: true });
-  }
+    },
+  },
 
-  function debtorList(rows) {
-    return list(rows.map((row) => itemRow({
-      lead: avatar(row.name, { size: 'sm' }),
-      title: row.name,
-      meta: `${plural(row.bills, 'factura', 'facturas')}${row.farmName ? ` · ${row.farmName}` : ''}`,
-      end: h('div.w-700', money(row.balance, { round: true })),
-      onClick: () => go(`/clients/${row.clientId}`),
-    })), { card: true });
-  }
+  ajustes: {
+    title: 'Ajustes de saldo',
+    unit: ['ajuste', 'ajustes'],
+    icon: 'edit',
+    count: (r) => r.corrections.length,
+    onlyWhenSome: true,
+    note: (r) => `${plural(r.corrections.length, 'cuenta se corrigió', 'cuentas se corrigieron')} a mano`,
+    empty: { icon: 'edit', title: 'Sin ajustes', text: 'Nadie cambió un saldo a mano en este periodo.' },
+    head: () => 'Cambios hechos a las facturas de este periodo, con el motivo que se escribió.',
+    rows: (r) => r.corrections,
+    render: (row) => itemRow({
+      lead: avatar(row.clientName, { size: 'sm' }),
+      title: row.clientName,
+      meta: `${row.note || 'Sin motivo'} · ${row.byName || 'sin registrar'} · ${formatDay(row.date)}`,
+      end: [
+        h(`div.rlist__money${row.delta > 0 ? '' : '.c-ok'}`,
+          `${row.delta > 0 ? '+' : '−'}${money(Math.abs(row.delta), { round: true })}`),
+        badge(`${money(row.from, { round: true })} → ${money(row.to, { round: true })}`, 'muted'),
+      ],
+      onClick: () => go(`/invoices/${row.invoiceId}`),
+    }),
+  },
+};
 
-  const unsubscribe = subscribe(draw);
-  return life.ending(unsubscribe);
+/** The order they appear in the menu: what came in, then who owes, then detail. */
+const LIST_ORDER = ['pagaron', 'deben', 'atrasados', 'dias', 'ranchos', 'movimientos', 'ajustes'];
+
+/** How many rows before the list offers a search box. */
+const SEARCH_FROM = 8;
+
+export const renderReportList = (context) =>
+  periodView(context, drawList, { which: context.params.lista, term: '' });
+
+function drawList(view) {
+  const spec = LISTS[view.state.which];
+  const report = view.report();
+
+  screen({
+    title: spec ? spec.title : 'Lista',
+    subtitle: rangeTitle(view.range),
+    // The way back is the report on the same period, so the chevron out of a
+    // list never loses the span somebody chose to get here.
+    backTo: urlFor(view.range),
+    tab: 'home',
+    sunken: true,
+    body: h('div.page__inner.rbig.stack.stack-4',
+      !spec
+        ? emptyState({
+            icon: 'search', title: 'Esta lista no existe',
+            text: 'Regresa al reporte y escoge una de la lista.',
+            action: button('Ir al reporte', { onClick: () => go(urlFor(view.range)) }),
+          })
+        : view.failure()
+          ? dataErrorCard(view.failure(), { onRetry: view.reload })
+          : view.ready() && report ? listBody(view, spec, report) : skeletonRows(5)),
+  });
 }
 
-const heroStat = (value, label) =>
-  h('div', h('div.hero__stat-v', value), h('div.hero__stat-l', label));
+function listBody(view, spec, report) {
+  const { state, range } = view;
+  const all = spec.rows(report);
+  const shown = state.term && spec.search
+    ? all.filter((row) => matches(spec.search(row), state.term))
+    : all;
 
-const BUCKET_WORD = { day: 'día', week: 'semana', month: 'mes' };
+  return h('div.stack.stack-4',
+    spec.head ? h('p.rnote', spec.head(report)) : null,
+
+    spec.chart && report.buckets.length > 1
+      ? card(columnChart(report.buckets, {
+          today: rangeHolds(range) ? today() : null,
+          tick: (row) => row.short,
+          label: (row) => row.label,
+          axis: [report.buckets[0].label, report.buckets[report.buckets.length - 1].label],
+        }))
+      : null,
+
+    all.length >= SEARCH_FROM && spec.search
+      ? searchInput({
+          placeholder: 'Buscar por nombre…',
+          value: state.term,
+          onInput: (value) => { state.term = value; refresh(view, spec, report); },
+        })
+      : null,
+
+    all.length
+      ? h('div.stack.stack-2',
+          h('p.rcount', state.term
+            ? `${plural(shown.length, 'resultado', 'resultados')} de ${all.length}`
+            : plural(all.length, ...(typeof spec.unit === 'function' ? spec.unit(report) : spec.unit))),
+          shown.length
+            ? list(shown.map(spec.render), { card: true })
+            : emptyState({ icon: 'search', title: 'Nada con ese nombre', text: 'Prueba escribiendo menos letras.' }))
+      : emptyState(spec.empty),
+
+    button('Regresar al reporte', {
+      variant: 'ghost', size: 'lg', block: true, icon: 'chevronL',
+      onClick: () => go(urlFor(range)),
+    }));
+}
 
 /**
- * The period a link asked for, or this month.
+ * Redraws the list alone while somebody is typing in the search box.
  *
- * `?p=day` from the dashboard's "cobrado hoy", `?p=week&d=2026-09-14` from
- * anywhere that wants to point at a particular one. A month is the default
- * because it is the span somebody sitting down to read a report has in mind —
- * and because a year is twelve times the reading, which is not what an idle
- * open of the screen should cost.
+ * A full `screen()` would rebuild the box and take the caret with it, which on
+ * a long name means retyping from the third letter. Only the page body is
+ * replaced, and the caret is put back where it was.
  */
+function refresh(view, spec, report) {
+  const host = document.querySelector('.page__inner.rbig');
+  if (!host) { view.repaint(); return; }
+  const box = host.querySelector('input[type="search"]');
+  const caret = box ? box.selectionStart : null;
+
+  host.replaceChildren(listBody(view, spec, report));
+
+  const next = host.querySelector('input[type="search"]');
+  if (next && box) {
+    next.focus();
+    if (caret != null) next.setSelectionRange(caret, caret);
+  }
+}
+
+/* --- Addresses -------------------------------------------------------------- */
+
+/**
+ * Where a period lives.
+ *
+ * In the address rather than in a closure, so the browser's own back button
+ * does the right thing: out of a list to the summary, out of the summary to
+ * Inicio. A link in may choose the period — Inicio's "cobrado hoy" arrives
+ * asking for today.
+ */
+function urlFor(range, list) {
+  const base = list ? `/reportes/${list}` : '/reportes';
+  const query = range.grain === 'custom'
+    ? `p=custom&d=${range.start}&h=${range.end}`
+    : `p=${range.grain}&d=${range.start}`;
+  return `${base}?${query}`;
+}
+
 function fromQuery(query = {}) {
-  const grain = GRAINS.includes(query.p) ? query.p : 'month';
-  const anchor = /^\d{4}-\d{2}-\d{2}$/.test(query.d || '') ? query.d : today();
-  return rangeFor(grain, anchor);
+  const isDay = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value || '');
+  const anchor = isDay(query.d) ? query.d : today();
+  if (query.p === 'custom' && isDay(query.h)) return customRange(anchor, query.h);
+  // A month by default: the span somebody sitting down to read a report has in
+  // mind, and a twelfth of the reading a year would cost on an idle open.
+  return rangeFor(GRAINS.includes(query.p) ? query.p : 'month', anchor);
 }

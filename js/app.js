@@ -23,7 +23,7 @@ import { renderClients } from './screens/clients.js';
 import { renderClientForm } from './screens/client-form.js';
 import { renderClientDetail } from './screens/client-detail.js';
 import { renderBilling } from './screens/billing.js';
-import { renderReport } from './screens/report.js';
+import { renderReport, renderReportList } from './screens/report.js';
 import { renderCheckout } from './screens/checkout.js';
 import { renderQuick } from './screens/quick.js';
 import { renderInvoice } from './screens/invoice.js';
@@ -131,6 +131,9 @@ function registerRoutes() {
   register('/billing', renderBilling);
   // What the business did over a span somebody chooses, and can print.
   register('/reportes', renderReport);
+  // Each of the report's lists is its own screen, so the back chevron out of
+  // one goes to the report rather than out of it.
+  register('/reportes/:lista', renderReportList);
   // The counter: find somebody and take their money.
   register('/cobrar', renderCheckout);
   register('/rapido', renderQuick);
