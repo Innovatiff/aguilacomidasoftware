@@ -75,12 +75,12 @@ const inRange = (day, range) => !!day && day >= range.start && day <= range.end;
  * @param {object[]} input.clients      the whole roster, for the register counts
  * @param {object[]} input.outstanding  everything unpaid right now — today's photograph
  * @param {object[]} input.buckets      how to cut the range up, from `periods.js`
- * @param {number}   input.activeCount  how many are being served today
+ * @param {object[]} input.serving     everybody being served today
  * @param {object}   [input.pricing]    the price list, to say if it moved
  */
 export function buildReport({
   range, receipts = [], invoices = [], clients = [], outstanding = [], buckets = [],
-  activeCount = 0, pricing = null, day = today(),
+  serving = [], pricing = null, day = today(),
 }) {
   const takings = receipts.filter((row) => Number(row.amount) > 0);
   const givenBack = receipts.filter((row) => Number(row.amount) < 0);
@@ -142,7 +142,7 @@ export function buildReport({
 
     /* --- Where the book stands, today ----------------------------------- */
     standing: standingOf(outstanding, day),
-    people: registerOf(clients, range, activeCount),
+    people: registerOf(clients, range, serving),
   };
 }
 
@@ -407,18 +407,27 @@ function standingOf(outstanding, day) {
 }
 
 /**
- * The register: who is on the books, who joined, who finished.
+ * The register: who is on the books, how much food that is, who joined, who
+ * finished.
  *
- * Read off the roster the app already holds, so it costs nothing. The joins
- * and the departures are flow and belong to the period; the head-count is a
- * photograph like any other balance, so it is handed in rather than worked out
- * again — `activeClients` in the store is what Inicio counts, and a report that
- * derived its own copy of "still being served" is a report that would sooner or
- * later disagree with the dashboard about how many people eat here.
+ * Read off the roster the app already holds, so it costs nothing. The joins and
+ * the departures are flow and belong to the period; the head-count and the
+ * plates are a photograph like any other balance.
+ *
+ * `serving` is handed in rather than worked out again — `activeClients` in the
+ * store is what Inicio counts, and a report that derived its own copy of "still
+ * being served" would sooner or later disagree with the dashboard about how
+ * many people eat here.
+ *
+ * `meals` is what the kitchen cooks on an ordinary day: every active client's
+ * plates per day, added up. Not the same thing as the period's "comidas
+ * facturadas", which is how many were sold over a fortnight — this is the
+ * number somebody buys ingredients against.
  */
-function registerOf(clients, range, activeCount) {
+function registerOf(clients, range, serving) {
   return {
-    active: activeCount,
+    active: serving.length,
+    meals: serving.reduce((total, client) => total + (Number(client.mealsPerDay) || 0), 0),
     total: clients.length,
     added: clients.filter((client) => inRange(dayOf(client.createdAt), range)).length,
     ended: clients.filter((client) => inRange(client.endsOn, range)).length,

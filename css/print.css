@@ -334,3 +334,84 @@
   margin-top: 4mm;
   padding-top: 1.5mm;
 }
+
+/* --- A list on its own sheet ------------------------------------------------
+   These may run to several pages — a list of two hundred people is two hundred
+   people — so what matters here is that a page break never lands inside a row
+   and that the column titles come back at the top of every sheet. */
+
+.rep--list .rep__top { margin-bottom: 2mm; }
+
+.rep__lead {
+  font-size: 11pt;
+  font-weight: 600;
+  margin: 0 0 1.5mm;
+}
+
+.rep__t {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9pt;
+}
+
+.rep__t th {
+  text-align: left;
+  font-size: 7.5pt;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: #333;
+  border-bottom: 1.5px solid #000;
+  padding: 0 0 1.2mm;
+}
+
+/* `.rep__t th` is one class and one element, so on its own it outranks
+   `.rep__num` and a header would sit left above a column of right-aligned
+   figures. Said again here, at the same weight and later, so both ends of a
+   money column line up. */
+.rep__t th.rep__num { text-align: right; }
+
+/*
+ * Row height is the whole game on these sheets.
+ *
+ * Measured rather than guessed: the frame of a list sheet — masthead, lead,
+ * column titles, totals row, footer — comes to 175px, and a Letter page has
+ * 948px of usable height. That leaves 773px for rows, so a row has to come in
+ * under 19.3px for forty of them to land on one page. At 9pt with a 1.15 line
+ * and 0.5mm of padding above and below a row measures about 18.5px, and
+ * forty-one fit — which is what "todos los ranchos en una hoja" needs, with the
+ * kitchen's thirty-odd farms and room to grow.
+ *
+ * 9pt rather than smaller because these are read by somebody with their
+ * glasses on. Tightening the leading buys the space instead.
+ */
+.rep__t td {
+  padding: 0.5mm 0;
+  line-height: 1.15;
+  border-bottom: 1px solid #ddd;
+  vertical-align: top;
+}
+
+/* A long name or a long reason must not push the money column off the page. */
+.rep__t td:first-child, .rep__t th:first-child { padding-right: 4mm; overflow-wrap: anywhere; }
+
+/* Words are read from the left even when they sit between two columns of
+   figures — a right-aligned farm name is a farm name pretending to be an
+   amount. */
+.rep__t .rep__text, .rep__t th.rep__text { text-align: left; padding-right: 4mm; overflow-wrap: anywhere; }
+
+.rep__t tfoot td {
+  font-weight: 700;
+  font-size: 10pt;
+  border-top: 1.5px solid #000;
+  border-bottom: 0;
+  padding-top: 1.4mm;
+}
+
+/* A row is never split across two pages, and the header comes back at the top
+   of each one — otherwise page three is a column of numbers with no names. */
+.rep__t tr { break-inside: avoid; page-break-inside: avoid; }
+.rep__t thead { display: table-header-group; }
+.rep__t tfoot { display: table-footer-group; }
+
+.rep__none { font-size: 10pt; color: #444; font-style: italic; }

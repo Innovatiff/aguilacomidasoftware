@@ -889,9 +889,12 @@
 
 /* --- Three figures beside the money ---------------------------------------- */
 
+/* Four figures. 165px is the width the widest of them needs — measured, not
+   guessed — so a desk monitor gets one row of four and a phone gets two rows
+   of two, and neither leaves a box stranded on a line of its own. */
 .rgrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
   gap: var(--s3);
 }
 

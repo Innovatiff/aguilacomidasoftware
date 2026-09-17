@@ -37,7 +37,7 @@ import {
 } from '../ui/kit.js';
 import { sheet, toastBad } from '../ui/overlay.js';
 import { columnChart } from '../ui/viz.js';
-import { reportSheet } from '../ui/report-sheet.js';
+import { reportSheet, listSheet } from '../ui/report-sheet.js';
 import { printSheet } from '../ui/print.js';
 import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
@@ -126,7 +126,7 @@ function periodView(context, paint, state = {}) {
       clients: store.clients,
       outstanding: store.outstanding,
       buckets: bucketsOf(range),
-      activeCount: activeClients().length,
+      serving: activeClients(),
       pricing: store.pricing,
       day: today(),
     });
@@ -171,7 +171,7 @@ function drawSummary(view) {
 
 /** The money, the lists, and the print button. Nothing else. */
 function summary(report) {
-  const { money: cash, counts, standing, range } = report;
+  const { money: cash, counts, standing, people, range } = report;
 
   return h('div.stack.stack-5',
     takings(report),
@@ -183,7 +183,11 @@ function summary(report) {
         debtWhy(cash.change)),
       smallBox('Deben hoy', money(standing.owed, { round: true }),
         `${plural(standing.debtors.length, 'cliente', 'clientes')} · `
-        + `${money(standing.overdue, { round: true })} vencido`, 'warn')),
+        + `${money(standing.overdue, { round: true })} vencido`, 'warn'),
+      // Lo que la cocina pone en la estufa un día cualquiera. Es de hoy, no del
+      // periodo, y por eso el pie lo dice.
+      smallBox('Comidas al día', number(people.meals),
+        `${plural(people.active, 'cliente activo', 'clientes activos')} hoy`)),
 
     counts.refunds
       ? alert(`${counts.refunds === 1 ? 'Se canceló' : 'Se cancelaron'} `
@@ -378,6 +382,23 @@ const LISTS = {
       ? `${plural(r.payers.length, 'persona pagó', 'personas pagaron')} en este periodo`
       : 'Nadie pagó en este periodo'),
     empty: { icon: 'wallet', title: 'Nadie pagó en este periodo', text: 'Prueba con otro periodo arriba.' },
+    // La columna de lo devuelto sólo aparece cuando hay algo devuelto: una
+    // columna de rayas en toda la hoja es una columna que estorba.
+    print: (rows) => {
+      const back = rows.some((row) => row.refunds);
+      return {
+        columns: ['Cliente', 'Rancho', 'Pagos', ...(back ? ['Devuelto'] : []), 'Pagó'],
+        text: [1],
+        body: rows.map((row) => [
+          row.name, row.farmName || '—', number(row.count),
+          ...(back ? [row.refunds ? `−${money(Math.abs(row.refunds))}` : '—'] : []),
+          money(row.amount),
+        ]),
+        total: ['Total', '', number(total(rows, (row) => row.count)),
+          ...(back ? [`−${money(Math.abs(total(rows, (row) => row.refunds)))}`] : []),
+          money(total(rows, (row) => row.amount))],
+      };
+    },
     search: (row) => [row.name, row.farmName],
     rows: (r) => r.payers,
     render: (row) => itemRow({
@@ -405,6 +426,16 @@ const LISTS = {
         + `${money(r.standing.owed, { round: true })} al día de hoy`
       : 'Nadie debe nada'),
     empty: { icon: 'shield', title: 'Nadie debe nada', text: 'Todas las facturas emitidas están pagadas.' },
+    print: (rows) => ({
+      columns: ['Cliente', 'Rancho', 'Facturas', 'Atrasadas', 'Debe'],
+      text: [1],
+      body: rows.map((row) => [
+        row.name, row.farmName || '—', number(row.bills),
+        row.late ? number(row.late) : '—', money(row.balance),
+      ]),
+      total: ['Total', '', number(total(rows, (row) => row.bills)),
+        number(total(rows, (row) => row.late)), money(total(rows, (row) => row.balance))],
+    }),
     head: () => 'Esto no es del periodo: es lo que se debe en este momento, de cualquier fecha.',
     search: (row) => [row.name, row.farmName],
     rows: (r) => r.standing.debtors,
@@ -429,6 +460,17 @@ const LISTS = {
       ? `${plural(r.standing.late.length, 'cliente pasó', 'clientes pasaron')} su fecha de pago`
       : 'Nadie está atrasado'),
     empty: { icon: 'shield', title: 'Nadie está atrasado', text: 'Nadie ha pasado su fecha de pago.' },
+    print: (rows) => ({
+      columns: ['Cliente', 'Rancho', 'Venció', 'Facturas', 'Atrasado'],
+      text: [1, 2],
+      body: rows.map((row) => [
+        row.name, row.farmName || '—',
+        `${formatDayShort(row.oldest)} · ${humanDelta(daysBetween(today(), row.oldest))}`,
+        number(row.late), money(row.lateBalance),
+      ]),
+      total: ['Total', '', '', number(total(rows, (row) => row.late)),
+        money(total(rows, (row) => row.lateBalance))],
+    }),
     head: () => 'Al día de hoy. Los más viejos primero.',
     search: (row) => [row.name, row.farmName],
     rows: (r) => r.standing.late,
@@ -449,6 +491,14 @@ const LISTS = {
     count: (r) => r.farms.length,
     note: (r) => `Cuánto entró de cada uno de los ${number(r.farms.length)} ranchos`,
     empty: { icon: 'farm', title: 'Sin movimiento por rancho', text: 'No hubo pagos ni facturas en este periodo.' },
+    print: (rows) => ({
+      columns: ['Rancho', 'Pagaron', 'Cobrado', 'Facturado'],
+      body: rows.map((row) => [
+        row.name, number(row.payers), money(row.collected), money(row.billed),
+      ]),
+      total: ['Total', number(total(rows, (row) => row.payers)),
+        money(total(rows, (row) => row.collected)), money(total(rows, (row) => row.billed))],
+    }),
     rows: (r) => r.farms,
     render: (row) => itemRow({
       lead: h('span.c-faint', icon('farm')),
@@ -475,6 +525,14 @@ const LISTS = {
     onlyWhenSome: true,
     note: (r) => `Cómo fue cada ${BUCKET_WORD[r.buckets[0]?.grain] || 'día'} del periodo`,
     empty: { icon: 'chart', title: 'Un solo día', text: 'Este periodo es un día; no hay nada que comparar.' },
+    print: (rows) => ({
+      columns: ['Periodo', 'Pagos', 'Cobrado', 'Facturado'],
+      body: rows.map((row) => [
+        row.label, number(row.count), money(row.amount), money(row.billed),
+      ]),
+      total: ['Total', number(total(rows, (row) => row.count)),
+        money(total(rows, (row) => row.amount)), money(total(rows, (row) => row.billed))],
+    }),
     chart: true,
     rows: (r) => (r.buckets.length > 1
       ? r.buckets.filter((row) => row.amount || row.billed || row.count)
@@ -498,6 +556,16 @@ const LISTS = {
       ? `${plural(r.movements.length, 'pago', 'pagos')} uno por uno, con su folio`
       : 'No hubo movimientos'),
     empty: { icon: 'receipt', title: 'No hubo movimientos', text: 'No se registró ningún pago en este periodo.' },
+    print: (rows) => ({
+      columns: ['Cliente', 'Fecha', 'Forma', 'Cobró', 'Folio', 'Monto'],
+      text: [1, 2, 3, 4],
+      body: rows.map((row) => [
+        row.clientName || 'Sin cliente', formatDayShort(row.date),
+        paymentMethodMeta(row.method).label, row.takenByName || '—', row.folio || '—',
+        `${Number(row.amount) < 0 ? '−' : ''}${money(Math.abs(Number(row.amount) || 0))}`,
+      ]),
+      total: ['Total', '', '', '', '', money(total(rows, (row) => row.amount))],
+    }),
     search: (row) => [row.clientName, row.folio, row.takenByName, row.farmName],
     rows: (r) => r.movements,
     render: (row) => {
@@ -526,6 +594,14 @@ const LISTS = {
     onlyWhenSome: true,
     note: (r) => `${plural(r.corrections.length, 'cuenta se corrigió', 'cuentas se corrigieron')} a mano`,
     empty: { icon: 'edit', title: 'Sin ajustes', text: 'Nadie cambió un saldo a mano en este periodo.' },
+    print: (rows) => ({
+      columns: ['Cliente', 'Motivo', 'Quién', 'Fecha', 'Antes', 'Después'],
+      text: [1, 2, 3],
+      body: rows.map((row) => [
+        row.clientName, row.note || '—', row.byName || '—', formatDayShort(row.date),
+        money(row.from), money(row.to),
+      ]),
+    }),
     head: () => 'Cambios hechos a las facturas de este periodo, con el motivo que se escribió.',
     rows: (r) => r.corrections,
     render: (row) => itemRow({
@@ -541,6 +617,10 @@ const LISTS = {
     }),
   },
 };
+
+/** Adds a column of a list up, for the totals row on its printed sheet. */
+const total = (rows, pick) =>
+  Math.round(rows.reduce((sum, row) => sum + (Number(pick(row)) || 0), 0) * 100) / 100;
 
 /** The order they appear in the menu: what came in, then who owes, then detail. */
 const LIST_ORDER = ['pagaron', 'deben', 'atrasados', 'dias', 'ranchos', 'movimientos', 'ajustes'];
@@ -563,6 +643,9 @@ function drawList(view) {
     backTo: urlFor(view.range),
     tab: 'reports',
     sunken: true,
+    actions: spec && report
+      ? [topbarButton('printer', { label: 'Imprimir la lista', onClick: () => printList(view, spec, report) })]
+      : [],
     body: h('div.page__inner.rbig.stack.stack-4',
       !spec
         ? emptyState({
@@ -613,10 +696,50 @@ function listBody(view, spec, report) {
             : emptyState({ icon: 'search', title: 'Nada con ese nombre', text: 'Prueba escribiendo menos letras.' }))
       : emptyState(spec.empty),
 
+    all.length
+      ? h('div.stack.stack-2',
+          button('Imprimir esta lista', {
+            variant: 'primary', size: 'lg', block: true, icon: 'printer',
+            onClick: () => printList(view, spec, report),
+          }),
+          h('p.rfoot', state.term
+            ? `Se imprime sólo lo que dice «${state.term}». Borra la búsqueda para la lista completa.`
+            : 'Sale en hoja tamaño carta, con esta lista completa y su total.'))
+      : null,
+
     button('Regresar al reporte', {
       variant: 'ghost', size: 'lg', block: true, icon: 'chevronL',
       onClick: () => go(urlFor(range)),
     }));
+}
+
+/**
+ * Prints the list that is on screen, as it is on screen.
+ *
+ * Including the search box: if she typed a name, the sheet is that search, and
+ * says so on the paper rather than letting somebody file a list with people
+ * quietly missing from it.
+ */
+function printList(view, spec, report) {
+  if (!spec?.print || !report) { toastBad('Esta lista no se puede imprimir.'); return; }
+
+  const all = spec.rows(report);
+  const rows = view.state.term && spec.search
+    ? all.filter((row) => matches(spec.search(row), view.state.term))
+    : all;
+
+  const sheet = spec.print(rows, report);
+  printSheet(listSheet(report, {
+    title: spec.title,
+    note: spec.note(report),
+    columns: sheet.columns,
+    rows: sheet.body,
+    total: sheet.total,
+    text: sheet.text,
+    filter: view.state.term || '',
+    business: store.business,
+    by: session.displayName || session.email || '',
+  }));
 }
 
 /**
