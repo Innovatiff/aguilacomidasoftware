@@ -267,15 +267,23 @@ export async function renderClientForm(context) {
         // would hand their clicks to the text box instead.
         fieldGroup({
           label: 'No puede comer',
-          hint: 'Lo que hay que dejar fuera de su comida. Aparece en la ruta y en la lista '
-            + 'de clientes, sin tener que abrir su ficha.',
+          hint: 'Alergias y lo que no puede llevar su comida. Sale en la pantalla de '
+            + 'empaque, en rojo, y en la lista de clientes. Nunca se imprime en la '
+            + 'etiqueta: eso viaja pegado a una caja.',
           control: tagEditor(),
+        }),
+
+        fieldGroup({
+          label: 'Preferencias',
+          hint: 'Lo que pidió, no lo que le hace daño: sin picante, sin cebolla. Esto sí '
+            + 'sale impreso en su etiqueta.',
+          control: tagEditor('preferencias', 'sin picante, sin cebolla…', 'utensils'),
         }),
 
         field({
           label: 'Notas',
           control: textarea({
-            value: model.notes, rows: 2, placeholder: 'Horario distinto, quién recibe, cómo llegar…',
+            value: model.notes, rows: 2, placeholder: 'Doble tortilla, quién recibe, cómo llegar…',
             oninput: (e) => update({ notes: e.target.value }),
           }),
         }))),
@@ -440,26 +448,32 @@ export async function renderClientForm(context) {
   }
 
   /**
-   * Restrictions: pick from what the kitchen already uses, or type a new one.
+   * One of the two lists: what they cannot eat, or what they asked for.
    *
    * The suggestions are the point. Left to a free-text box, "sin pollo" becomes
    * "Sin Pollo", "no pollo" and "sin pollo." within a month, and then nobody
    * can count how many portions to leave chicken out of. Offering the existing
-   * spellings first means the common ones stay one thing.
+   * spellings first means the common ones stay one thing — and on the
+   * preferences it also keeps four spellings from printing four different
+   * looking stickers.
+   *
+   * @param {'tags'|'preferencias'} listField
+   * @param {string} placeholder
+   * @param {string} glyph  the icon on a chosen chip
    */
-  function tagEditor() {
-    const chosen = [...(model.tags || [])];
+  function tagEditor(listField = 'tags', placeholder = 'sin pollo, sin espagueti…', glyph = 'ban') {
+    const chosen = [...(model[listField] || [])];
     const wrap = h('div.stack.stack-2');
 
     const commit = (next) => {
-      model.tags = normalizeTags(next);
+      model[listField] = normalizeTags(next);
       chosen.length = 0;
-      chosen.push(...model.tags);
+      chosen.push(...model[listField]);
       paint();
     };
 
     const box = input({
-      placeholder: 'sin pollo, sin espagueti…',
+      placeholder,
       onkeydown: (event) => {
         if (event.key !== 'Enter') return;
         // Enter adds the restriction; it must not submit the whole form.
@@ -473,8 +487,8 @@ export async function renderClientForm(context) {
 
     function paint() {
       // Only offer what this person does not already have.
-      const suggestions = tagsInUse(store.clients)
-        .filter((entry) => !hasTag({ tags: chosen }, entry.tag))
+      const suggestions = tagsInUse(store.clients, listField)
+        .filter((entry) => !hasTag({ [listField]: chosen }, entry.tag, listField))
         .slice(0, 8);
 
       mount(wrap,
@@ -484,7 +498,7 @@ export async function renderClientForm(context) {
                 type: 'button',
                 'aria-label': `Quitar ${tag}`,
                 onclick: () => commit(chosen.filter((one) => one !== tag)),
-              }, icon('ban'), tag, icon('x'))))
+              }, icon(glyph), tag, icon('x'))))
           : null,
 
         h('div.row', { style: { gap: '8px' } },

@@ -350,6 +350,64 @@ El número **no es una contraseña**. Sirve para que quede escrito quién empac�
 cada libreta; la pantalla ya está dentro del panel, detrás de una cuenta de la
 cocina, y quien puede escribir el número ya podía entrar sin él.
 
+#### La etiqueta que sale sola
+
+Cada vez que aparece una persona en la pantalla, su etiqueta sale de la
+impresora. La libreta **siempre empieza desde cero**, la diapositiva del rancho
+no imprime nada, y regresar tampoco: eso es para revisar un nombre ya empacado,
+y una etiqueta por cada revisión es un rollo perdido para el miércoles. Volver a
+avanzar sí imprime, que es como se repone una etiqueta atorada.
+
+La etiqueta es de **100 × 50 mm** y lleva, de arriba abajo: el nombre grande en
+mayúsculas, una raya, el rancho y la ubicación, las preferencias, la nota, y al
+pie el día, la libreta y el número de la persona. A la izquierda un **QR de
+32 mm** que lleva a la página donde esa persona instala su propia app, con su
+correo ya escrito.
+
+**En la etiqueta nunca se imprime una alergia.** Las alergias están en la
+pantalla de empaque, en rojo, donde alguien las lee con la comida todavía
+abierta. La etiqueta se cierra con la tapa y se va en una camioneta.
+
+Por eso cada persona tiene **dos listas** en su ficha:
+
+| | Dónde sale | Para qué |
+|---|---|---|
+| **No puede comer** | Pantalla de empaque y lista de clientes | Alergias. Nunca se imprime. |
+| **Preferencias** | La etiqueta | Sin picante, sin cebolla. Lo que pidió. |
+
+Antes eran una sola lista. Al separarlas, en *Ajustes → Empaque* aparece
+**Copiar restricciones a preferencias**, que llena la lista nueva una sola vez
+con lo que cada quien ya tenía. **Hay que revisarla después:** ningún programa
+puede distinguir «sin picante» de «sin maní» en una lista escrita antes de que
+la diferencia existiera, así que lo que de verdad sea una alergia hay que
+quitarlo de preferencias a mano.
+
+Y la **nota de hoy**: en la ficha de cualquier persona, *Nota de hoy* escribe
+una línea que sale en su etiqueta en lugar de su nota de siempre, solo por hoy.
+Lleva escrito el día para el que es, así que mañana desaparece sola — nadie
+tiene que acordarse de borrarla.
+
+#### Que la etiqueta salga sin preguntar nada
+
+Un navegador no puede imprimir sin abrir su cuadro de diálogo; es a propósito.
+La única forma de que la etiqueta salga sola es abrir Chrome con
+**`--kiosk-printing`**, que manda todo directo a la impresora predeterminada.
+
+En cada computadora de la cocina:
+
+1. Pon la impresora de etiquetas como **predeterminada** de Windows, con papel
+   de 100 × 50 mm.
+2. Haz clic derecho en el acceso directo de Empaque → **Propiedades**, y al
+   final del campo *Destino* agrega un espacio y `--kiosk-printing`.
+3. Ciérrala y vuelve a abrirla desde ese acceso directo.
+
+Sin esa bandera, cada persona abre un cuadro de diálogo que alguien tiene que
+confirmar con las manos mojadas. Si eso pasa, o si la impresora se descompone,
+se apaga todo desde *Empaque → Configurar → Imprimir la etiqueta sola*.
+
+La dirección a la que lleva el QR se cambia en *Ajustes → Recibo impreso →
+Dirección de la app del cliente*.
+
 #### Instalar la app de empaque en las computadoras de la cocina
 
 La cocina tiene su propia puerta — **`/empaque`** — con su propio icono, su
@@ -463,6 +521,7 @@ js/
     icons.js          set de iconos SVG
     mode.js           por cuál de las dos puertas se abrió la app
     packing.js        el orden en que se empaca: rancho, lugar, persona
+    qr.js             códigos QR, escritos aquí: sin paquetes y sin internet
   data/               una capa por colección de Firestore
     session.js  staff.js  pricing.js  farms.js  clients.js
     deliveries.js  invoices.js  receipts.js  chat.js
@@ -470,6 +529,8 @@ js/
                     — una sola implementación para Clientes y Cobranza
     store.js          escuchas compartidas del panel
   ui/                 shell, kit de componentes, hojas, chat
+    print.js          recibos, reportes y etiquetas, por el diálogo del navegador
+    label.js          la etiqueta de 100 × 50 mm que se pega en el recipiente
   screens/            una pantalla por archivo
 ```
 
@@ -554,6 +615,10 @@ config/bootstrap                 -- quién fue el primer administrador
 users/{uid}                      -- sólo datos personales; no otorga nada
   name, email, phone
 
+config/business                  -- lo que va en el encabezado de un recibo
+  name, address, city, phone, email, footer
+  appUrl                         -- a dónde lleva el QR de las etiquetas
+
 config/pricing                   -- la lista de precios de todo el negocio
   tiers [{ mealsPerDay, price }] -- precio de UNA QUINCENA en cada plan
   referenceDays                  -- días de servicio que cubre ese precio (12)
@@ -571,7 +636,10 @@ farms/{farmId}                   -- el lugar y lo acordado con él
 
 clients/{clientId}               -- una persona que come
   name, phone, email, notes
-  tags        ['sin pollo', …]   -- lo que no puede comer
+  tags        ['sin pollo', …]   -- alergias; NUNCA se imprimen
+  preferencias ['sin picante',…] -- lo que pidió; esto sí sale en la etiqueta
+  notaDelDia                     -- una línea, solo para un día
+  notaDelDiaOn 'YYYY-MM-DD'      -- el día que le toca; por eso se borra sola
   farmId, farmName               -- obligatorio
   locationId, locationName       -- obligatorio
   mealsPerDay                    -- su plan; de ahí sale su precio base
@@ -607,6 +675,7 @@ receipts/{receiptId}             -- se escribe una vez y nunca se toca
 
 config/packing                   -- cómo se reparte el empaque
   lines [{ id, name, farmIds }]  -- exactamente dos libretas
+  autoPrint                      -- si la etiqueta sale sola al avanzar
   updatedAt, updatedByName
 
 packers/{packerId}               -- quién empaca y con qué número entra

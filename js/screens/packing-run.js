@@ -26,6 +26,15 @@
  * card, and inside it two tinted blocks that only appear when they have
  * something to say.
  *
+ * **Each person's label prints as they come up.** The libreta always starts at
+ * the beginning, the farm slide prints nothing, and every Siguiente that lands
+ * on a person sends their sticker to the label printer — so the container is
+ * labelled while the food is going into it rather than at the end from a pile.
+ * Going back never prints: that is how somebody checks a name they already
+ * packed, and a sticker for every check is a roll of labels gone by Wednesday.
+ * The whole thing can be switched off in Empaque → Configurar, which is what a
+ * machine without a label printer wants — and the morning the printer dies.
+ *
  * The keyboard moves it too: space, enter or the right arrow go forward, the
  * left arrow goes back. On a counter machine with a cheap mouse that is the
  * difference between a pleasant morning and a long one.
@@ -42,9 +51,9 @@ import { toastBad } from '../ui/overlay.js';
 import { go } from '../lib/router.js';
 import { store, subscribe, activeClients, isReady, firstError, startStore } from '../data/store.js';
 import {
-  watchPacking, startRun, finishRun, noteProgress,
-  seatedPacker, rememberSlide, recallSlide, forgetSlide,
+  watchPacking, startRun, finishRun, noteProgress, seatedPacker,
 } from '../data/packing.js';
+import { printLabel } from '../ui/print.js';
 import { packingSequence, lineOf } from '../lib/packing.js';
 import { today, formatDayLong, capitalize } from '../lib/dates.js';
 import { plural, number } from '../lib/format.js';
@@ -81,9 +90,10 @@ export function renderPackingRun(context) {
     if (!line || !isReady()) { plan = null; return; }
 
     plan = { line, ...packingSequence({ line, farms: store.farms, clients: activeClients(), day }) };
-    // Somebody who closed the browser at plate nineteen comes back to plate
-    // nineteen. Clamped, because the roster may have shrunk since.
-    if (!runId && !at) at = Math.min(recallSlide(day, lineId), Math.max(0, plan.slides.length - 1));
+    // Always from the beginning. It used to come back to plate nineteen after
+    // a browser was closed, which was right when the screen was only a screen;
+    // now every person that goes by prints a label, and resuming halfway means
+    // eighteen containers with nothing on them.
     if (at > plan.slides.length - 1) at = Math.max(0, plan.slides.length - 1);
     open();
   }
@@ -117,8 +127,12 @@ export function renderPackingRun(context) {
     const next = Math.max(0, Math.min(at + step, plan.slides.length - 1));
     if (next === at) return;
     at = next;
-    rememberSlide(day, lineId, at);
     paint();
+
+    // Forward only. Going back is how somebody checks a name they already
+    // packed, and a second sticker coming out of the printer every time they
+    // do that is how a roll of labels disappears by Wednesday.
+    if (step > 0) labelFor(plan.slides[at]);
 
     // The record keeps the count, not every step: it is written when a farm
     // starts or ends, and every fifth person in between. Often enough that the
@@ -130,8 +144,32 @@ export function renderPackingRun(context) {
     }
   }
 
+  /**
+   * The sticker for whoever is on screen, if this machine prints them.
+   *
+   * Only people: a farm slide is a heading and the last slide is a summary,
+   * and neither one goes on a container. Wrapped, because a printer that is
+   * off or out of paper must not stop the morning — the screen is the job, the
+   * label is the convenience.
+   */
+  function labelFor(slide) {
+    if (!setup?.autoPrint || slide?.kind !== 'client') return;
+    try {
+      printLabel({
+        client: slide.client,
+        farmName: slide.farm?.name || '',
+        placeName: slide.place?.name || '',
+        day,
+        lineName: plan?.line?.name || '',
+        sequence: packedSoFar(),
+        appUrl: store.business?.appUrl || '',
+      });
+    } catch (error) {
+      toastBad(`No se pudo imprimir la etiqueta: ${errorText(error)}`);
+    }
+  }
+
   function finish() {
-    forgetSlide(day, lineId);
     const close = runId
       ? finishRun(runId, { packed: plan ? plan.people : 0 })
       : Promise.resolve();

@@ -22,6 +22,11 @@ export const DEFAULT_BUSINESS = {
   phone: '519-322-4222',
   email: 'PLEAGUILA@GMAIL.COM',
   footer: 'GRACIAS POR SU PAGO',
+  // Where the QR on a packing label points: the client app, on the page that
+  // shows somebody how to install it. Here rather than in the source for the
+  // same reason as the phone number — the day the address changes, it is a
+  // field somebody types.
+  appUrl: 'https://aguilacomidaapp.netlify.app/',
 };
 
 /** Stored values over defaults, with blanks treated as "not set". */

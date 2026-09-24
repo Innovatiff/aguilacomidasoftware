@@ -23,6 +23,7 @@
  */
 
 import { h, mount } from '../lib/dom.js';
+import { labelSheet, fitLabel } from './label.js';
 import { money } from '../lib/format.js';
 import { appliedTitle } from '../lib/billing.js';
 import { paymentMethodMeta } from '../lib/model.js';
@@ -192,6 +193,10 @@ function printRoot() {
 const PAPER = {
   receipt: 'size: 80mm auto; margin: 0;',
   report: 'size: Letter; margin: 13mm 12mm 15mm;',
+  // A die-cut label, edge to edge. Any margin here and the printer centres a
+  // 96mm sticker on a 100mm label, which on a thermal unit means the first
+  // line comes out on the gap between two of them.
+  label: 'size: 100mm 50mm; margin: 0;',
 };
 
 function paper(kind) {
@@ -255,6 +260,30 @@ export function printReceipt(receipt, options = {}) {
     receiptSheet(receipt, { ...sheet, forWhom }))));
 
   // A frame, so the layout is done before the dialog freezes the page.
+  requestAnimationFrame(() => window.print());
+}
+
+/**
+ * Prints one packing label.
+ *
+ * The extra step over a receipt is the measuring: the sticker is mounted,
+ * `fitLabel` shrinks the name until it stops wrapping, and only then is the
+ * printer asked for. That order is the whole reason `#print-root` is parked
+ * off the screen instead of being `display: none` — a subtree with no layout
+ * has no width to compare against.
+ *
+ * On a kitchen machine this runs once per person, with nobody pressing
+ * anything: Chrome started with `--kiosk-printing` sends it straight to the
+ * default printer and shows no dialog. Without that flag every label stops for
+ * a confirmation, which is why the whole thing can be turned off in
+ * Empaque → Configurar rather than being something the kitchen has to live
+ * with.
+ */
+export function printLabel(spec) {
+  paper('label');
+  const root = printRoot();
+  mount(root, labelSheet(spec));
+  fitLabel(root);
   requestAnimationFrame(() => window.print());
 }
 

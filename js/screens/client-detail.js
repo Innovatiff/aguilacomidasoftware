@@ -21,7 +21,7 @@ import { session } from '../data/session.js';
 import { store, subscribe, billingFor, farmById, periodPrice } from '../data/store.js';
 import {
   watchClient, updateClient, moveClient, servingSince, setEndsOn, servingStatus, daysLeft,
-  cycleIsSet,
+  cycleIsSet, setDayNote,
 } from '../data/clients.js';
 import { watchClientInvoices, issueInvoice } from '../data/invoices.js';
 import { watchClientReceipts, totalOf, cancelledIds } from '../data/receipts.js';
@@ -136,13 +136,27 @@ export function renderClientDetail(context) {
             tagList(model.tags, { className: 'tags--loud' }))
         : null,
 
+      (model.preferencias || []).length
+        ? h('div.stack.stack-2',
+            h('div.t-xs.upper.c-faint.w-700', 'Preferencias'),
+            tagList(model.preferencias))
+        : null,
+
       model.notes ? h('div.t-sm.c-soft', model.notes) : null,
+
+      // Today's note, which is the only thing on this card that expires.
+      dayNoteOf(model)
+        ? alert(`Hoy: ${dayNoteOf(model)}`, 'info', 'note')
+        : null,
 
       h('div.btn-group',
         model.phone
           ? h('a.btn.btn--ghost.btn--sm', { href: telHref(model.phone) }, icon('phone'), 'Llamar')
           : null,
         button('Mensaje', { variant: 'ghost', size: 'sm', icon: 'chat', onClick: onChat }),
+        button(dayNoteOf(model) ? 'Cambiar nota de hoy' : 'Nota de hoy', {
+          variant: 'ghost', size: 'sm', icon: 'note', onClick: () => editDayNote(model),
+        }),
         button(model.endsOn ? 'Cambiar último día' : 'Poner último día', {
           variant: 'ghost', size: 'sm', icon: 'calendar', onClick: () => setLastDay(model),
         }))));
@@ -355,6 +369,54 @@ export function renderClientDetail(context) {
    * about it. From the day after, they leave the libreta and stop being
    * billed by themselves.
    */
+  /**
+   * The note this morning, if it was written for this morning.
+   *
+   * A declaration, not a `const`: the listeners below paint the moment they
+   * are set up, which is before a `const` further down this function exists.
+   */
+  function dayNoteOf(model) {
+    return model?.notaDelDiaOn === today() ? String(model.notaDelDia || '').trim() : '';
+  }
+
+  /**
+   * A note for today only — it goes on the sticker instead of the standing one
+   * and is gone tomorrow without anybody clearing it.
+   */
+  async function editDayNote(model) {
+    const box = input({
+      value: dayNoteOf(model),
+      placeholder: 'Hoy no viene, dejar con su hermano…',
+      maxlength: 90,
+    });
+
+    await sheet({
+      title: 'Nota de hoy',
+      build: (close) => h('form.stack.stack-3', {
+        onsubmit: async (event) => {
+          event.preventDefault();
+          try {
+            await setDayNote(model.id, box.value, today());
+            toastOk(box.value.trim() ? 'Nota de hoy guardada' : 'Nota de hoy quitada');
+            close(true);
+          } catch (error) { toastBad(errorText(error)); }
+        },
+      },
+      h('p.t-sm.c-soft',
+        `Sale en la etiqueta de ${model.name} en lugar de su nota de siempre, y solo hoy. `
+        + 'Mañana desaparece sola.'),
+      model.notes ? h('p.t-sm.c-faint', `Su nota de siempre: ${model.notes}`) : null,
+      fieldGroup({ label: 'Lo de hoy', control: box }),
+      h('button.btn.btn--primary.btn--block.btn--lg', { type: 'submit' }, 'Guardar'),
+      dayNoteOf(model)
+        ? button('Quitar la de hoy', {
+          variant: 'ghost', block: true,
+          onClick: async () => { box.value = ''; },
+        })
+        : null),
+    });
+  }
+
   async function setLastDay(model) {
     const choices = [
       ['Hoy es su último día', 0],

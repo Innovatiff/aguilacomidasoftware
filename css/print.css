@@ -16,7 +16,21 @@
    the printer is asked for.
    ========================================================================== */
 
-#print-root { display: none; }
+/*
+ * Parked off the screen rather than `display: none`.
+ *
+ * A packing label has to be measured before it is printed — the name is set as
+ * large as it fits and shrunk until it stops wrapping — and a subtree that is
+ * `display: none` has no layout, so there is nothing to measure. Fixed
+ * positioning keeps it out of the document's flow, so nothing scrolls sideways
+ * to reach it, and `visibility` keeps it off the glass.
+ */
+#print-root {
+  position: fixed;
+  left: -9999px;
+  top: 0;
+  visibility: hidden;
+}
 
 @media print {
   /*
@@ -51,11 +65,17 @@
     print-color-adjust: exact;
   }
 
-  /* Pinned to the roll — except when a report says otherwise, and then the
-     page box from `@page` is the only width there is. */
-  body:not([data-paper="report"]) { width: 80mm; }
+  /* Pinned to whatever is about to come out. A report says nothing here: the
+     page box from `@page` is the only width it has. */
+  body[data-paper="receipt"], body:not([data-paper]) { width: 80mm; }
+  body[data-paper="label"] { width: 100mm; }
 
-  #print-root { display: block !important; }
+  #print-root {
+    position: static;
+    left: auto;
+    visibility: visible;
+    display: block !important;
+  }
 }
 
 /* --- The receipt itself ---------------------------------------------------
@@ -415,3 +435,68 @@
 .rep__t tfoot { display: table-footer-group; }
 
 .rep__none { font-size: 10pt; color: #444; font-style: italic; }
+
+/* --- The packing label -----------------------------------------------------
+   100 × 50 mm on a thermal label printer. Outside the media query, like the
+   receipt above, so the layout can be measured and tested rather than guessed
+   at through a print dialog.
+
+   Everything is in millimetres. A label printer's dots are a fixed physical
+   size and the paper is a fixed physical size; a layout in pixels here would
+   come out a different shape on every machine it is plugged into. */
+
+.lbl {
+  box-sizing: border-box;
+  width: 100mm;
+  height: 50mm;
+  padding: 3mm;
+  display: flex;
+  align-items: center;
+  gap: 4mm;
+  background: #fff;
+  color: #000;
+  font-family: Arial, Helvetica, "DejaVu Sans", sans-serif;
+  overflow: hidden;
+}
+.lbl * { box-sizing: border-box; }
+
+.lbl__qr { flex: none; width: 32mm; height: 32mm; }
+/* No address on file, so no code — but the space stays, or the column would
+   jump a centimetre to the left on one label in a hundred. */
+.lbl__qr--none { border: 0.3mm dashed #999; }
+
+.lbl__col {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+/* Every line is one line. A sticker that reflows is a sticker whose last line
+   fell off the bottom of the paper. */
+.lbl__name, .lbl__where, .lbl__pref, .lbl__note, .lbl__foot {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lbl__name {
+  font-size: 7mm;
+  font-weight: 800;
+  line-height: 1.04;
+  letter-spacing: -0.01em;
+}
+.lbl__rule { border-top: 0.4mm solid #000; margin: 1.6mm 0 1.4mm; }
+.lbl__where { font-size: 3mm; font-weight: 600; letter-spacing: 0.06em; }
+.lbl__pref { margin-top: 1.4mm; font-size: 3.8mm; font-weight: 800; }
+.lbl__note { margin-top: 1.2mm; font-size: 3mm; font-style: italic; }
+.lbl__foot {
+  margin-top: auto;
+  font-size: 2.6mm; font-weight: 700; letter-spacing: 0.08em;
+  color: #000;
+}
+
+/* One label per page: the printer cuts between them. */
+.lbl + .lbl { break-before: page; page-break-before: always; }

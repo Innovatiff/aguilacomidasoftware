@@ -26,7 +26,7 @@ import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
 import { store, subscribe, isReady } from '../data/store.js';
 import {
-  watchPacking, savePacking, watchPackers, savePacker, removePacker,
+  watchPacking, savePacking, setAutoPrint, watchPackers, savePacker, removePacker,
 } from '../data/packing.js';
 import { lineOfFarm, unassignedFarms, duplicatePins } from '../lib/packing.js';
 import { lifetime } from '../ui/shell.js';
@@ -79,6 +79,10 @@ export function renderPackingSetup() {
         : null,
 
       h('div.stack.stack-3',
+        sectionLabel('Las etiquetas'),
+        printCard()),
+
+      h('div.stack.stack-3',
         sectionLabel('Las libretas'),
         h('p.rnote', 'Cada rancho va en una sola libreta. Al ponerlo en una, sale de la otra.'),
         setup.lines.map(lineCard)),
@@ -93,6 +97,44 @@ export function renderPackingSetup() {
           text: 'Agrega a quién empaca y dale un número de cuatro dígitos. '
             + 'Con ese número su nombre queda en la lista de cada mañana.',
         })));
+  }
+
+  /* --- Whether the labels print by themselves --------------------------------- */
+
+  /**
+   * The switch, and the one thing nobody can guess from the screen.
+   *
+   * A browser cannot print without asking — that is the point of the dialog —
+   * unless Chrome was started with `--kiosk-printing`, which makes it send
+   * everything straight to the default printer with nothing to confirm. So the
+   * card says so. Without that flag this setting turns forty containers into
+   * forty dialogs, and somebody will turn it off and never say why.
+   */
+  function printCard() {
+    const on = setup.autoPrint !== false;
+    return card(h('div.stack.stack-3',
+      h('div.row.row--between',
+        h('div',
+          h('div.w-700', 'Imprimir la etiqueta sola'),
+          h('div.t-sm.c-soft', on
+            ? 'Al pasar a cada persona sale su etiqueta, sin tocar nada.'
+            : 'Apagado: nadie imprime nada durante el empaque.')),
+        h('button.btn.btn--soft', {
+          type: 'button',
+          onclick: async () => {
+            try {
+              await setAutoPrint(!on, author());
+              toastOk(on ? 'Ya no se imprime sola' : 'Ahora se imprime sola');
+            } catch (error) { toastBad(errorText(error)); }
+          },
+        }, on ? 'Apagar' : 'Encender')),
+
+      on
+        ? alert('Para que salga sin preguntar nada, Chrome tiene que abrirse con '
+          + '--kiosk-printing y la impresora de etiquetas tiene que ser la '
+          + 'predeterminada de esa computadora. Sin eso, cada persona abre un '
+          + 'cuadro de diálogo.', 'info', 'printer')
+        : null));
   }
 
   /* --- One libreta ----------------------------------------------------------- */

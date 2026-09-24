@@ -44,6 +44,18 @@ export function normalizePacking(data) {
   const stored = Array.isArray(data?.lines) ? data.lines : [];
 
   return {
+    /*
+     * Whether a label prints by itself as each person comes up.
+     *
+     * On by default, because that is what the kitchen computers are for. It is
+     * a setting at all because it only works on a machine where Chrome was
+     * started with `--kiosk-printing`: anywhere else every Siguiente stops for
+     * a print dialog, and a packer with wet hands confirming forty dialogs is
+     * worse than no labels. Off is also how you pack the morning the label
+     * printer dies.
+     */
+    autoPrint: data?.autoPrint !== false,
+
     lines: DEFAULT_LINES.map((fallback, i) => {
       const line = stored[i] || {};
       return {

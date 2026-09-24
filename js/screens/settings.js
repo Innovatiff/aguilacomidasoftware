@@ -16,7 +16,7 @@ import { screen } from '../ui/shell.js';
 import { icon } from '../lib/icons.js';
 import {
   card, button, badge, avatar, itemRow, list, defList, defRow, sectionLabel,
-  alert, emptyState, field, input, moneyInput, statGrid, stat,
+  alert, emptyState, field, input, moneyInput, statGrid, stat, asyncButton,
 } from '../ui/kit.js';
 import { toastOk, toastBad, confirm, sheet } from '../ui/overlay.js';
 import { go } from '../lib/router.js';
@@ -24,6 +24,7 @@ import { session, signOutNow, updateOwnProfile } from '../data/session.js';
 import { watchStaff, addStaff, removeStaff, isValidEmail, normalizeEmail } from '../data/staff.js';
 import { savePricing } from '../data/pricing.js';
 import { saveBusiness, DEFAULT_BUSINESS } from '../data/business.js';
+import { copyTagsToPreferences } from '../data/clients.js';
 import { printReceipt } from '../ui/print.js';
 import { store, subscribe, activeClients, moneyStats, unpriced } from '../data/store.js';
 import { money, number, plural } from '../lib/format.js';
@@ -185,6 +186,12 @@ export function renderSettings() {
         hint: 'La línea de despedida. Ej. GRACIAS POR SU PAGO.',
         control: input({ value: draft.footer, oninput: set('footer') }),
       }),
+      field({
+        label: 'Dirección de la app del cliente',
+        hint: 'A donde lleva el código QR de las etiquetas de empaque: la página '
+          + 'donde el trabajador instala su propia app.',
+        control: input({ value: draft.appUrl, oninput: set('appUrl'), type: 'url' }),
+      }),
       h('button.btn.btn--primary.btn--block.btn--lg', { type: 'submit' }, 'Guardar')),
     });
   }
@@ -287,12 +294,25 @@ export function renderSettings() {
   function aboutCard() {
     return h('div.stack.stack-3',
       sectionLabel('Empaque'),
-      list([itemRow({
-        lead: h('span.c-faint', icon('box')),
-        title: 'Las libretas y quién las empaca',
-        meta: 'Qué ranchos van en cada libreta, y el número de cada persona',
-        onClick: () => go('/empaque/ajustes'),
-      })], { card: true }),
+      list([
+        itemRow({
+          lead: h('span.c-faint', icon('box')),
+          title: 'Las libretas y quién las empaca',
+          meta: 'Qué ranchos van en cada libreta, y el número de cada persona',
+          onClick: () => go('/empaque/ajustes'),
+        }),
+        // Only while there is anybody left to copy. Once it is done it stops
+        // being an option, because it is not a thing to run twice.
+        pendingPreferences().length
+          ? itemRow({
+            lead: h('span.c-faint', icon('utensils')),
+            title: 'Copiar restricciones a preferencias',
+            meta: `${plural(pendingPreferences().length, 'persona', 'personas')} sin lista `
+              + 'de preferencias. Se copia lo que ya tienen en «No puede comer».',
+            onClick: seedPreferences,
+          })
+          : null,
+      ].filter(Boolean), { card: true }),
 
       sectionLabel('Acerca de'),
       card(defList([
@@ -304,6 +324,51 @@ export function renderSettings() {
   }
 
   /* --- Actions -------------------------------------------------------------- */
+
+  /**
+   * Who has never had a preferences list — the people the copy is for.
+   *
+   * A declaration for the same reason as `aboutCard` above it: `draw()` runs
+   * the instant the listeners are attached, which is before a `const` down
+   * here would have a value.
+   */
+  function pendingPreferences() {
+    return (store.clients || []).filter((row) => row.preferencias === undefined);
+  }
+
+  /**
+   * The one-time copy, with the warning it deserves.
+   *
+   * What comes out of this is printed on a sticker that travels, so the sheet
+   * says plainly what is about to be copied and what the manager has to do
+   * afterwards: take the real allergies back out. Nothing here can tell them
+   * apart, and pretending otherwise would put somebody's medical information
+   * on the outside of a box.
+   */
+  async function seedPreferences() {
+    const waiting = pendingPreferences();
+    await sheet({
+      title: 'Copiar restricciones a preferencias',
+      build: (close) => h('div.stack.stack-3',
+        h('p.t-sm.c-soft',
+          `${plural(waiting.length, 'persona tiene', 'personas tienen')} su lista de `
+          + '«No puede comer» pero todavía no tienen preferencias. Esto copia una a la otra, '
+          + 'una sola vez, sin borrar nada.'),
+        alert('Después hay que revisarlas. Las preferencias se imprimen en la etiqueta '
+          + 'y las alergias no: lo que de verdad sea una alergia hay que quitarlo de '
+          + 'preferencias en la ficha de esa persona.', 'warn', 'alert'),
+        asyncButton(`Copiar a ${plural(waiting.length, 'persona', 'personas')}`, {
+          variant: 'primary', block: true, size: 'lg',
+          onClick: async () => {
+            try {
+              const done = await copyTagsToPreferences(waiting);
+              toastOk(`Copiado a ${plural(done, 'persona', 'personas')}`);
+              close(true);
+            } catch (error) { toastBad(errorText(error)); }
+          },
+        })),
+    });
+  }
 
   /**
    * Editing the price list.

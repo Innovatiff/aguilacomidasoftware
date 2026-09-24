@@ -55,6 +55,26 @@ export const emptyClient = (farm) => ({
   email: '',
   notes: '',
   tags: [],
+  /*
+   * Two lists, on purpose.
+   *
+   * `tags` is what somebody cannot eat and it never leaves the kitchen: it is
+   * on the packing screen in red, where the food is still open, and it is
+   * never printed on a sticker that gets closed under a lid and driven around
+   * a county. `preferencias` is what they asked for — sin picante, sin cebolla
+   * — and that is what goes on the label.
+   *
+   * They started as one list, so most people's preferences were copied out of
+   * their restrictions when this was added. A restriction that turns out to be
+   * a preference is moved by hand; one that is really an allergy is taken out
+   * of here and nothing about it is ever printed.
+   */
+  preferencias: [],
+  // A note for today and nothing else. It carries the day it was written for
+  // rather than being cleared by somebody in the morning, because a field that
+  // needs clearing is a field that still says "doble tortilla" next Thursday.
+  notaDelDia: '',
+  notaDelDiaOn: '',
   mealsPerDay: Number(farm?.defaultMealsPerDay) || 1,
   // Extra plates on particular weekdays, keyed by weekday: { '6': 1 } is one
   // more every Saturday.
@@ -367,8 +387,57 @@ export function normalizeTags(tags) {
   return out;
 }
 
-export const hasTag = (client, tag) =>
-  (client?.tags || []).some((one) => fold(one) === fold(tag));
+export const hasTag = (client, tag, field = 'tags') =>
+  (client?.[field] || []).some((one) => fold(one) === fold(tag));
+
+/** Firestore caps a batch at 500 writes. */
+const BATCH_LIMIT = 450;
+
+/**
+ * Seeds everybody's preferences from the restrictions they already have.
+ *
+ * The two lists used to be one. When the sticker arrived they had to come
+ * apart — an allergy is not printed, a preference is — and there is no way for
+ * software to tell "sin picante" from "sin maní" in a list that was typed
+ * before the distinction existed. So every restriction is copied across once
+ * and the kitchen edits from there: what is really an allergy gets taken back
+ * out of the printed list, by somebody who knows.
+ *
+ * Only people who have never had the field are touched, so running it twice
+ * changes nothing and a list somebody has already cleaned up is left alone.
+ *
+ * @returns {Promise<number>} how many people were given a preferences list.
+ */
+export async function copyTagsToPreferences(clients) {
+  const pending = (clients || []).filter((row) => row.preferencias === undefined);
+  for (let from = 0; from < pending.length; from += BATCH_LIMIT) {
+    const batch = writeBatch(db);
+    for (const client of pending.slice(from, from + BATCH_LIMIT)) {
+      batch.update(doc(db, 'clients', client.id), {
+        preferencias: normalizeTags(client.tags || []),
+        updatedAt: serverTimestamp(),
+      });
+    }
+    await batch.commit();
+  }
+  return pending.length;
+}
+
+/**
+ * The note for one morning: "hoy no viene, dejar con su hermano".
+ *
+ * Stored with the day it is for, so tomorrow it is simply not today's note any
+ * more. Nothing has to run at midnight and nobody has to remember to clear it,
+ * which is the only version of this that survives a busy Monday.
+ */
+export async function setDayNote(clientId, text, day = today()) {
+  const clean = String(text || '').trim();
+  await updateDoc(doc(db, 'clients', clientId), {
+    notaDelDia: clean,
+    notaDelDiaOn: clean ? day : '',
+    updatedAt: serverTimestamp(),
+  });
+}
 
 /**
  * Every restriction in use, most common first.
@@ -376,11 +445,14 @@ export const hasTag = (client, tag) =>
  * The form offers these before it offers an empty box: "sin pollo" is typed
  * once and picked forever after, which is what keeps one restriction from
  * becoming four spellings nobody can count.
+ *
+ * `field` picks the list: the restrictions, or the preferences that go on a
+ * printed label — where four spellings is four different-looking stickers.
  */
-export function tagsInUse(clients) {
+export function tagsInUse(clients, field = 'tags') {
   const counts = new Map();
   for (const client of clients || []) {
-    for (const tag of client.tags || []) {
+    for (const tag of client[field] || []) {
       const key = fold(tag);
       const entry = counts.get(key) || { tag, count: 0 };
       entry.count += 1;
@@ -403,7 +475,7 @@ function sanitize(data) {
     if (value === undefined || NOT_WRITABLE.has(key)) continue;
     if (NUMERIC.has(key)) out[key] = Number(value) || 0;
     else if (key === 'deliveryDays') out[key] = (value || []).map(Number).sort((a, b) => a - b);
-    else if (key === 'tags') out[key] = normalizeTags(value);
+    else if (key === 'tags' || key === 'preferencias') out[key] = normalizeTags(value);
     else if (key === 'extras') out[key] = normalizeExtras(value, data.deliveryDays);
     else if (typeof value === 'string') out[key] = value.trim();
     else out[key] = value;

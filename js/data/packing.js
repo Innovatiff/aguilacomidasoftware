@@ -49,12 +49,24 @@ export const getPacking = async () => normalizePacking(docData(await getDoc(pack
  */
 export async function savePacking(lines, author) {
   const clean = normalizePacking({ lines });
+  // Only the libretas. Writing the whole normalized object would spread
+  // `autoPrint: true` over a kitchen that had deliberately turned it off,
+  // every time somebody moved a farm from one libreta to the other.
   await setDoc(packingRef(), {
-    ...clean,
+    lines: clean.lines,
     updatedAt: serverTimestamp(),
     updatedByName: author?.name || '',
   }, { merge: true });
   return clean;
+}
+
+/** Whether a label prints by itself as each person comes up. */
+export async function setAutoPrint(on, author) {
+  await setDoc(packingRef(), {
+    autoPrint: !!on,
+    updatedAt: serverTimestamp(),
+    updatedByName: author?.name || '',
+  }, { merge: true });
 }
 
 /* --- Who packs --------------------------------------------------------------- */
@@ -196,32 +208,4 @@ export function sitDown(packer) {
     if (packer) sessionStorage.setItem(SEAT, JSON.stringify(packer));
     else sessionStorage.removeItem(SEAT);
   } catch { /* a locked-down browser simply asks for the number again */ }
-}
-
-/* --- How far through a libreta somebody got ---------------------------------- */
-
-/**
- * Progress, on the machine doing the packing.
- *
- * Kept here rather than written to Firestore on every tap: thirty-four writes
- * per libreta is thirty-four round trips between somebody's hand and the next
- * name, and the record only needs the number at the start and at the end. What
- * this is for is a browser that was closed, or a machine that lost power, at
- * plate nineteen.
- */
-const trail = (day, lineId) => `aguila.packing.${day}.${lineId}`;
-
-export function rememberSlide(day, lineId, index) {
-  try { localStorage.setItem(trail(day, lineId), String(index)); } catch { /* ignore */ }
-}
-
-export function recallSlide(day, lineId) {
-  try {
-    const at = Number(localStorage.getItem(trail(day, lineId)));
-    return Number.isFinite(at) && at > 0 ? at : 0;
-  } catch { return 0; }
-}
-
-export function forgetSlide(day, lineId) {
-  try { localStorage.removeItem(trail(day, lineId)); } catch { /* ignore */ }
 }
