@@ -116,6 +116,19 @@
 .pos__exit:hover { background: rgba(255, 255, 255, .16); }
 .pos__exit svg { width: 22px; height: 22px; }
 
+/* On a kitchen computer the same slot holds the name of whoever typed their
+   number. Two lines, because a bare name looks like a label and nobody
+   presses a label: the word under it says what happens if you do. */
+.pos__exit--who { padding-left: 14px; }
+.pos__me { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.12; }
+.pos__me strong { font-size: 19px; font-weight: 800; }
+.pos__me em {
+  font-style: normal;
+  font-size: 13px; font-weight: 700; letter-spacing: .03em;
+  text-transform: uppercase;
+  color: #cfd5dd;
+}
+
 /* The scrolling middle. `min-height: 0` or the flex child refuses to scroll.
    A slide with three controls on it used to sit at the top of a 768px panel
    with three hundred pixels of nothing under it; centring costs nothing when
@@ -290,6 +303,18 @@
 .postile--plan  { --pos-tile: var(--pos-plan); }
 .postile--who   { --pos-tile: var(--pos-who); }
 
+/*
+ * The kitchen's top row: what that machine is for, then the two things it also
+ * does. Three tiles in the height of one, because the board only fits a 768px
+ * panel if it keeps the shape it has — so width, not height, is what says
+ * which of the three matters. The first one is a third wider than the others
+ * and carries a bigger word; from two steps back that reads before anything
+ * else on the screen.
+ */
+.postiles--lead { grid-template-columns: 1.7fr 1fr 1fr; }
+.postiles--lead > :first-child .postile__name { font-size: 40px; }
+@media (max-width: 720px) { .postiles--lead { grid-template-columns: 1fr; } }
+
 /* The one action that is most of the day. */
 .postile--hero {
   min-height: 152px;
@@ -298,6 +323,7 @@
   box-shadow: 0 var(--pos-key) 0 var(--pos-brand-dark);
 }
 .postile--hero:active { box-shadow: 0 0 0 var(--pos-brand-dark); }
+
 /* Inverted on the orange: solid white with the brand glyph, which reads at a
    distance where a translucent panel just looks like a smudge. */
 .postile--hero .postile__ico {
@@ -638,6 +664,7 @@
 
   .postile { min-height: 112px; padding: 14px; }
   .postile--hero { min-height: 128px; }
+  .postiles--lead > :first-child .postile__name { font-size: 36px; }
   .postile__ico svg { width: 34px; height: 34px; }
   .postile--pick { min-height: 88px; }
 
@@ -724,6 +751,16 @@
 /* --- The number ------------------------------------------------------------ */
 
 .pk__pin { display: flex; flex-direction: column; gap: var(--s4); align-items: center; }
+
+/* The keypad is the first thing a kitchen computer shows and, for most of the
+   morning, the only thing. Sitting in the top third of a 768px screen it read
+   like a form somebody had abandoned halfway; down the middle it reads like
+   what it is — a door with a number on it. */
+.pk--asking {
+  min-height: 100%;
+  justify-content: center;
+  padding-bottom: var(--s6);
+}
 
 .pk__dots { display: flex; gap: var(--s3); justify-content: center; }
 .pk__dot {

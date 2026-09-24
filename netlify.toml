@@ -21,6 +21,12 @@
   [headers.values]
     Cache-Control = "public, max-age=0, must-revalidate"
 
+# The kitchen's entry point, same reasoning.
+[[headers]]
+  for = "/empaque.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
 # The service worker must never be stale: it is what decides how everything
 # else is cached, so a pinned copy would keep serving an old app forever.
 [[headers]]
@@ -40,6 +46,11 @@
 
 [[headers]]
   for = "/manifest.webmanifest"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/empaque.webmanifest"
   [headers.values]
     Cache-Control = "public, max-age=0, must-revalidate"
 
@@ -69,6 +80,21 @@
 # Real files win over this rule, so it only catches paths that do not exist —
 # a mistyped URL lands on the app instead of a Netlify 404.
 # ---------------------------------------------------------------------------
+
+# The address dictated to the kitchen is /empaque — short enough to type on a
+# machine with no keyboard shortcuts and no bookmarks yet. Spelled out rather
+# than left to pretty-URL guessing, because the rule underneath would quietly
+# answer it with the panel.
+[[redirects]]
+  from = "/empaque"
+  to = "/empaque.html"
+  status = 200
+
+# Y con la diagonal al final, que es como la teclea media gente.
+[[redirects]]
+  from = "/empaque/"
+  to = "/empaque.html"
+  status = 200
 
 [[redirects]]
   from = "/*"

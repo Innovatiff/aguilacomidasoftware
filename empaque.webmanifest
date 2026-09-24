@@ -1,0 +1,20 @@
+{
+  "name": "El Águila · Empaque",
+  "short_name": "Empaque",
+  "description": "La libreta de empaque de la cocina: quién empaca, qué rancho y qué lleva cada persona.",
+  "id": "/aguila-empaque",
+  "start_url": "./empaque.html",
+  "scope": "./empaque.html",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#21262c",
+  "lang": "es",
+  "dir": "ltr",
+  "categories": ["business", "food"],
+  "icons": [
+    { "src": "./assets/empaque.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "./assets/empaque-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./assets/empaque-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./assets/empaque-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

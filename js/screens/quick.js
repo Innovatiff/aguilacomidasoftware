@@ -42,6 +42,8 @@ import {
 } from '../lib/billing.js';
 import { periodCharge, tierFor } from '../lib/pricing.js';
 import { money, plural } from '../lib/format.js';
+import { kitchen } from '../lib/mode.js';
+import { seatedPacker, sitDown } from '../data/packing.js';
 import { paymentMethodMeta } from '../lib/model.js';
 import {
   today, addDays, formatDay, formatDayLong, weekdayName, capitalize, WEEKDAYS_SHORT,
@@ -68,6 +70,11 @@ const round2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
 const owedBy = (client) => billingFor(client)?.balance || 0;
 
 export function renderQuick() {
+  // On a kitchen computer this menu belongs to whoever typed their number.
+  // Reached without one — a reload, a bookmark, somebody's first morning —
+  // it sends them to the keypad rather than opening nameless.
+  if (kitchen() && !seatedPacker()) { go('/empaque'); return undefined; }
+
   let panel = null;
   // The action running on top, if any — so a window that shrinks below the
   // threshold can close it rather than leave it squeezed.
@@ -96,8 +103,8 @@ export function renderQuick() {
     if (wideEnough()) { mountPos(); return; }
     unmountPos();
     screen({
-      title: 'Acción rápida',
-      backTo: '/',
+      title: kitchen() ? 'Empaque' : 'Acción rápida',
+      backTo: kitchen() ? '/empaque' : '/',
       tab: 'home',
       body: h('div.page__inner', emptyState({
         icon: 'bolt',
@@ -105,28 +112,50 @@ export function renderQuick() {
         text: 'Acción rápida está hecha para la computadora del mostrador: botones grandes, '
           + 'un teclado numérico y una pregunta por pantalla. En el teléfono no cabe, y aquí '
           + 'el panel normal hace lo mismo con menos vueltas.',
-        action: button('Ir a Clientes', {
-          variant: 'primary', block: true, icon: 'users', onClick: () => go('/clients'),
-        }),
+        action: kitchen()
+          ? button('Ir a Empaque', {
+            variant: 'primary', block: true, icon: 'box', onClick: () => go('/empaque'),
+          })
+          : button('Ir a Clientes', {
+            variant: 'primary', block: true, icon: 'users', onClick: () => go('/clients'),
+          }),
       })),
     });
   }
 
   function mountPos() {
     if (panel) return;
-    screen({ title: 'Acción rápida', hideTabs: true, body: h('div') });
+    const cocina = kitchen();
+    screen({ title: cocina ? 'Empaque' : 'Acción rápida', hideTabs: true, body: h('div') });
 
     panel = h('div.pos.pos--home',
       h('header.pos__bar',
-        h('button.pos__exit', { type: 'button', onclick: () => go('/') },
+        // In the panel the button on the left is the way out. On a kitchen
+        // computer there is nothing to go out to, so the same slot says who
+        // is sitting there — and pressing it is how the next person takes
+        // over, which is the only thing anybody wants from it.
+        cocina ? whoButton() : h('button.pos__exit', { type: 'button', onclick: () => go('/') },
           icon('chevronL'), h('span', 'Salir')),
         h('span.pos__mark', icon('eagle')),
-        h('span.pos__title', 'Acción rápida'),
+        h('span.pos__title', cocina ? 'Empaque' : 'Acción rápida'),
         h('span.pos__day', capitalize(formatDayLong(today())))),
       h('div.pos__body', h('div.pos__inner', { id: 'quick-tiles' })));
 
     document.body.append(panel);
     paintTiles();
+  }
+
+  /** The name on the bar, and the way to hand the machine to somebody else. */
+  function whoButton() {
+    const me = seatedPacker();
+    return h('button.pos__exit.pos__exit--who', {
+      type: 'button',
+      onclick: () => { sitDown(null); go('/empaque'); },
+    },
+    icon('users'),
+    h('span.pos__me',
+      h('strong', me?.name || 'Sin nombre'),
+      h('em', 'Cambiar')));
   }
 
   function unmountPos() {
@@ -160,24 +189,45 @@ export function renderQuick() {
     if (!host) return;
     const ready = store.loaded.clients && store.loaded.farms;
 
+    const tileCharge = () => posTile({
+      icon: 'cash', title: 'Cobrar',
+      sub: 'Registrar un pago',
+      hero: true,
+      onClick: () => ready && flowCharge(),
+    });
+    const tileMeals = () => posTile({
+      icon: 'utensils', title: 'Cambiar comidas', family: 'plan',
+      sub: '1 ó 2 al día',
+      onClick: () => ready && flowMeals(),
+    });
+
     mount(host,
       h('h2.pos__q', '¿Qué vas a hacer?'),
       h('p.pos__hint', ready
         ? `${plural(store.clients.length, 'cliente', 'clientes')} · se cobra en ${payDaysInWords()}`
         : 'Cargando…'),
 
-      h('div.postiles.postiles--2', { style: { marginBottom: '14px' } },
-        posTile({
-          icon: 'cash', title: 'Cobrar',
-          sub: 'Registrar un pago',
-          hero: true,
-          onClick: () => ready && flowCharge(),
-        }),
-        posTile({
-          icon: 'utensils', title: 'Cambiar comidas', family: 'plan',
-          sub: '1 ó 2 al día',
-          onClick: () => ready && flowMeals(),
-        })),
+      /*
+       * The top row.
+       *
+       * At the counter it is Cobrar, twice the size of anything else. In the
+       * kitchen, Empacar goes in front of it — wider than both the tiles
+       * beside it, which is what says it is the one that matters, and in the
+       * same row rather than a band of its own: the board has to fit a 768px
+       * panel with the day's takings still visible under it, and a row of its
+       * own costs a hundred pixels that panel does not have.
+       */
+      kitchen()
+        ? h('div.postiles.postiles--lead', { style: { marginBottom: '14px' } },
+            posTile({
+              icon: 'box', title: 'Empacar',
+              sub: 'La comida de hoy, rancho por rancho',
+              hero: true,
+              onClick: () => go('/empaque'),
+            }),
+            tileCharge(), tileMeals())
+        : h('div.postiles.postiles--2', { style: { marginBottom: '14px' } },
+            tileCharge(), tileMeals()),
 
       h('div.postiles.postiles--4',
         posTile({

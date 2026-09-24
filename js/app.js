@@ -35,6 +35,7 @@ import { renderMessages } from './screens/messages.js';
 import { renderChat } from './screens/chat.js';
 import { renderSettings } from './screens/settings.js';
 import { emptyState, button } from './ui/kit.js';
+import { kitchen } from './lib/mode.js';
 
 const TABS = [
   { id: 'home',     path: '/',         label: 'Inicio',   icon: 'home' },
@@ -105,11 +106,23 @@ function enter(next) {
   host.replaceChildren();
   configureShell({
     mount: host,
-    tabs: TABS,
-    brand: { name: 'El Águila', sub: 'Administración' },
+    // The kitchen computers get no navigation at all. That machine has one
+    // job, and a rail offering Clientes, Reportes and Mensajes next to it is
+    // both a distraction and a way to end up somewhere nobody meant to go.
+    tabs: kitchen() ? [] : TABS,
+    brand: { name: 'El Águila', sub: kitchen() ? 'Empaque' : 'Administración' },
   });
   startStore();
-  stopBadge = subscribe(() => setTabBadge('messages', unreadCount()));
+  if (!kitchen()) stopBadge = subscribe(() => setTabBadge('messages', unreadCount()));
+
+  // The kitchen's shortcut opens `empaque.html` with no address after it. It
+  // is not the panel's home screen that should answer — it is the keypad.
+  //
+  // `replaceState` rather than setting the hash: assigning to `location.hash`
+  // fires `hashchange` a tick later, and the router — which is about to read
+  // the address anyway — would draw the screen twice and re-attach its
+  // listeners in between.
+  if (kitchen() && !location.hash.slice(1)) history.replaceState(null, '', '#/empaque');
 
   if (!routerStarted) {
     registerRoutes();
@@ -161,13 +174,20 @@ function registerRoutes() {
   register('/settings', renderSettings);
 
   setNotFound(() => {
+    // On a kitchen computer "el inicio" is the keypad, not the panel: that
+    // machine has no rail to climb back out with, so a button that lands on
+    // the dashboard would leave somebody stuck on a screen they never meant
+    // to open.
+    const homeHref = kitchen() ? '/empaque' : '/';
     screen({
       title: 'No encontrado',
       body: emptyState({
         icon: 'search',
         title: 'Esta pantalla no existe',
         text: 'El enlace puede estar mal escrito o la pantalla ya no está disponible.',
-        action: button('Ir al inicio', { onClick: () => go('/') }),
+        action: button(kitchen() ? 'Ir a Empaque' : 'Ir al inicio', {
+          onClick: () => go(homeHref),
+        }),
       }),
     });
   });

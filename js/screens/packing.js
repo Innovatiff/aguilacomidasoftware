@@ -24,6 +24,7 @@ import {
 } from '../data/packing.js';
 import { packingSequence, packerByPin, unassignedFarms } from '../lib/packing.js';
 import { today, formatDayLong, formatTime, capitalize } from '../lib/dates.js';
+import { kitchen } from '../lib/mode.js';
 import { plural, number } from '../lib/format.js';
 
 export function renderPacking() {
@@ -46,15 +47,25 @@ export function renderPacking() {
 
   function paint() {
     if (!life.alive()) return;
+    const content = bodyFor();
+    // The keypad gets the whole screen to itself; everything else is a page.
+    const asking = content?.classList?.contains('pk__pin');
+
     screen({
       title: 'Empaque',
       subtitle: capitalize(formatDayLong(day)),
       tab: 'packing',
+      // On a kitchen computer there is no tab bar to get back to the menu
+      // with, so the chevron is the way; in the panel the tab already is.
+      // Not while it is asking for a number, though — there is nothing behind
+      // that screen but itself, and a chevron that comes straight back is a
+      // button people press twice before deciding the app is broken.
+      backTo: kitchen() && !asking ? '/rapido' : undefined,
       sunken: true,
       actions: [topbarButton('settings', {
         label: 'Configurar el empaque', onClick: () => go('/empaque/ajustes'),
       })],
-      body: h('div.page__inner.pk.stack.stack-5', bodyFor()),
+      body: h(`div.page__inner.pk.stack.stack-5${asking ? '.pk--asking' : ''}`, content),
     });
   }
 
@@ -117,6 +128,10 @@ export function renderPacking() {
         packer = { id: found.id, name: found.name };
         sitDown(packer);
         typed = '';
+        // In the kitchen the number is the way in to the whole machine, and
+        // what follows it is the menu. In the panel this screen was opened to
+        // pack, and the next question is which libreta.
+        if (kitchen()) { go('/rapido'); return; }
         paint();
         return;
       }

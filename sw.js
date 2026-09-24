@@ -12,11 +12,13 @@
  * Bump VERSION when the shell list changes; `activate` drops every older cache.
  */
 
-const VERSION = 'aguila-panel-v4';
+const VERSION = 'aguila-panel-v5';
 const SHELL = [
   './',
   './index.html',
+  './empaque.html',
   './manifest.webmanifest',
+  './empaque.webmanifest',
   './css/tokens.css',
   './css/base.css',
   './css/components.css',
@@ -25,8 +27,19 @@ const SHELL = [
   './css/print.css',
   './assets/icon.svg',
   './assets/icon-180.png',
+  './assets/empaque.svg',
+  './assets/empaque-180.png',
   './js/app.js',
 ];
+
+/**
+ * Which document answers a navigation nothing else could.
+ *
+ * There are two entry points and they are not interchangeable: falling back to
+ * the panel would drop a kitchen computer, offline, into the manager's app
+ * with a rail full of screens it is not supposed to have.
+ */
+const shellFor = (pathname) => (pathname.includes('empaque') ? './empaque.html' : './index.html');
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -77,7 +90,8 @@ self.addEventListener('fetch', (event) => {
           }
           return response;
         })
-        .catch(() => caches.match(request).then((hit) => hit || caches.match('./index.html'))),
+        .catch(() => caches.match(request)
+          .then((hit) => hit || caches.match(shellFor(url.pathname)))),
     );
     return;
   }

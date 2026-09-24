@@ -326,7 +326,54 @@ un segundo recibo en negativo que lo referencia — como se corrige un libro de
 caja. Los dos quedan visibles para los dos lados, que es la única forma de que
 la cuenta se pueda verificar después.
 
-### 10. Correr en local
+### 10. Empacar la comida
+
+Todas las mañanas hay que llenar las charolas rancho por rancho, y eso se hace
+en dos computadoras a la vez: una colaboradora lleva la **Libreta 1** y otra la
+**Libreta 2**.
+
+**Configurarlo** — *Empaque → el engrane de arriba*. Ahí se da de alta a quién
+empaca (nombre y número) y se reparten los ranchos entre las dos libretas. Un
+rancho sólo puede estar en una; si queda fuera de las dos, la pantalla lo avisa,
+porque esa comida no se empacaría.
+
+**Empacar** — se escribe el número, se elige la libreta, y la pantalla va
+pasando de uno en uno: primero el rancho («One Floral · 8 personas») y después
+cada persona, con sus **restricciones en rojo** y su nota. Se avanza con el
+botón grande, con la barra espaciadora o con →; se regresa con ←.
+
+Las dos computadoras se ven entre ellas: quien llega segunda alcanza a ver que
+la primera ya va por la mitad de la Libreta 1, que es lo que evita que la misma
+comida se empaque dos veces y el otro rancho no se empaque nunca.
+
+El número **no es una contraseña**. Sirve para que quede escrito quién empacó
+cada libreta; la pantalla ya está dentro del panel, detrás de una cuenta de la
+cocina, y quien puede escribir el número ya podía entrar sin él.
+
+#### Instalar la app de empaque en las computadoras de la cocina
+
+La cocina tiene su propia puerta — **`/empaque`** — con su propio icono, su
+propio nombre y nada del panel adentro: abre directo en «¿Quién eres?» y
+después en el menú, con **Empacar** de primero y el mostrador completo debajo.
+
+En cada computadora, una sola vez:
+
+1. Abre Chrome o Edge en `https://TUSITIO.netlify.app/empaque`.
+2. Entra con la cuenta de la cocina. Queda entrada; no la vuelve a pedir.
+3. En la barra de direcciones, a la derecha, toca el icono de instalar
+   (⊕, o *Instalar El Águila · Empaque*) → **Instalar**.
+
+Queda un acceso directo naranja con una caja. De ahí en adelante se abre con
+doble clic, sin barra de direcciones y sin pestañas, directo en el teclado.
+
+Al cerrar la ventana se olvida quién estaba, así que a la mañana siguiente
+vuelve a preguntar. Dentro del mismo día el nombre se cambia tocándolo arriba a
+la izquierda.
+
+El panel se sigue instalando desde la dirección de siempre y no cambia en nada:
+son dos accesos directos distintos, cada uno con su icono.
+
+### 11. Correr en local
 
 No hay dependencias ni build. Cualquier servidor estático sirve:
 
@@ -335,13 +382,16 @@ npx http-server . -p 5173 -c-1
 # o: python3 -m http.server 5173
 ```
 
-Abre `http://localhost:5173`. Agrega `localhost` en
-**Authentication → Settings → Authorized domains** si el inicio de sesión falla.
+Abre `http://localhost:5173` para el panel y
+`http://localhost:5173/empaque.html` para la cocina — en local hay que escribir
+el `.html`, porque la dirección corta `/empaque` la resuelve Netlify. Agrega
+`localhost` en **Authentication → Settings → Authorized domains** si el inicio
+de sesión falla.
 
 > Los módulos ES no funcionan abriendo `index.html` con `file://`. Usa un
 > servidor.
 
-### 11. Publicar en Netlify
+### 12. Publicar en Netlify
 
 El sitio se publica solo: Netlify vigila la rama del repositorio y sube cada
 push. No hay build — la raíz del repositorio *es* el sitio, y `netlify.toml` ya
@@ -360,7 +410,7 @@ Al conectar el repositorio en Netlify:
 Authorized domains → Add domain**, y agrega el dominio de Netlify
 (`tu-sitio.netlify.app` y tu dominio propio si lo tienes).
 
-### 12. Publicar las reglas
+### 13. Publicar las reglas
 
 **Publicar el sitio no publica las reglas.** Son dos cosas distintas y es la
 causa más común de «ya lo arreglé pero sigue igual». Netlify sube la app;
@@ -388,9 +438,11 @@ con `firebase deploy --only firestore:indexes`.
 ## Cómo está organizado
 
 ```
-index.html            una sola página; todo lo demás se monta con JavaScript
+index.html            el panel; todo lo demás se monta con JavaScript
+empaque.html          la puerta de la cocina: el mismo código, otra entrada
 sw.js                 service worker: cachea el shell para trabajar sin señal
 manifest.webmanifest  instalable en el teléfono
+empaque.webmanifest   la app de empaque, con su propio icono y su propio nombre
 
 css/
   tokens.css          color, tipografía, espacio, sombras
@@ -409,6 +461,8 @@ js/
     format.js         dinero (CAD), números, teléfonos, iniciales
     model.js          estados de entrega, métodos de pago, respuestas rápidas
     icons.js          set de iconos SVG
+    mode.js           por cuál de las dos puertas se abrió la app
+    packing.js        el orden en que se empaca: rancho, lugar, persona
   data/               una capa por colección de Firestore
     session.js  staff.js  pricing.js  farms.js  clients.js
     deliveries.js  invoices.js  receipts.js  chat.js
@@ -550,6 +604,22 @@ receipts/{receiptId}             -- se escribe una vez y nunca se toca
   balanceAfter
   reversalOf                     -- folio que cancela, si aplica
   takenByName, takenByUid, at
+
+config/packing                   -- cómo se reparte el empaque
+  lines [{ id, name, farmIds }]  -- exactamente dos libretas
+  updatedAt, updatedByName
+
+packers/{packerId}               -- quién empaca y con qué número entra
+  name, pin, active              -- el número es una etiqueta, no una contraseña
+  createdAt, updatedAt, updatedByName
+
+packRuns/{YYYY-MM-DD_lineId}     -- una libreta, una mañana; nunca se borra
+  date, lineId, lineName
+  packerId, packerName           -- quien la abrió
+  packerNames [nombres]          -- las dos, si la mañana cambió de manos
+  farms, people, plates          -- el tamaño del trabajo al empezar
+  packed                         -- por dónde iba
+  done, startedAt, finishedAt, updatedAt
 
 conversations/{clientId}
   clientName, lastMessage, lastAt, lastSenderRole

@@ -1,24 +1,30 @@
 <!doctype html>
 <html lang="es">
 <head>
+  <!--
+    La puerta de la cocina.
+
+    Es index.html con otro nombre, otro icono y data-mode="kitchen". Se instala
+    en las dos computadoras donde se empaca: abre directo en "¿Quién eres?", no
+    trae la navegación del panel, y en el menú el botón más grande es Empacar.
+
+    Todo lo que está de <body> para abajo es idéntico a index.html a propósito,
+    incluido el arranque del service worker. Si se toca uno, se toca el otro.
+  -->
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#21262c">
-  <meta name="description" content="Panel de administración de El Águila Cocina: clientes, entregas, cobros quincenales y mensajería.">
+  <meta name="description" content="La libreta de empaque de El Águila Cocina: quién empaca, qué rancho y qué lleva cada persona.">
   <meta name="color-scheme" content="light">
 
-  <title>El Águila Cocina · Administración</title>
+  <title>El Águila · Empaque</title>
 
-  <!-- La cocina entra por empaque.html, que es este archivo con otro nombre,
-       otro icono y data-mode="kitchen". Lo que está de <body> para abajo es
-       idéntico en los dos a propósito. Si se toca uno, se toca el otro. -->
-
-  <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="./assets/icon-180.png">
+  <link rel="manifest" href="./empaque.webmanifest">
+  <link rel="icon" href="./assets/empaque.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./assets/empaque-180.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Águila Admin">
+  <meta name="apple-mobile-web-app-title" content="Empaque">
 
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -34,7 +40,7 @@
   <link rel="stylesheet" href="./css/pos.css">
   <link rel="stylesheet" href="./css/print.css">
 </head>
-<body>
+<body data-mode="kitchen">
   <div id="app"></div>
 
   <noscript>
