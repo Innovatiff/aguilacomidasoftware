@@ -144,7 +144,7 @@ export function renderPackingRun(context) {
       title: plan?.line?.name || 'Empaque',
       subtitle: `${packer.name} · ${capitalize(formatDayLong(day))}`,
       backTo: '/empaque',
-      tab: 'home',
+      tab: 'packing',
       // The tab bar is a way out of a job somebody is halfway through. The
       // chevron is the way out, and it is one place.
       hideTabs: true,

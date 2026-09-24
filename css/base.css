@@ -195,6 +195,13 @@ img, svg { display: block; max-width: 100%; }
   box-sizing: content-box;
 }
 
+/* Seven tabs on a small phone leave the words shoulder to shoulder: measured
+   at 320px, the labels filled the bar edge to edge with nothing between them.
+   A slightly smaller label gives each word air on both sides. */
+@media (max-width: 400px) {
+  .tab { font-size: 10px; letter-spacing: 0; }
+}
+
 /* --- Utilities ------------------------------------------------------------ */
 
 .stack   { display: flex; flex-direction: column; }

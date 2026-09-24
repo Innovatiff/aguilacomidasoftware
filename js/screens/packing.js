@@ -49,8 +49,7 @@ export function renderPacking() {
     screen({
       title: 'Empaque',
       subtitle: capitalize(formatDayLong(day)),
-      tab: 'home',
-      backTo: '/',
+      tab: 'packing',
       sunken: true,
       actions: [topbarButton('settings', {
         label: 'Configurar el empaque', onClick: () => go('/empaque/ajustes'),

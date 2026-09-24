@@ -52,7 +52,7 @@ export function renderPackingSetup() {
       title: 'Configurar el empaque',
       subtitle: 'Las libretas y quién las empaca',
       backTo: '/empaque',
-      tab: 'home',
+      tab: 'packing',
       sunken: true,
       body: h('div.page__inner.rbig.stack.stack-5', bodyFor()),
     });

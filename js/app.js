@@ -42,10 +42,12 @@ const TABS = [
   { id: 'farms',    path: '/farms',    label: 'Ranchos',  icon: 'farm' },
   { id: 'clients',  path: '/clients',  label: 'Clientes', icon: 'users' },
   { id: 'messages', path: '/messages', label: 'Mensajes', icon: 'chat' },
-  // Last, so nothing above it moves. The counter's staff reach for the same
-  // four places a hundred times a day and know where they are by position;
-  // Reportes is opened by one person, sitting down, who will read the labels.
+  // These two go last, so nothing above them moves. The counter's staff reach
+  // for the same four places a hundred times a day and know where they are by
+  // position; Reportes and Empaque are opened once, deliberately, by someone
+  // who will read the label before pressing it.
   { id: 'reports',  path: '/reportes', label: 'Reportes', icon: 'chart' },
+  { id: 'packing',  path: '/empaque',  label: 'Empaque',  icon: 'box' },
 ];
 
 const host = $('#app');
