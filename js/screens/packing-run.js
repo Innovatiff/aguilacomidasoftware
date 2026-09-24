@@ -5,16 +5,26 @@
  * backward, and nothing else: no list to lose your place in, no form, no
  * decision. The person using this has a plate in one hand.
  *
- * What is on a person's screen is decided by what gets somebody's food wrong:
+ * A person's screen is four things down one left edge, and never more:
  *
- *   1. **How many plates**, in the largest type on the screen. It is the one
- *      number that has to be right, and it is read before the name.
- *   2. **What they cannot eat**, next, in red, before anything else about
- *      them. A restriction read after the lid is closed is a restriction that
- *      did not work.
- *   3. **Their name**, big enough to check against the label.
+ *   1. **Where** — the farm and the house, quiet. Within a farm it barely
+ *      changes; it is reassurance, not news.
+ *   2. **Who, and how many**, on one line. They are read as one thought —
+ *      "Rafael Núñez, two meals" — so they are one row rather than two blocks
+ *      taking turns at being the biggest thing on the screen. The name is the
+ *      larger of the two because it is what goes on the container; the count
+ *      is the only orange on the slide, which is how it is found.
+ *   3. **What they cannot eat**, when there is anything — red, and the only
+ *      thing that interrupts the column. A restriction read after the lid is
+ *      closed is a restriction that did not work.
  *   4. **The note the kitchen wrote** — "trabaja de noche, dejar con el
  *      encargado" — last, because it is read once the plate is made.
+ *
+ * Everything starts at the same left edge on every slide, so the eye lands in
+ * the same place forty times in a row instead of hunting for the middle of a
+ * name it has not read yet. Nothing is boxed that does not need to be: one
+ * card, and inside it two tinted blocks that only appear when they have
+ * something to say.
  *
  * The keyboard moves it too: space, enter or the right arrow go forward, the
  * left arrow goes back. On a counter machine with a cheap mouse that is the
@@ -193,9 +203,9 @@ export function renderPackingRun(context) {
       h('div.pkbar__track', h('div.pkbar__fill', {
         style: { width: `${Math.round((done / people) * 100)}%` },
       })),
-      h('div.pkbar__text',
-        h('span', `${number(done)} de ${number(people)}`),
-        h('span', plural(plan.farms.length, 'rancho', 'ranchos'))));
+      // How many people are packed, and nothing else. The number of farms was
+      // on this line too; it never changed while anybody was reading it.
+      h('div.pkbar__text', `${number(done)} de ${number(people)}`));
   }
 
   /* --- The three kinds of slide ---------------------------------------------- */
@@ -204,14 +214,12 @@ export function renderPackingRun(context) {
     return h('div.pkfarm',
       h('div.pkfarm__eyebrow', 'Sigue este rancho'),
       h('h2.pkfarm__name', slide.farm.name),
+      // One line instead of two stacked columns of figures. It is the size of
+      // what is coming, read once; the line under the name is enough for that.
       h('div.pkfarm__nums',
-        h('div.pkfarm__num',
-          h('span.pkfarm__n', number(slide.people)),
-          h('span.pkfarm__l', slide.people === 1 ? 'persona' : 'personas')),
-        h('div.pkfarm__num',
-          h('span.pkfarm__n', number(slide.plates)),
-          h('span.pkfarm__l', 'comidas'))),
-      h('p.pkfarm__hint', 'Dale a Siguiente para ver a la primera persona.'));
+        h('span', h('b', number(slide.people)), slide.people === 1 ? ' persona' : ' personas'),
+        h('span.pkfarm__dot', '·'),
+        h('span', h('b', number(slide.plates)), ' comidas')));
   }
 
   function clientSlide(slide) {
@@ -221,31 +229,30 @@ export function renderPackingRun(context) {
 
     return h('div.pkperson',
       h('div.pkperson__where',
-        h('span', slide.farm.name),
-        slide.place?.name ? h('span.pkperson__dot', '·') : null,
-        slide.place?.name ? h('span', slide.place.name) : null),
+        [slide.farm.name, slide.place?.name].filter(Boolean).join(' · ')),
 
-      // 1. How many. The number the morning turns on.
-      h('div.pkperson__plates',
-        h('span.pkperson__count', number(slide.plates)),
-        h('span.pkperson__word', slide.plates === 1 ? 'comida' : 'comidas')),
+      // Who, and how many, on one line.
+      h('div.pkperson__head',
+        h('h2.pkperson__name', client.name),
+        h('div.pkperson__plates',
+          h('span.pkperson__count', number(slide.plates)),
+          h('span.pkperson__word', slide.plates === 1 ? 'comida' : 'comidas'))),
 
-      // 2. What they cannot eat, before the name and impossible to scroll past.
+      // What they cannot eat. The words themselves usually say it — "sin
+      // pollo" — but they are typed by hand, and a tag written "maní" instead
+      // of "sin maní" would read as exactly the wrong instruction. So the
+      // label stays; it is just the quiet line now, over the loud one.
       diet.length
         ? h('div.pkdiet',
-            h('div.pkdiet__head', icon('alert'), 'No puede comer'),
-            h('div.pkdiet__tags', diet.map((tag) => h('span.pkdiet__tag', tag))))
+            icon('alert'),
+            h('div.pkdiet__body',
+              h('span.pkdiet__head', 'No puede comer'),
+              h('span.pkdiet__what', diet.join(' · '))))
         : null,
 
-      // 3. Who it is for.
-      h('h2.pkperson__name', client.name),
-
-      // 4. What the kitchen wrote in the margin.
-      note
-        ? h('div.pknote',
-            h('div.pknote__head', icon('note'), 'Nota'),
-            h('p.pknote__text', note))
-        : null);
+      // What the kitchen wrote in the margin. It does not need a label either;
+      // it is the only sentence on the screen.
+      note ? h('p.pknote', note) : null);
   }
 
   function doneSlide() {

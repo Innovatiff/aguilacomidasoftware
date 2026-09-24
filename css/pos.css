@@ -877,110 +877,145 @@
    ========================================================================== */
 
 /* Wide enough to set a name large, narrow enough that the eye does not have to
-   travel across a whole 1366px window to get from the plate count to the name. */
+   cross a 1366px window to get from the name to the count beside it. */
 .pkstage { max-width: 920px; margin: 0 auto; }
 .pkstage__wrap { display: flex; flex-direction: column; gap: var(--s4); min-height: 0; }
 
-.pkbar { display: flex; flex-direction: column; gap: var(--s1); }
-.pkbar__track { height: 12px; border-radius: var(--r-full); background: var(--ink-150); overflow: hidden; }
+.pkbar { display: flex; flex-direction: column; gap: var(--s2); }
+.pkbar__track { height: 10px; border-radius: var(--r-full); background: var(--ink-150); overflow: hidden; }
 .pkbar__fill { height: 100%; background: var(--brand-500); border-radius: var(--r-full); transition: width 180ms var(--ease); }
-.pkbar__text {
-  display: flex; justify-content: space-between;
-  font-size: var(--fs-sm); font-weight: 600; color: var(--text-soft);
-}
+.pkbar__text { font-size: var(--fs-sm); font-weight: 700; color: var(--text-soft); }
 
+/* One card, and no border on it. A hairline around a white card on a grey page
+   is a line that draws itself; the page already says where the card ends. */
 .pkstage__slide {
-  display: flex; flex-direction: column; justify-content: center;
-  min-height: 380px;
+  display: flex; flex-direction: column;
+  min-height: 300px;
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  padding: var(--s6) var(--s5);
+  border-radius: var(--r-xl);
+  padding: var(--s7);
   box-shadow: var(--sh-1);
 }
 
+/* Everything on every slide starts at the same left edge. Centred, each name
+   began somewhere new and the eye had to find it forty times in a row. */
+
 /* --- A farm is starting ----------------------------------------------------- */
 
-.pkfarm { text-align: center; display: flex; flex-direction: column; gap: var(--s4); align-items: center; }
+.pkfarm { display: flex; flex-direction: column; }
 .pkfarm__eyebrow {
-  font-size: var(--fs-sm); font-weight: 700; letter-spacing: .14em;
+  margin-bottom: var(--s3);
+  font-size: var(--fs-md); font-weight: 700; letter-spacing: .14em;
   text-transform: uppercase; color: var(--brand-600);
 }
-.pkfarm__name { font-size: clamp(2rem, 6vw, 3.2rem); font-weight: 800; letter-spacing: -.03em; margin: 0; line-height: 1.05; }
-.pkfarm__nums { display: flex; gap: var(--s7); }
-.pkfarm__num { display: flex; flex-direction: column; }
-.pkfarm__n { font-size: var(--fs-3xl); font-weight: 800; line-height: 1; }
-.pkfarm__l { font-size: var(--fs-sm); color: var(--text-soft); }
-.pkfarm__hint { color: var(--text-faint); font-size: var(--fs-base); margin: 0; }
+.pkfarm__name {
+  margin: 0 0 var(--s4);
+  font-size: clamp(2.25rem, 6.4vw, 4.5rem);
+  font-weight: 800; letter-spacing: -.035em; line-height: 1.02;
+}
+.pkfarm__nums {
+  display: flex; gap: var(--s3);
+  font-size: var(--fs-2xl); color: var(--text-soft);
+}
+.pkfarm__nums b { font-weight: 800; color: var(--text); }
+.pkfarm__dot { color: var(--text-faint); }
 
 /* --- One person ------------------------------------------------------------- */
 
-.pkperson { display: flex; flex-direction: column; gap: var(--s3); align-items: center; text-align: center; }
+/* Set large on purpose. This is read from a step or two back, by somebody
+   holding a container, not by somebody leaning into a laptop. */
+.pkperson { display: flex; flex-direction: column; }
+.pkperson > :last-child { margin-bottom: 0; }
 
 .pkperson__where {
-  display: flex; gap: var(--s2); align-items: center;
-  font-size: var(--fs-md); font-weight: 600; color: var(--text-soft);
-  text-transform: uppercase; letter-spacing: .06em;
+  margin-bottom: var(--s3);
+  font-size: var(--fs-md); font-weight: 700;
+  letter-spacing: .12em; text-transform: uppercase;
+  color: var(--text-soft);
 }
-.pkperson__dot { color: var(--text-faint); }
 
-/* The number the morning turns on, and the first thing read. */
-.pkperson__plates { display: flex; align-items: baseline; gap: var(--s3); }
+/* The name and the count are one thought, so they are one row. The name is
+   larger — it is what goes on the container — and the count is the only orange
+   on the slide, which is how it is found without being shouted. */
+.pkperson__head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: var(--s6); flex-wrap: wrap;
+  margin-bottom: var(--s6);
+}
+.pkperson__name {
+  margin: 0; min-width: 0;
+  font-size: clamp(2.25rem, 6vw, 4.25rem);
+  font-weight: 800; letter-spacing: -.035em; line-height: 1.02;
+}
+/* The count stacks: the numeral and its word are one block in the corner, in
+   the same place on every slide, rather than a phrase trailing off the end of
+   a name that is a different length every time. */
+.pkperson__plates { flex: none; display: flex; flex-direction: column; align-items: flex-end; }
 .pkperson__count {
-  font-size: clamp(3.5rem, 11vw, 6rem);
-  font-weight: 800; line-height: 1; letter-spacing: -.04em;
+  font-size: clamp(2.25rem, 4.8vw, 3.5rem);
+  font-weight: 800; line-height: 1; letter-spacing: -.03em;
   color: var(--brand-600);
 }
 .pkperson__word {
-  font-size: var(--fs-xl); font-weight: 700; color: var(--text-soft);
-  text-transform: uppercase; letter-spacing: .06em;
+  font-size: var(--fs-md); font-weight: 700;
+  text-transform: uppercase; letter-spacing: .1em;
+  color: var(--text-soft);
+}
+/* Too narrow for a corner. Wrapped onto its own line the stacked block read
+   as two loose pieces, so below the counter width it goes back to being a
+   phrase under the name — which is what it is when it is not out on its own. */
+@media (max-width: 899px) {
+  .pkperson__plates { flex-direction: row; align-items: baseline; gap: var(--s2); }
 }
 
-.pkperson__name {
-  font-size: clamp(1.8rem, 5vw, 2.8rem);
-  font-weight: 800; letter-spacing: -.02em; line-height: 1.1; margin: 0;
-}
-
-/* What they cannot eat. Loud on purpose: a restriction read after the lid is
-   closed is a restriction that did not work. */
+/* What they cannot eat: the one thing allowed to interrupt the column. No
+   border, no heading and no pills — red at this size, behind that mark, is not
+   going to be read as anything else, and the three layers it used to wear were
+   decoration around two words. */
 .pkdiet {
-  width: 100%;
+  display: flex; align-items: center; gap: var(--s4);
+  margin-bottom: var(--s3);
   background: var(--bad-50);
-  border: 2px solid var(--bad-500);
   border-radius: var(--r-md);
-  padding: var(--s3) var(--s4);
-  display: flex; flex-direction: column; gap: var(--s2); align-items: center;
+  padding: var(--s4) var(--s5);
+  color: var(--bad-600);
 }
+.pkdiet svg { flex: none; width: 38px; height: 38px; stroke-width: 2.4; }
+.pkdiet__body { display: flex; flex-direction: column; min-width: 0; }
 .pkdiet__head {
-  display: flex; align-items: center; gap: var(--s2);
-  font-size: var(--fs-md); font-weight: 800; letter-spacing: .06em;
-  text-transform: uppercase; color: var(--bad-600);
+  font-size: var(--fs-sm); font-weight: 700;
+  letter-spacing: .14em; text-transform: uppercase;
+  opacity: .78;
 }
-.pkdiet__tags { display: flex; flex-wrap: wrap; gap: var(--s2); justify-content: center; }
-.pkdiet__tag {
-  font-size: var(--fs-lg); font-weight: 700; color: var(--bad-600);
-  background: #fff; border: 1px solid var(--bad-500);
-  border-radius: var(--r-full); padding: 4px 14px;
+.pkdiet__what {
+  font-size: clamp(1.375rem, 2.8vw, 2rem);
+  font-weight: 800; letter-spacing: .03em; text-transform: uppercase;
+  line-height: 1.15;
 }
 
+/* The same shape as the restriction, in the quietest voice the page has: they
+   rhyme, so neither one is a new kind of thing to learn. */
 .pknote {
-  width: 100%;
+  margin: 0;
   background: var(--surface-alt);
-  border-left: 4px solid var(--ink-300);
-  border-radius: var(--r-sm);
-  padding: var(--s3) var(--s4);
-  text-align: left;
+  border-radius: var(--r-md);
+  padding: var(--s4) var(--s5);
+  font-size: var(--fs-xl); line-height: 1.4;
+  color: var(--text-soft);
 }
-.pknote__head {
-  display: flex; align-items: center; gap: var(--s2);
-  font-size: var(--fs-xs); font-weight: 700; letter-spacing: .1em;
-  text-transform: uppercase; color: var(--text-soft);
-}
-.pknote__text { font-size: var(--fs-md); line-height: 1.5; margin: var(--s1) 0 0; }
 
 /* --- The end ---------------------------------------------------------------- */
 
-.pkdone { display: flex; flex-direction: column; align-items: center; gap: var(--s3); text-align: center; }
+/* Centred, unlike the slides: it is not a thing to work through, it is the
+   moment the work stopped. */
+.pkdone {
+  display: flex; flex-direction: column; align-items: center; gap: var(--s3);
+  text-align: center;
+  /* The only slide that sits in the middle of the card. The others hang from
+     the top so a name is always in the same place; there is no next name to
+     find here, and a result belongs in the middle of the space it fills. */
+  margin: auto 0;
+}
 .pkdone__ico {
   display: grid; place-items: center;
   width: 88px; height: 88px; border-radius: var(--r-full);
@@ -1051,17 +1086,32 @@
   padding: 6px 10px; white-space: nowrap;
 }
 
-/* On a real screen the slide takes the height it is given, so the two buttons
-   sit where a hand last left them instead of floating halfway up the window. */
+/*
+ * Where each thing sits, on a screen somebody presses forty times in a row.
+ *
+ * The card takes the whole height between the bar and the buttons, and its
+ * content hangs from the top of it rather than sitting in the middle. Centred,
+ * a name sat a hundred pixels lower on a slide with no restriction than on one
+ * with, so the eye had to find it again every press — which is the one thing
+ * this screen exists not to make anybody do. Hung from the top, the name is
+ * always in the same place and anything extra only ever appears below it.
+ *
+ * The buttons stay at the bottom of the window for the same reason: a hand
+ * goes back to where it last was, whatever is on the card.
+ */
 @media (min-width: 900px) {
-  .pkstage__wrap { min-height: calc(100dvh - var(--topbar-h) - 96px); }
+  /* Capped, so a taller screen than the kitchen's does not turn the card into
+     eight hundred pixels of white with a name at the top of it — and so the
+     two buttons stay where a hand can reach them without leaving the desk.
+     On the 768px machines the cap never applies. */
+  .pkstage__wrap { min-height: min(680px, calc(100dvh - var(--topbar-h) - 96px)); }
   .pkstage__slide { flex: 1 1 auto; }
 }
 
 /* The kitchen machines are 1366×768. Below that height the slide stops
    reserving space it cannot afford and the buttons come down a size. */
 @media (max-height: 820px) {
-  .pkstage__slide { min-height: 260px; padding: var(--s4); }
+  .pkstage__slide { min-height: 240px; padding: var(--s6); }
   .pkbtn { min-height: 64px; }
   .pk__key { min-height: 70px; }
 }
