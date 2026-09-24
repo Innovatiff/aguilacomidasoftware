@@ -695,3 +695,336 @@
   font-size: 17px; font-weight: 700; color: #dfe4ea;
   font-variant-numeric: tabular-nums; white-space: nowrap;
 }
+
+/* ==========================================================================
+   Empaque.
+
+   Two kitchen computers, two people, two lists, at six in the morning. The
+   sizes here are not the panel's: a name is read across a counter by somebody
+   holding a plate, and the two buttons that move the morning along are hit
+   without looking.
+
+   Everything is built to fit 1366×768 — the machines the kitchen has — with
+   the slide itself never scrolling. A packer who has to scroll to find out
+   whether there is a restriction is a packer who will one day not scroll.
+   ========================================================================== */
+
+.pk { max-width: 860px; margin: 0 auto; }
+
+.pk__ask {
+  font-size: var(--fs-2xl);
+  font-weight: 800;
+  letter-spacing: -.02em;
+  text-align: center;
+  margin: 0;
+}
+.pk__ask--sm { font-size: var(--fs-lg); text-align: left; }
+.pk__hint { text-align: center; color: var(--text-soft); font-size: var(--fs-md); margin: 0; }
+
+/* --- The number ------------------------------------------------------------ */
+
+.pk__pin { display: flex; flex-direction: column; gap: var(--s4); align-items: center; }
+
+.pk__dots { display: flex; gap: var(--s3); justify-content: center; }
+.pk__dot {
+  width: 18px; height: 18px;
+  border-radius: var(--r-full);
+  border: 2px solid var(--border-strong);
+  background: transparent;
+  transition: background 120ms var(--ease), border-color 120ms var(--ease);
+}
+.pk__dot.is-on { background: var(--brand-500); border-color: var(--brand-500); }
+
+.pk__pad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--s3);
+  width: 100%;
+  max-width: 360px;
+}
+
+/* 84px is a key somebody hits with a knuckle while their hands are wet. */
+.pk__key {
+  min-height: 84px;
+  font-family: inherit;
+  font-size: var(--fs-3xl);
+  font-weight: 700;
+  color: var(--text);
+  background: var(--surface);
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  cursor: pointer;
+  transition: background 90ms var(--ease), transform 90ms var(--ease);
+}
+.pk__key:active { background: var(--ink-100); transform: scale(.97); }
+.pk__key--rub { font-size: var(--fs-2xl); color: var(--text-soft); }
+/* The hole where a tick would be. It keeps 0 in the middle, where a hand
+   expects it, without putting a button there that does nothing. */
+.pk__key.is-blank { visibility: hidden; cursor: default; }
+
+/* --- Who is at this computer ------------------------------------------------ */
+
+.pk__who {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: var(--s3) var(--s4);
+}
+.pk__wholabel { font-size: var(--fs-sm); color: var(--text-soft); }
+.pk__whoname { font-size: var(--fs-xl); font-weight: 800; letter-spacing: -.02em; }
+
+/* --- Choosing a libreta ----------------------------------------------------- */
+
+.pk__lines { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--s4); }
+
+.pkline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  padding: var(--s5);
+  text-align: left;
+  background: var(--surface);
+  border: 2px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh-1);
+  cursor: pointer;
+  transition: border-color 120ms var(--ease), box-shadow 120ms var(--ease);
+}
+.pkline:hover:not(:disabled) { border-color: var(--brand-500); box-shadow: var(--sh-2); }
+.pkline:disabled { opacity: .5; cursor: default; }
+/* Already finished this morning: still openable to look at, but it should not
+   be the thing the eye lands on. */
+.pkline--lista { border-color: var(--ok-500); background: var(--ok-50); }
+.pkline--empezada { border-color: var(--warn-500); background: var(--warn-50); }
+
+.pkline__head { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); }
+.pkline__name { font-size: var(--fs-2xl); font-weight: 800; letter-spacing: -.02em; }
+.pkline__badge {
+  font-size: var(--fs-xs); font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  background: var(--warn-500); color: #fff; padding: 3px 10px; border-radius: var(--r-full);
+}
+.pkline__badge.is-done { background: var(--ok-600); }
+
+.pkline__farms { font-size: var(--fs-md); color: var(--text-soft); }
+
+.pkline__nums { display: flex; gap: var(--s5); }
+.pkline__num { display: flex; flex-direction: column; }
+.pkline__n { font-size: var(--fs-3xl); font-weight: 800; line-height: 1; letter-spacing: -.03em; }
+.pkline__l { font-size: var(--fs-sm); color: var(--text-soft); }
+
+.pkline__foot {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s3);
+  font-size: var(--fs-sm); color: var(--text-soft);
+  border-top: 1px solid var(--border); padding-top: var(--s3);
+}
+.pkline__go { color: var(--brand-600); }
+
+/* --- What has been packed today --------------------------------------------- */
+
+.pk__runs { display: flex; flex-direction: column; gap: var(--s2); }
+.pkrun {
+  display: flex; align-items: center; gap: var(--s3);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-md); padding: var(--s3) var(--s4);
+}
+.pkrun__ico { color: var(--ok-600); display: grid; place-items: center; }
+.pkrun__name { font-weight: 700; }
+.pkrun__meta { font-size: var(--fs-sm); color: var(--text-soft); }
+
+/* ==========================================================================
+   Packing a libreta: one thing on the screen at a time.
+   ========================================================================== */
+
+/* Wide enough to set a name large, narrow enough that the eye does not have to
+   travel across a whole 1366px window to get from the plate count to the name. */
+.pkstage { max-width: 920px; margin: 0 auto; }
+.pkstage__wrap { display: flex; flex-direction: column; gap: var(--s4); min-height: 0; }
+
+.pkbar { display: flex; flex-direction: column; gap: var(--s1); }
+.pkbar__track { height: 12px; border-radius: var(--r-full); background: var(--ink-150); overflow: hidden; }
+.pkbar__fill { height: 100%; background: var(--brand-500); border-radius: var(--r-full); transition: width 180ms var(--ease); }
+.pkbar__text {
+  display: flex; justify-content: space-between;
+  font-size: var(--fs-sm); font-weight: 600; color: var(--text-soft);
+}
+
+.pkstage__slide {
+  display: flex; flex-direction: column; justify-content: center;
+  min-height: 380px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: var(--s6) var(--s5);
+  box-shadow: var(--sh-1);
+}
+
+/* --- A farm is starting ----------------------------------------------------- */
+
+.pkfarm { text-align: center; display: flex; flex-direction: column; gap: var(--s4); align-items: center; }
+.pkfarm__eyebrow {
+  font-size: var(--fs-sm); font-weight: 700; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--brand-600);
+}
+.pkfarm__name { font-size: clamp(2rem, 6vw, 3.2rem); font-weight: 800; letter-spacing: -.03em; margin: 0; line-height: 1.05; }
+.pkfarm__nums { display: flex; gap: var(--s7); }
+.pkfarm__num { display: flex; flex-direction: column; }
+.pkfarm__n { font-size: var(--fs-3xl); font-weight: 800; line-height: 1; }
+.pkfarm__l { font-size: var(--fs-sm); color: var(--text-soft); }
+.pkfarm__hint { color: var(--text-faint); font-size: var(--fs-base); margin: 0; }
+
+/* --- One person ------------------------------------------------------------- */
+
+.pkperson { display: flex; flex-direction: column; gap: var(--s3); align-items: center; text-align: center; }
+
+.pkperson__where {
+  display: flex; gap: var(--s2); align-items: center;
+  font-size: var(--fs-md); font-weight: 600; color: var(--text-soft);
+  text-transform: uppercase; letter-spacing: .06em;
+}
+.pkperson__dot { color: var(--text-faint); }
+
+/* The number the morning turns on, and the first thing read. */
+.pkperson__plates { display: flex; align-items: baseline; gap: var(--s3); }
+.pkperson__count {
+  font-size: clamp(3.5rem, 11vw, 6rem);
+  font-weight: 800; line-height: 1; letter-spacing: -.04em;
+  color: var(--brand-600);
+}
+.pkperson__word {
+  font-size: var(--fs-xl); font-weight: 700; color: var(--text-soft);
+  text-transform: uppercase; letter-spacing: .06em;
+}
+
+.pkperson__name {
+  font-size: clamp(1.8rem, 5vw, 2.8rem);
+  font-weight: 800; letter-spacing: -.02em; line-height: 1.1; margin: 0;
+}
+
+/* What they cannot eat. Loud on purpose: a restriction read after the lid is
+   closed is a restriction that did not work. */
+.pkdiet {
+  width: 100%;
+  background: var(--bad-50);
+  border: 2px solid var(--bad-500);
+  border-radius: var(--r-md);
+  padding: var(--s3) var(--s4);
+  display: flex; flex-direction: column; gap: var(--s2); align-items: center;
+}
+.pkdiet__head {
+  display: flex; align-items: center; gap: var(--s2);
+  font-size: var(--fs-md); font-weight: 800; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--bad-600);
+}
+.pkdiet__tags { display: flex; flex-wrap: wrap; gap: var(--s2); justify-content: center; }
+.pkdiet__tag {
+  font-size: var(--fs-lg); font-weight: 700; color: var(--bad-600);
+  background: #fff; border: 1px solid var(--bad-500);
+  border-radius: var(--r-full); padding: 4px 14px;
+}
+
+.pknote {
+  width: 100%;
+  background: var(--surface-alt);
+  border-left: 4px solid var(--ink-300);
+  border-radius: var(--r-sm);
+  padding: var(--s3) var(--s4);
+  text-align: left;
+}
+.pknote__head {
+  display: flex; align-items: center; gap: var(--s2);
+  font-size: var(--fs-xs); font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--text-soft);
+}
+.pknote__text { font-size: var(--fs-md); line-height: 1.5; margin: var(--s1) 0 0; }
+
+/* --- The end ---------------------------------------------------------------- */
+
+.pkdone { display: flex; flex-direction: column; align-items: center; gap: var(--s3); text-align: center; }
+.pkdone__ico {
+  display: grid; place-items: center;
+  width: 88px; height: 88px; border-radius: var(--r-full);
+  background: var(--ok-50); color: var(--ok-600);
+}
+.pkdone__ico svg { width: 46px; height: 46px; }
+.pkdone__title { font-size: var(--fs-3xl); font-weight: 800; margin: 0; letter-spacing: -.02em; }
+.pkdone__text { font-size: var(--fs-lg); color: var(--text-soft); margin: 0; }
+.pkdone__who { font-size: var(--fs-base); color: var(--text-faint); margin: 0; }
+
+/* --- The two buttons, always in the same two places ------------------------- */
+
+.pkfoot { display: flex; gap: var(--s3); }
+
+.pkbtn {
+  display: flex; align-items: center; justify-content: center; gap: var(--s2);
+  min-height: 76px;
+  font-family: inherit; font-size: var(--fs-xl); font-weight: 700;
+  border: 0; border-radius: var(--r-lg);
+  cursor: pointer;
+  transition: filter 90ms var(--ease), transform 90ms var(--ease);
+}
+.pkbtn:active:not(:disabled) { transform: scale(.985); }
+.pkbtn svg { width: 28px; height: 28px; }
+
+/* Back is the smaller of the two and on the left, every time. Forward is the
+   one a hand goes to without looking, so it gets the width. */
+.pkbtn--back {
+  flex: 0 0 auto; min-width: 150px;
+  background: var(--surface); color: var(--text-soft);
+  border: 1.5px solid var(--border-strong);
+}
+.pkbtn--back:disabled { opacity: .35; cursor: default; }
+.pkbtn--go { flex: 1 1 auto; background: var(--brand-500); color: #fff; box-shadow: var(--sh-brand); }
+.pkbtn--done { flex: 1 1 auto; background: var(--ok-600); color: #fff; }
+
+/* --- Setting it up ---------------------------------------------------------- */
+
+.pkchips { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.pkchip {
+  font-size: var(--fs-sm); font-weight: 600;
+  background: var(--brand-50); color: var(--brand-700);
+  border-radius: var(--r-full); padding: 4px 12px;
+}
+
+.pkpick {
+  display: flex; align-items: center; gap: var(--s3);
+  width: 100%; min-height: 60px; padding: var(--s3);
+  text-align: left; background: var(--surface);
+  border: 1.5px solid var(--border); border-radius: var(--r-md);
+  cursor: pointer;
+}
+.pkpick:hover { background: var(--surface-alt); }
+.pkpick.is-on { border-color: var(--brand-500); background: var(--brand-50); }
+.pkpick__box {
+  flex: 0 0 auto; display: grid; place-items: center;
+  width: 30px; height: 30px; border-radius: var(--r-sm);
+  border: 2px solid var(--border-strong); background: #fff; color: var(--brand-600);
+}
+.pkpick.is-on .pkpick__box { border-color: var(--brand-500); }
+.pkpick__name { display: block; font-size: var(--fs-md); font-weight: 700; }
+.pkpick__meta { display: block; font-size: var(--fs-sm); color: var(--text-soft); }
+
+.pkpin {
+  font-family: var(--font-num); font-size: var(--fs-md); font-weight: 700;
+  letter-spacing: .12em; color: var(--text-soft);
+  background: var(--surface-alt); border-radius: var(--r-sm);
+  padding: 6px 10px; white-space: nowrap;
+}
+
+/* On a real screen the slide takes the height it is given, so the two buttons
+   sit where a hand last left them instead of floating halfway up the window. */
+@media (min-width: 900px) {
+  .pkstage__wrap { min-height: calc(100dvh - var(--topbar-h) - 96px); }
+  .pkstage__slide { flex: 1 1 auto; }
+}
+
+/* The kitchen machines are 1366×768. Below that height the slide stops
+   reserving space it cannot afford and the buttons come down a size. */
+@media (max-height: 820px) {
+  .pkstage__slide { min-height: 260px; padding: var(--s4); }
+  .pkbtn { min-height: 64px; }
+  .pk__key { min-height: 70px; }
+}

@@ -139,7 +139,18 @@ export function setTabBadge(id, count) {
   renderTabs();
 }
 
-export const showTabs = (visible) => { tabbar.hidden = !visible; };
+/**
+ * Shows or hides the tab bar — and, on a desktop, the column it lives in.
+ *
+ * Hiding the bar alone left an empty 236px strip down the side of the window,
+ * because the frame's grid reserves a track for the rail whether or not there
+ * is anything in it. A screen that asks for the tabs to go wants the width,
+ * which is the whole reason it asked.
+ */
+export const showTabs = (visible) => {
+  tabbar.hidden = !visible;
+  root?.classList.toggle('app--norail', !visible);
+};
 
 /* --- A screen's lifetime ---------------------------------------------------- */
 

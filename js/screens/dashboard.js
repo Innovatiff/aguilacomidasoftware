@@ -153,6 +153,7 @@ function body() {
             h('span.quickcta__s', 'Pantalla grande para la tienda: cobrar, comidas, días…')),
           icon('chevronR')),
         button('Cobrar en la tienda', { variant: 'primary', block: true, icon: 'cash', onClick: () => go('/cobrar') }),
+        button('Empacar la comida de hoy', { variant: 'dark', block: true, icon: 'box', onClick: () => go('/empaque') }),
         button('Ver reportes', { variant: 'soft', block: true, icon: 'chart', onClick: () => go('/reportes') }),
         button('Abrir la libreta', { variant: 'dark', block: true, icon: 'clipboard', onClick: () => go('/libreta') }),
         button('Registrar un cliente', { variant: 'ghost', block: true, icon: 'userPlus', onClick: () => go('/clients/new') }))));

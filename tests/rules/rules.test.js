@@ -248,6 +248,48 @@ await check('an account may check its own staff entry',
 
 /* --- The first administrator ------------------------------------------------- */
 
+/* --- Empaque ----------------------------------------------------------------- */
+
+console.log('\n--- Empaque ----------------------------------------------------');
+
+// Who packs, and the number each one types. Not a password — the screen it
+// opens is already inside the panel — but a list of staff and their numbers is
+// not something to leave where every worker's phone can read it.
+await check('the kitchen keeps the list of who packs',
+  setDoc(doc(admin, 'packers/p1'), { name: 'Lucía Ramos', pin: '4821', active: true }), true);
+await check('and reads it back',
+  getDocs(collection(admin, 'packers')), true);
+await check('a worker cannot read who packs, or their numbers',
+  getDoc(doc(rafa, 'packers/p1')), false);
+await check('nor list them', getDocs(collection(rafa, 'packers')), false);
+await check('anon cannot either', getDoc(doc(anon, 'packers/p1')), false);
+await check('a worker cannot invent a packer',
+  setDoc(doc(rafa, 'packers/p9'), { name: 'Yo', pin: '0000' }), false);
+
+// The morning's record: who packed which libreta. It may be corrected but
+// never deleted — it is the answer to "whose list was this?" when somebody's
+// food was missed.
+await check('the kitchen opens the morning record',
+  setDoc(doc(admin, 'packRuns/2026-09-24_l1'), {
+    date: '2026-09-24', lineId: 'l1', lineName: 'Libreta 1',
+    packerId: 'p1', packerName: 'Lucía Ramos', people: 34, done: false,
+  }), true);
+await check('and closes it when the libreta is finished',
+  updateDoc(doc(admin, 'packRuns/2026-09-24_l1'), { done: true, packed: 34 }), true);
+await check('but nobody can delete a morning that happened',
+  deleteDoc(doc(admin, 'packRuns/2026-09-24_l1')), false);
+await check('a worker cannot read who packed',
+  getDoc(doc(rafa, 'packRuns/2026-09-24_l1')), false);
+await check('nor write a morning of their own',
+  setDoc(doc(rafa, 'packRuns/2026-09-24_l2'), { date: '2026-09-24' }), false);
+
+// Which farms go in which libreta lives in `config`, which any signed-in
+// account may `get` — which is exactly why the numbers do not live there.
+await check('the kitchen sets which farms go in which libreta',
+  setDoc(doc(admin, 'config/packing'), { lines: [{ id: 'l1', name: 'Libreta 1', farmIds: ['fA'] }] }), true);
+await check('a worker cannot rearrange the libretas',
+  setDoc(doc(rafa, 'config/packing'), { lines: [] }), false);
+
 console.log('\n--- The first administrator ------------------------------------');
 
 // A fresh project: clear everything so no staff exists.

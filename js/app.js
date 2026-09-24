@@ -24,6 +24,9 @@ import { renderClientForm } from './screens/client-form.js';
 import { renderClientDetail } from './screens/client-detail.js';
 import { renderBilling } from './screens/billing.js';
 import { renderReport, renderReportList } from './screens/report.js';
+import { renderPacking } from './screens/packing.js';
+import { renderPackingRun } from './screens/packing-run.js';
+import { renderPackingSetup } from './screens/packing-setup.js';
 import { renderCheckout } from './screens/checkout.js';
 import { renderQuick } from './screens/quick.js';
 import { renderInvoice } from './screens/invoice.js';
@@ -140,6 +143,12 @@ function registerRoutes() {
   // Each of the report's lists is its own screen, so the back chevron out of
   // one goes to the report rather than out of it.
   register('/reportes/:lista', renderReportList);
+
+  // Empaque: the morning's two lists. "ajustes" is registered before ':id' so
+  // it is never read as the name of a libreta.
+  register('/empaque', renderPacking);
+  register('/empaque/ajustes', renderPackingSetup);
+  register('/empaque/:id', renderPackingRun);
   // The counter: find somebody and take their money.
   register('/cobrar', renderCheckout);
   register('/rapido', renderQuick);

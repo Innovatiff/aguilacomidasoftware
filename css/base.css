@@ -297,6 +297,15 @@ img, svg { display: block; max-width: 100%; }
       "rail page";
   }
 
+  /* A screen that hides the tab bar gets the track back: an empty rail is
+     236px of window a focused screen asked not to have. */
+  #app.app--shell.app--norail {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "topbar"
+      "page";
+  }
+
   /* --- Top bar ----------------------------------------------------------- */
 
   .topbar {

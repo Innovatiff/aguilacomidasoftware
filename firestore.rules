@@ -266,6 +266,33 @@ service cloud.firestore {
       }
     }
 
+    /* --- packers ---------------------------------------------------------------- */
+
+    // The people who pack the food each morning, and the number each one types
+    // so their name lands on that morning's record.
+    //
+    // The number is a name tag, not a password: the screen it opens already
+    // sits inside the panel, behind a signed-in kitchen account, so anybody who
+    // could type it could reach every other screen without it. Kitchen-only all
+    // the same — a list of staff and their numbers is not something to leave
+    // where every worker's phone can read it, which is also why it does not
+    // live in `config`, where any signed-in account may `get`.
+    match /packers/{packerId} {
+      allow read, write: if isAdmin();
+    }
+
+    /* --- packRuns --------------------------------------------------------------- */
+
+    // One document per libreta per morning: who packed it, when they started,
+    // when they finished, how many people it held. It is the answer to "whose
+    // list was this?" when somebody's food was missed, so it may be written and
+    // corrected but never deleted.
+    match /packRuns/{runId} {
+      allow read: if isAdmin();
+      allow create, update: if isAdmin();
+      allow delete: if false;
+    }
+
     /* --- everything else ------------------------------------------------------- */
 
     match /{document=**} {

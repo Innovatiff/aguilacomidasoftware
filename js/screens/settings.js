@@ -19,6 +19,7 @@ import {
   alert, emptyState, field, input, moneyInput, statGrid, stat,
 } from '../ui/kit.js';
 import { toastOk, toastBad, confirm, sheet } from '../ui/overlay.js';
+import { go } from '../lib/router.js';
 import { session, signOutNow, updateOwnProfile } from '../data/session.js';
 import { watchStaff, addStaff, removeStaff, isValidEmail, normalizeEmail } from '../data/staff.js';
 import { savePricing } from '../data/pricing.js';
@@ -285,6 +286,14 @@ export function renderSettings() {
   // they are set up, which is before a `const` further down would exist.
   function aboutCard() {
     return h('div.stack.stack-3',
+      sectionLabel('Empaque'),
+      list([itemRow({
+        lead: h('span.c-faint', icon('box')),
+        title: 'Las libretas y quién las empaca',
+        meta: 'Qué ranchos van en cada libreta, y el número de cada persona',
+        onClick: () => go('/empaque/ajustes'),
+      })], { card: true }),
+
       sectionLabel('Acerca de'),
       card(defList([
         defRow('Aplicación', 'El Águila Cocina · Administración'),
