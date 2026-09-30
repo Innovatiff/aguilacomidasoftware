@@ -1070,6 +1070,22 @@
 }
 .pkpick:hover { background: var(--surface-alt); }
 .pkpick.is-on { border-color: var(--brand-500); background: var(--brand-50); }
+
+/* Held by the other libreta. It still answers when pressed — a row that does
+   nothing under a thumb reads as a broken screen — but it reads as closed, so
+   nobody has to press it to find out. */
+.pkpick--locked {
+  background: var(--surface-alt);
+  border-style: dashed;
+  color: var(--text-soft);
+}
+.pkpick--locked:hover { background: var(--surface-alt); }
+.pkpick--locked .pkpick__name { font-weight: 600; color: var(--text-soft); }
+.pkpick--locked .pkpick__box {
+  border-style: dashed;
+  background: transparent;
+  color: var(--text-faint);
+}
 .pkpick__box {
   flex: 0 0 auto; display: grid; place-items: center;
   width: 30px; height: 30px; border-radius: var(--r-sm);

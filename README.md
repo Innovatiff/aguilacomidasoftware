@@ -342,10 +342,19 @@ dónde están, no por de quién es el portón. **Casa 1 puede ir en la Libreta 1
 Casa 4 en la Libreta 2.** Si un rancho entero va a una sola libreta, hay un
 botón *Todo el rancho* que lo hace de un toque.
 
-Cada ubicación va en una sola libreta: ponerla en una la saca de la otra, o la
-misma comida se empaca dos veces. Y si una ubicación **con gente adentro** queda
-fuera de las dos, la pantalla lo avisa arriba, porque esa comida no se empacaría.
-Una ubicación vacía no se avisa — una casa sin nadie no es un problema.
+Cada ubicación va en una sola libreta, o la misma comida se empaca dos veces.
+**Una libreta no le puede quitar una ubicación a la otra:** lo que ya está
+asignado sale con candado, y para moverlo hay que quitarlo primero de donde
+está, guardar, e irlo a escoger en la otra. Son dos actos a propósito — antes
+era un toque, y un toque es también como alguien mueve una casa sin darse
+cuenta de que la movió.
+
+Mientras está suelta, esa ubicación no está en ninguna libreta y el aviso de
+arriba lo dice, que es justo lo que alguien a media mudanza tiene que poder ver.
+
+Y si una ubicación **con gente adentro** queda fuera de las dos, la pantalla lo
+avisa, porque esa comida no se empacaría. Una ubicación vacía no se avisa — una
+casa sin nadie no es un problema.
 
 Quien no tenga ubicación puesta, o la tenga borrada, cae en un cajón llamado
 *Sin ubicación* que también se asigna a una libreta. Así nadie desaparece de la

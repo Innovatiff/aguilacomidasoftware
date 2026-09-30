@@ -94,8 +94,9 @@ export function renderPackingSetup() {
 
       h('div.stack.stack-3',
         sectionLabel('Las libretas'),
-        h('p.rnote', 'Cada ubicación va en una sola libreta. Las de un mismo rancho pueden '
-          + 'repartirse entre las dos: al poner una en esta, sale de la otra.'),
+        h('p.rnote', 'Cada ubicación va en una sola libreta, y las de un mismo rancho pueden '
+          + 'repartirse entre las dos. Para mover una, primero quítala de la libreta donde '
+          + 'está y después escógela en la otra.'),
         setup.lines.map(lineCard)),
 
       h('div.stack.stack-3',
@@ -234,52 +235,87 @@ export function renderPackingSetup() {
     const chosen = new Set(
       placesOf(setup.lines, line.id, store.farms, store.clients).map((one) => one.key),
     );
+
+    /*
+     * A location the other libreta already has cannot be taken from here.
+     *
+     * It used to be one press: tap it in the second libreta and it left the
+     * first. That is fast and it is also how somebody moves a house without
+     * noticing they moved it — the other libreta shrinks on a screen nobody is
+     * looking at. So taking is now two deliberate acts: unmark it where it is,
+     * save, then come here and mark it. In between it sits in no libreta and
+     * the warning at the top of the setup screen says so, which is exactly the
+     * state somebody halfway through a change should be able to see.
+     */
+    const heldElsewhere = (one) => {
+      const other = lineOfPlace(setup.lines, one.farm.id, one.place.id);
+      return other && other.id !== line.id ? other : null;
+    };
+
     const rows = h('div.stack.stack-4');
 
     const paintRows = () => rows.replaceChildren(...store.farms.map((farm) => {
       const here = every.filter((one) => one.farm.id === farm.id);
       if (!here.length) return null;
-      const mine = here.filter((one) => chosen.has(one.key)).length;
+
+      const locked = here.filter((one) => heldElsewhere(one));
+      const free = here.filter((one) => !heldElsewhere(one));
+      const mine = free.filter((one) => chosen.has(one.key)).length;
+      const allFree = free.length > 0 && mine === free.length;
 
       return h('div.pkgroup',
         h('div.pkgroup__head',
           h('div.grow',
             h('div.pkgroup__name', farm.name),
-            h('div.pkgroup__meta', mine === here.length ? 'Todo el rancho'
-              : mine ? `${mine} de ${here.length}`
-                : 'Ninguna')),
-          h('button.btn.btn--ghost.btn--sm', {
-            type: 'button',
-            onclick: () => {
-              // All or nothing, whichever it is not already.
-              const all = mine === here.length;
-              for (const one of here) {
-                if (all) chosen.delete(one.key); else chosen.add(one.key);
-              }
-              paintRows();
-            },
-          }, mine === here.length ? 'Quitar todo' : 'Todo el rancho')),
+            h('div.pkgroup__meta', [
+              mine === here.length ? 'Todo el rancho'
+                : mine ? `${mine} de ${here.length}`
+                  : 'Ninguna',
+              locked.length ? `${locked.length} en ${heldElsewhere(locked[0]).name}` : null,
+            ].filter(Boolean).join(' · '))),
+
+          // Nothing to press when the whole farm belongs to the other one.
+          free.length
+            ? h('button.btn.btn--ghost.btn--sm', {
+              type: 'button',
+              onclick: () => {
+                // All or nothing, whichever it is not already — and only over
+                // what this libreta is allowed to touch.
+                for (const one of free) {
+                  if (allFree) chosen.delete(one.key); else chosen.add(one.key);
+                }
+                paintRows();
+              },
+            }, allFree ? 'Quitar todo' : 'Todo el rancho')
+            : null),
 
         h('div.stack.stack-2', here.map((one) => {
-          const other = lineOfPlace(setup.lines, one.farm.id, one.place.id);
-          const elsewhere = other && other.id !== line.id && !chosen.has(one.key);
+          const other = heldElsewhere(one);
           const on = chosen.has(one.key);
           const count = peopleAt(one);
 
-          return h(`button.pkpick${on ? '.is-on' : ''}`, {
+          return h(`button.pkpick${on ? '.is-on' : ''}${other ? '.pkpick--locked' : ''}`, {
             type: 'button',
             onclick: () => {
+              // Still a button, and it still answers. A row that does nothing
+              // when a thumb lands on it reads as a broken screen; this one
+              // says what to do instead.
+              if (other) {
+                toastBad(`${one.place.name} está en ${other.name}. `
+                  + 'Quítala de ahí primero y luego escógela aquí.');
+                return;
+              }
               if (on) chosen.delete(one.key); else chosen.add(one.key);
               paintRows();
             },
           },
-          h('span.pkpick__box', on ? icon('check') : null),
+          h('span.pkpick__box', other ? icon('lock') : (on ? icon('check') : null)),
           h('span.grow',
             h('span.pkpick__name', one.place.name),
             h('span.pkpick__meta',
               (count ? plural(count, 'cliente', 'clientes') : 'Sin clientes')
-              + (elsewhere ? ` · ahora está en ${other.name}` : ''))),
-          elsewhere ? badge('En la otra', 'warn') : null);
+              + (other ? ` · está en ${other.name}` : ''))),
+          other ? badge(other.name, 'muted') : null);
         })));
     }).filter(Boolean));
     paintRows();
@@ -288,7 +324,8 @@ export function renderPackingSetup() {
       title: `Ubicaciones de ${line.name}`,
       build: (close) => h('div.stack.stack-4',
         h('p.t-sm.c-soft', 'Toca las ubicaciones que van en esta libreta. Las de un mismo '
-          + 'rancho pueden repartirse entre las dos.'),
+          + 'rancho pueden repartirse entre las dos. Lo que ya tiene la otra sale con '
+          + 'candado: para traerlo, quítalo de allá primero.'),
         rows,
         button('Guardar', {
           variant: 'primary', size: 'lg', block: true, onClick: () => close(true),
@@ -306,12 +343,21 @@ export function renderPackingSetup() {
      * whole-farm shape into the explicit locations it always meant. From then
      * on the stored setup says exactly what the manager saw.
      */
+    // Belt and braces: whatever the rows did, a location the other libreta
+    // holds is never written into this one. The rule lives in the saved data,
+    // not only in what the screen let somebody press.
+    const mine = [...chosen].filter((key) => {
+      const one = every.find((entry) => entry.key === key);
+      if (!one) return false;
+      const other = lineOfPlace(setup.lines, one.farm.id, one.place.id);
+      return !other || other.id === line.id;
+    });
+
     const next = setup.lines.map((row) => {
-      if (row.id === line.id) {
-        return { ...row, farmIds: [], placeIds: [...chosen] };
-      }
+      if (row.id === line.id) return { ...row, farmIds: [], placeIds: mine };
+      // The other libreta keeps exactly what it had. Nothing on this sheet can
+      // take from it — that is the whole point of the lock.
       const theirs = every
-        .filter((one) => !chosen.has(one.key))
         .filter((one) => lineOfPlace(setup.lines, one.farm.id, one.place.id)?.id === row.id)
         .map((one) => one.key);
       return { ...row, farmIds: [], placeIds: theirs };
