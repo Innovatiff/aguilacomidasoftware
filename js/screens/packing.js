@@ -22,7 +22,7 @@ import { store, subscribe, activeClients, isReady, firstError, startStore } from
 import {
   watchPacking, watchPackers, watchPackRuns, seatedPacker, sitDown,
 } from '../data/packing.js';
-import { packingSequence, packerByPin, unassignedFarms } from '../lib/packing.js';
+import { packingSequence, packerByPin, unassignedPlaces } from '../lib/packing.js';
 import { today, formatDayLong, formatTime, capitalize } from '../lib/dates.js';
 import { kitchen } from '../lib/mode.js';
 import { plural, number } from '../lib/format.js';
@@ -161,7 +161,7 @@ export function renderPacking() {
 
   function pickLine() {
     const roster = activeClients();
-    const orphans = unassignedFarms(setup.lines, store.farms);
+    const orphans = unassignedPlaces(setup.lines, store.farms, store.clients);
 
     return h('div.stack.stack-5',
       h('div.pk__who',
@@ -178,16 +178,19 @@ export function renderPacking() {
       h('div.pk__lines', setup.lines.map((line) => lineCard(line, roster))),
 
       orphans.length
-        ? alert(`${plural(orphans.length, 'rancho no está', 'ranchos no están')} en ninguna libreta: `
-          + `${orphans.map((farm) => farm.name).join(', ')}. Su comida no se va a empacar `
-          + 'hasta que el encargado los agregue.', 'warn', 'alert')
+        ? alert(`${plural(orphans.length, 'ubicación no está', 'ubicaciones no están')} en `
+          + 'ninguna libreta: '
+          + `${orphans.map((one) => `${one.farm.name} · ${one.place.name}`).join(', ')}. `
+          + 'Su comida no se va a empacar hasta que el encargado las agregue.', 'warn', 'alert')
         : null,
 
       runs.length ? doneToday() : null);
   }
 
   function lineCard(line, roster) {
-    const plan = packingSequence({ line, farms: store.farms, clients: roster, day });
+    const plan = packingSequence({
+      line, lines: setup.lines, farms: store.farms, clients: roster, day,
+    });
     const run = runs.find((row) => row.lineId === line.id);
     const mine = run && run.packerId === packer.id;
     const state = !run ? 'libre' : (run.done ? 'lista' : 'empezada');
@@ -208,7 +211,7 @@ export function renderPacking() {
 
       h('div.pkline__farms', farmNames.length
         ? farmNames.join(' · ')
-        : 'Sin ranchos asignados'),
+        : 'Sin ubicaciones asignadas'),
 
       h('div.pkline__nums',
         h('div.pkline__num',

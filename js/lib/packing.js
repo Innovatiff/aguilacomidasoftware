@@ -2,11 +2,17 @@
  * Empaque — turning the roster into the order the plates get packed in.
  *
  * Two people pack the kitchen's food each morning, on two computers, from two
- * lists. A *libreta* is one of those lists: a set of farms the manager assigned
- * to it, in the order they should be worked through. Everything here is about
- * producing that order and nothing else — no Firestore, so the sequence a
- * packer walks can be checked against a handful of objects in a test rather
- * than against a screenshot.
+ * lists. A *libreta* is one of those lists: a set of **locations** the manager
+ * assigned to it, in the order they should be worked through. Everything here
+ * is about producing that order and nothing else — no Firestore, so the
+ * sequence a packer walks can be checked against a handful of objects in a
+ * test rather than against a screenshot.
+ *
+ * **Locations, not farms.** A farm like #332 Morsea has houses spread over a
+ * few kilometres, and the kitchen splits them between the two people by
+ * geography, not by whose name is on the gate. So Casa 1 can be in Libreta 1
+ * while Casa 4 is in Libreta 2, and the unit this file works in is the
+ * location.
  *
  * Three rules decide who appears:
  *
@@ -29,9 +35,26 @@ import { weekdayOf, today as todayKey } from '../lib/dates.js';
 
 /** The two lists the kitchen packs from. Named so the manager can rename them. */
 export const DEFAULT_LINES = [
-  { id: 'l1', name: 'Libreta 1', farmIds: [] },
-  { id: 'l2', name: 'Libreta 2', farmIds: [] },
+  { id: 'l1', name: 'Libreta 1', farmIds: [], placeIds: [] },
+  { id: 'l2', name: 'Libreta 2', farmIds: [], placeIds: [] },
 ];
+
+/**
+ * How one location is named in a libreta: the farm and the place, together.
+ *
+ * An empty location is not a mistake — it is the bucket for people whose
+ * location was deleted, or who never got one. They still eat, so they still
+ * need somewhere to be packed from.
+ */
+export const placeKey = (farmId, locationId) => `${farmId}:${locationId || ''}`;
+
+/** Splits a key back apart. */
+export const readPlaceKey = (key) => {
+  const at = String(key || '').indexOf(':');
+  return at === -1
+    ? { farmId: String(key || ''), locationId: '' }
+    : { farmId: key.slice(0, at), locationId: key.slice(at + 1) };
+};
 
 /**
  * The stored setup, with anything missing filled in.
@@ -61,9 +84,19 @@ export function normalizePacking(data) {
       return {
         id: fallback.id,
         name: String(line.name || '').trim() || fallback.name,
-        // De-duplicated, because a farm packed twice is a farm whose people get
-        // two plates each and a count that never reconciles.
+        /*
+         * `farmIds` is the old shape: a whole farm in one libreta.
+         *
+         * It is still read, and it still means what it meant, so a kitchen
+         * that never opens the setup screen again keeps packing exactly as it
+         * did. The first time somebody does open it, the save writes the
+         * explicit locations and empties this — see `placesOf`. Nothing has to
+         * be migrated on a morning when people are waiting for food.
+         */
         farmIds: [...new Set((Array.isArray(line.farmIds) ? line.farmIds : []).filter(Boolean))],
+        // De-duplicated, because a location packed twice is a location whose
+        // people get two plates each and a count that never reconciles.
+        placeIds: [...new Set((Array.isArray(line.placeIds) ? line.placeIds : []).filter(Boolean))],
       };
     }),
   };
@@ -72,24 +105,93 @@ export function normalizePacking(data) {
 /** The libreta with this id, or null. */
 export const lineOf = (lines, id) => (lines || []).find((line) => line.id === id) || null;
 
-/** Which libreta a farm belongs to, or null when nobody has assigned it. */
+/** Which libreta a farm belongs to as a whole, under the old shape. */
 export const lineOfFarm = (lines, farmId) =>
-  (lines || []).find((line) => line.farmIds.includes(farmId)) || null;
+  (lines || []).find((line) => (line.farmIds || []).includes(farmId)) || null;
 
 /**
- * Farms nobody assigned to a libreta.
+ * Which libreta packs one location.
  *
- * The thing that goes wrong with a setup like this is a farm registered in
- * March that nobody adds to a list, whose people are then quietly not packed
- * for. So it is counted and said out loud rather than left to be noticed.
+ * The location wins over the farm. A farm may still be assigned whole under
+ * the old shape, and then one of its houses moved to the other libreta; the
+ * house that was named explicitly is the one somebody decided about, so it is
+ * the one that counts.
  */
-export const unassignedFarms = (lines, farms) =>
-  (farms || []).filter((farm) => !lineOfFarm(lines, farm.id));
+export function lineOfPlace(lines, farmId, locationId) {
+  const key = placeKey(farmId, locationId);
+  const named = (lines || []).find((line) => (line.placeIds || []).includes(key));
+  if (named) return named;
+  return lineOfFarm(lines, farmId);
+}
+
+/**
+ * Every location that exists, plus the "no location" bucket for any farm that
+ * has people adrift in it.
+ *
+ * The bucket is only offered where somebody is actually in it. An empty row on
+ * every farm would be six rows of nothing to read past on the one screen that
+ * has to be read carefully.
+ */
+export function allPlaces(farms = [], clients = []) {
+  const out = [];
+  for (const farm of farms) {
+    const known = new Set((farm.locations || []).map((place) => place.id));
+    for (const place of farm.locations || []) {
+      out.push({ key: placeKey(farm.id, place.id), farm, place });
+    }
+    const adrift = clients.some((client) =>
+      client.farmId === farm.id && !known.has(client.locationId));
+    if (adrift) {
+      out.push({
+        key: placeKey(farm.id, ''),
+        farm,
+        place: { id: '', name: 'Sin ubicación' },
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * The locations one libreta packs right now, written out in full.
+ *
+ * This is what turns the old shape into the new one: a farm assigned whole
+ * comes back as each of its locations. The setup screen saves what this
+ * returns, so the first save after an edit makes the stored setup say exactly
+ * what the screen showed.
+ */
+export const placesOf = (lines, lineId, farms, clients) =>
+  allPlaces(farms, clients)
+    .filter((entry) => lineOfPlace(lines, entry.farm.id, entry.place.id)?.id === lineId);
+
+/**
+ * Locations nobody assigned to a libreta, and that have people in them.
+ *
+ * The thing that goes wrong with a setup like this is a house added in March
+ * that nobody puts on a list, whose people are then quietly not packed for. So
+ * it is counted and said out loud rather than left to be noticed. Locations
+ * with nobody in them are not mentioned: an empty house is not a problem.
+ */
+export function unassignedPlaces(lines, farms, clients = []) {
+  const known = new Set((farms || []).flatMap((farm) =>
+    (farm.locations || []).map((place) => `${farm.id}:${place.id}`)));
+
+  return allPlaces(farms, clients)
+    .filter((entry) => !lineOfPlace(lines, entry.farm.id, entry.place.id))
+    .filter((entry) => (clients || []).some((client) => {
+      if (client.farmId !== entry.farm.id) return false;
+      return entry.place.id
+        ? client.locationId === entry.place.id
+        : !known.has(`${client.farmId}:${client.locationId}`);
+    }));
+}
 
 /* --- The order of the morning ---------------------------------------------- */
 
 /**
  * @param {object}   input.line     the libreta being packed
+ * @param {object[]} [input.lines]  both libretas, so a location named in the
+ *   other one is known to be spoken for. Defaults to just this one.
  * @param {object[]} input.farms    every farm, to resolve ids and locations
  * @param {object[]} input.clients  the roster, already filtered to who is served
  * @param {string}   [input.day]    the day being packed
@@ -99,13 +201,34 @@ export const unassignedFarms = (lines, farms) =>
  *   slides   what the screen walks through, one thing per screen
  *   missing  ids in the libreta that no longer match a farm
  */
-export function packingSequence({ line, farms = [], clients = [], day = todayKey() }) {
+export function packingSequence({
+  line, lines, farms = [], clients = [], day = todayKey(),
+}) {
   const weekday = weekdayOf(day);
+  const all = lines || (line ? [line] : []);
   const byId = new Map(farms.map((farm) => [farm.id, farm]));
   const missing = [];
   const out = [];
 
+  /*
+   * Which farm comes first, and the one thing this ordering has to protect.
+   *
+   * The morning runs in the order the manager built the libreta in, not
+   * alphabetically — they know which farm the van loads first. So farms appear
+   * in the order their first location was added, and a farm assigned whole
+   * under the old shape keeps the place it had. Inside a farm the order is the
+   * farm's own list of locations, which is the order of the paper book.
+   */
+  const order = [];
+  for (const key of line?.placeIds || []) {
+    const { farmId } = readPlaceKey(key);
+    if (farmId && !order.includes(farmId)) order.push(farmId);
+  }
   for (const farmId of line?.farmIds || []) {
+    if (!order.includes(farmId)) order.push(farmId);
+  }
+
+  for (const farmId of order) {
     const farm = byId.get(farmId);
     if (!farm) { missing.push(farmId); continue; }
 
@@ -115,6 +238,7 @@ export function packingSequence({ line, farms = [], clients = [], day = todayKey
 
     const groups = [];
     for (const place of farm.locations || []) {
+      if (lineOfPlace(all, farm.id, place.id)?.id !== line?.id) continue;
       const here = roster.filter((client) => client.locationId === place.id);
       if (here.length) groups.push({ place, clients: here.sort(byName) });
     }
@@ -123,7 +247,7 @@ export function packingSequence({ line, farms = [], clients = [], day = todayKey
     // vanish from the only list that decides whether they eat.
     const known = new Set((farm.locations || []).map((place) => place.id));
     const adrift = roster.filter((client) => !known.has(client.locationId));
-    if (adrift.length) {
+    if (adrift.length && lineOfPlace(all, farm.id, '')?.id === line?.id) {
       groups.push({ place: { id: '', name: 'Sin ubicación' }, clients: adrift.sort(byName) });
     }
 

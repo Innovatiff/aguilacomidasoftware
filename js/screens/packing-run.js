@@ -89,7 +89,12 @@ export function renderPackingRun(context) {
     const line = lineOf(setup?.lines, lineId);
     if (!line || !isReady()) { plan = null; return; }
 
-    plan = { line, ...packingSequence({ line, farms: store.farms, clients: activeClients(), day }) };
+    plan = {
+      line,
+      ...packingSequence({
+        line, lines: setup.lines, farms: store.farms, clients: activeClients(), day,
+      }),
+    };
     // Always from the beginning. It used to come back to plate nineteen after
     // a browser was closed, which was right when the screen was only a screen;
     // now every person that goes by prints a label, and resuming halfway means
@@ -219,7 +224,7 @@ export function renderPackingRun(context) {
       return emptyState({
         icon: 'box',
         title: 'Hoy no hay nada que empacar en esta libreta',
-        text: 'Ninguno de sus ranchos tiene gente que coma hoy.',
+        text: 'Ninguna de sus ubicaciones tiene gente que coma hoy.',
         action: button('Regresar', { variant: 'primary', size: 'lg', onClick: () => go('/empaque') }),
       });
     }

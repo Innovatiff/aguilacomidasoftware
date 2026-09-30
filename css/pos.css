@@ -1115,3 +1115,17 @@
   .pkbtn { min-height: 64px; }
   .pk__key { min-height: 70px; }
 }
+
+/* --- Picking locations for a libreta ----------------------------------------
+   One block per farm, its locations under it. Grouped rather than one long
+   list because "Casa 1" appears at three different farms, and a flat list of
+   them is a list nobody can choose from. */
+
+.pkgroup { display: flex; flex-direction: column; gap: var(--s2); }
+.pkgroup__head {
+  display: flex; align-items: center; gap: var(--s3);
+  padding: 0 var(--s1) var(--s1);
+  border-bottom: 1px solid var(--border);
+}
+.pkgroup__name { font-size: var(--fs-md); font-weight: 700; }
+.pkgroup__meta { font-size: var(--fs-xs); color: var(--text-soft); }

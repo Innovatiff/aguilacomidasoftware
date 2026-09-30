@@ -1,17 +1,24 @@
 /**
  * Configuring the empaque — the manager's side of it.
  *
- * Two things get set here and they are set rarely: which farms belong to which
- * libreta, and who is allowed to pack with what number. Unlike the packing
- * screen itself this is an ordinary panel screen, because the person using it
- * is sitting down with the roster in front of them.
+ * Two things get set here and they are set rarely: which locations belong to
+ * which libreta, and who is allowed to pack with what number. Unlike the
+ * packing screen itself this is an ordinary panel screen, because the person
+ * using it is sitting down with the roster in front of them.
  *
- * The one thing it works hard at is the thing that goes wrong: a farm
- * registered in March that nobody puts on a list, whose people are then quietly
- * not packed for. Every farm is on this screen whether or not it has been
- * assigned, the unassigned ones are counted at the top, and a farm can only be
- * in one libreta — picking it for the second takes it out of the first, rather
- * than letting somebody pack the same food twice.
+ * **The unit is the location, not the farm.** A farm can be houses spread over
+ * kilometres, and the kitchen splits them between the two people by where they
+ * are, not by whose name is on the gate — so Casa 1 and Casa 4 of the same farm
+ * can be in different libretas. Assigning a whole farm at once is still one
+ * press; it is a shortcut over the locations rather than a different kind of
+ * thing.
+ *
+ * The one thing it works hard at is the thing that goes wrong: a house added in
+ * March that nobody puts on a list, whose people are then quietly not packed
+ * for. Every location with people in it is on this screen whether or not it has
+ * been assigned, the unassigned ones are counted at the top, and a location can
+ * only be in one libreta — picking it for the second takes it out of the first,
+ * rather than letting somebody pack the same food twice.
  */
 
 import { h } from '../lib/dom.js';
@@ -28,7 +35,9 @@ import { store, subscribe, isReady } from '../data/store.js';
 import {
   watchPacking, savePacking, setAutoPrint, watchPackers, savePacker, removePacker,
 } from '../data/packing.js';
-import { lineOfFarm, unassignedFarms, duplicatePins } from '../lib/packing.js';
+import {
+  lineOfPlace, allPlaces, placesOf, unassignedPlaces, duplicatePins,
+} from '../lib/packing.js';
 import { lifetime } from '../ui/shell.js';
 import { plural } from '../lib/format.js';
 import { errorText } from '../firebase.js';
@@ -62,14 +71,15 @@ export function renderPackingSetup() {
     if (failure) return dataErrorCard(failure, { onRetry: () => go('/empaque/ajustes') });
     if (!setup || !packers || !isReady()) return skeletonRows(5);
 
-    const orphans = unassignedFarms(setup.lines, store.farms);
+    const orphans = unassignedPlaces(setup.lines, store.farms, store.clients);
     const clashes = duplicatePins(packers);
 
     return h('div.stack.stack-5',
       orphans.length
-        ? alert(`${plural(orphans.length, 'rancho no está', 'ranchos no están')} en ninguna libreta. `
-          + 'Su comida no se va a empacar: '
-          + `${orphans.map((farm) => farm.name).join(', ')}.`, 'warn', 'alert')
+        ? alert(`${plural(orphans.length, 'ubicación no está', 'ubicaciones no están')} en `
+          + 'ninguna libreta. Su comida no se va a empacar: '
+          + `${orphans.map((one) => `${one.farm.name} · ${one.place.name}`).join(', ')}.`,
+        'warn', 'alert')
         : null,
 
       clashes.length
@@ -84,7 +94,8 @@ export function renderPackingSetup() {
 
       h('div.stack.stack-3',
         sectionLabel('Las libretas'),
-        h('p.rnote', 'Cada rancho va en una sola libreta. Al ponerlo en una, sale de la otra.'),
+        h('p.rnote', 'Cada ubicación va en una sola libreta. Las de un mismo rancho pueden '
+          + 'repartirse entre las dos: al poner una en esta, sale de la otra.'),
         setup.lines.map(lineCard)),
 
       h('div.stack.stack-3',
@@ -140,28 +151,44 @@ export function renderPackingSetup() {
   /* --- One libreta ----------------------------------------------------------- */
 
   function lineCard(line) {
-    const mine = store.farms.filter((farm) => line.farmIds.includes(farm.id));
-    const people = mine.reduce((sum, farm) =>
-      sum + store.clients.filter((client) => client.farmId === farm.id).length, 0);
+    const mine = placesOf(setup.lines, line.id, store.farms, store.clients);
+    const farms = new Set(mine.map((one) => one.farm.id));
+    const people = mine.reduce((sum, one) => sum + peopleAt(one), 0);
 
     return card(h('div.stack.stack-3',
       h('div.row.row--between',
         h('div',
           h('div.rmenu__t', line.name),
           h('div.rmenu__s', mine.length
-            ? `${plural(mine.length, 'rancho', 'ranchos')} · ${plural(people, 'cliente', 'clientes')}`
-            : 'Sin ranchos')),
+            ? `${plural(farms.size, 'rancho', 'ranchos')} · `
+              + `${plural(mine.length, 'ubicación', 'ubicaciones')} · `
+              + `${plural(people, 'cliente', 'clientes')}`
+            : 'Sin ubicaciones')),
         h('button.btn.btn--ghost.btn--sm', {
           type: 'button', onclick: () => renameLine(line),
         }, icon('edit'), 'Nombre')),
 
       mine.length
-        ? h('div.pkchips', mine.map((farm) => h('span.pkchip', farm.name)))
-        : h('p.t-sm.c-soft', 'Todavía no le has puesto ranchos.'),
+        // Farm and place together on the chip. "Casa 1" on its own says
+        // nothing on a screen where three farms have a Casa 1.
+        ? h('div.pkchips', mine.map((one) =>
+          h('span.pkchip', `${one.farm.name} · ${one.place.name}`)))
+        : h('p.t-sm.c-soft', 'Todavía no le has puesto ubicaciones.'),
 
-      button('Escoger sus ranchos', {
-        variant: 'soft', block: true, icon: 'farm', onClick: () => pickFarms(line),
+      button('Escoger sus ubicaciones', {
+        variant: 'soft', block: true, icon: 'pin', onClick: () => pickPlaces(line),
       })));
+  }
+
+  /** How many people are packed from one location today and every other day. */
+  function peopleAt(entry) {
+    const known = new Set((entry.farm.locations || []).map((place) => place.id));
+    return store.clients.filter((client) => {
+      if (client.farmId !== entry.farm.id) return false;
+      return entry.place.id
+        ? client.locationId === entry.place.id
+        : !known.has(client.locationId);
+    }).length;
   }
 
   async function renameLine(line) {
@@ -184,42 +211,84 @@ export function renderPackingSetup() {
   }
 
   /**
-   * Which farms this libreta packs.
+   * Which locations this libreta packs.
    *
-   * Every farm is listed, with the other libreta's ones marked — so the choice
-   * is made against the whole roster rather than against a filtered half of it,
-   * and taking one is visibly taking it from somewhere.
+   * Every location in the kitchen is on this sheet, grouped under its farm and
+   * with the other libreta's marked — so the choice is made against the whole
+   * roster rather than against a filtered half of it, and taking one is
+   * visibly taking it from somewhere.
+   *
+   * Each farm keeps a "todo el rancho" press, because most farms do go to one
+   * libreta whole and nobody should tap eight houses to say so. It is a
+   * shortcut over the rows, not a different setting: what gets saved is always
+   * the list of locations, which is the only thing the morning reads.
+   *
+   * The empty locations are here too, greyed. A house with nobody in it today
+   * has somebody in it next month, and leaving it off this screen is how it
+   * gets forgotten then.
    */
-  async function pickFarms(line) {
-    const chosen = new Set(line.farmIds);
-    const rows = h('div.stack.stack-2');
+  async function pickPlaces(line) {
+    const every = allPlaces(store.farms, store.clients);
+    // What this libreta owns right now, with any whole-farm assignment from
+    // the old shape already written out as its locations.
+    const chosen = new Set(
+      placesOf(setup.lines, line.id, store.farms, store.clients).map((one) => one.key),
+    );
+    const rows = h('div.stack.stack-4');
 
     const paintRows = () => rows.replaceChildren(...store.farms.map((farm) => {
-      const other = lineOfFarm(setup.lines, farm.id);
-      const elsewhere = other && other.id !== line.id;
-      const on = chosen.has(farm.id);
-      const count = store.clients.filter((client) => client.farmId === farm.id).length;
+      const here = every.filter((one) => one.farm.id === farm.id);
+      if (!here.length) return null;
+      const mine = here.filter((one) => chosen.has(one.key)).length;
 
-      return h(`button.pkpick${on ? '.is-on' : ''}`, {
-        type: 'button',
-        onclick: () => {
-          if (on) chosen.delete(farm.id); else chosen.add(farm.id);
-          paintRows();
-        },
-      },
-        h('span.pkpick__box', on ? icon('check') : null),
-        h('span.grow',
-          h('span.pkpick__name', farm.name),
-          h('span.pkpick__meta', `${plural(count, 'cliente', 'clientes')}`
-            + (elsewhere ? ` · ahora está en ${other.name}` : ''))),
-        elsewhere && !on ? badge('En la otra', 'warn') : null);
-    }));
+      return h('div.pkgroup',
+        h('div.pkgroup__head',
+          h('div.grow',
+            h('div.pkgroup__name', farm.name),
+            h('div.pkgroup__meta', mine === here.length ? 'Todo el rancho'
+              : mine ? `${mine} de ${here.length}`
+                : 'Ninguna')),
+          h('button.btn.btn--ghost.btn--sm', {
+            type: 'button',
+            onclick: () => {
+              // All or nothing, whichever it is not already.
+              const all = mine === here.length;
+              for (const one of here) {
+                if (all) chosen.delete(one.key); else chosen.add(one.key);
+              }
+              paintRows();
+            },
+          }, mine === here.length ? 'Quitar todo' : 'Todo el rancho')),
+
+        h('div.stack.stack-2', here.map((one) => {
+          const other = lineOfPlace(setup.lines, one.farm.id, one.place.id);
+          const elsewhere = other && other.id !== line.id && !chosen.has(one.key);
+          const on = chosen.has(one.key);
+          const count = peopleAt(one);
+
+          return h(`button.pkpick${on ? '.is-on' : ''}`, {
+            type: 'button',
+            onclick: () => {
+              if (on) chosen.delete(one.key); else chosen.add(one.key);
+              paintRows();
+            },
+          },
+          h('span.pkpick__box', on ? icon('check') : null),
+          h('span.grow',
+            h('span.pkpick__name', one.place.name),
+            h('span.pkpick__meta',
+              (count ? plural(count, 'cliente', 'clientes') : 'Sin clientes')
+              + (elsewhere ? ` · ahora está en ${other.name}` : ''))),
+          elsewhere ? badge('En la otra', 'warn') : null);
+        })));
+    }).filter(Boolean));
     paintRows();
 
     const done = await sheet({
-      title: `Ranchos de ${line.name}`,
+      title: `Ubicaciones de ${line.name}`,
       build: (close) => h('div.stack.stack-4',
-        h('p.t-sm.c-soft', 'Toca los ranchos que van en esta libreta.'),
+        h('p.t-sm.c-soft', 'Toca las ubicaciones que van en esta libreta. Las de un mismo '
+          + 'rancho pueden repartirse entre las dos.'),
         rows,
         button('Guardar', {
           variant: 'primary', size: 'lg', block: true, onClick: () => close(true),
@@ -227,11 +296,26 @@ export function renderPackingSetup() {
     });
     if (!done) return;
 
-    // Taking a farm for this libreta takes it out of the other one. Two lists
-    // that both contain Mucci Farms is two people packing the same food.
-    const next = setup.lines.map((row) => (row.id === line.id
-      ? { ...row, farmIds: store.farms.filter((farm) => chosen.has(farm.id)).map((farm) => farm.id) }
-      : { ...row, farmIds: row.farmIds.filter((id) => !chosen.has(id)) }));
+    /*
+     * The save writes both libretas out in full, and empties `farmIds`.
+     *
+     * Taking a location for this libreta takes it out of the other one — two
+     * lists that both contain Casa 1 is two people packing the same food. And
+     * because what the other libreta owns is worked out here from what the
+     * screen was showing, the first save after any edit turns the old
+     * whole-farm shape into the explicit locations it always meant. From then
+     * on the stored setup says exactly what the manager saw.
+     */
+    const next = setup.lines.map((row) => {
+      if (row.id === line.id) {
+        return { ...row, farmIds: [], placeIds: [...chosen] };
+      }
+      const theirs = every
+        .filter((one) => !chosen.has(one.key))
+        .filter((one) => lineOfPlace(setup.lines, one.farm.id, one.place.id)?.id === row.id)
+        .map((one) => one.key);
+      return { ...row, farmIds: [], placeIds: theirs };
+    });
 
     try {
       await savePacking(next, author());

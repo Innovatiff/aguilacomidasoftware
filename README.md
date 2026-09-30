@@ -333,9 +333,23 @@ en dos computadoras a la vez: una colaboradora lleva la **Libreta 1** y otra la
 **Libreta 2**.
 
 **Configurarlo** — *Empaque → el engrane de arriba*. Ahí se da de alta a quién
-empaca (nombre y número) y se reparten los ranchos entre las dos libretas. Un
-rancho sólo puede estar en una; si queda fuera de las dos, la pantalla lo avisa,
-porque esa comida no se empacaría.
+empaca (nombre y número) y se reparten las **ubicaciones** entre las dos
+libretas.
+
+La unidad es la ubicación, no el rancho: un rancho como #332 Morsea tiene casas
+repartidas por kilómetros, y la cocina las divide entre las dos personas por
+dónde están, no por de quién es el portón. **Casa 1 puede ir en la Libreta 1 y
+Casa 4 en la Libreta 2.** Si un rancho entero va a una sola libreta, hay un
+botón *Todo el rancho* que lo hace de un toque.
+
+Cada ubicación va en una sola libreta: ponerla en una la saca de la otra, o la
+misma comida se empaca dos veces. Y si una ubicación **con gente adentro** queda
+fuera de las dos, la pantalla lo avisa arriba, porque esa comida no se empacaría.
+Una ubicación vacía no se avisa — una casa sin nadie no es un problema.
+
+Quien no tenga ubicación puesta, o la tenga borrada, cae en un cajón llamado
+*Sin ubicación* que también se asigna a una libreta. Así nadie desaparece de la
+única lista que decide si come.
 
 **Empacar** — se escribe el número, se elige la libreta, y la pantalla va
 pasando de uno en uno: primero el rancho («One Floral · 8 personas») y después
@@ -674,7 +688,12 @@ receipts/{receiptId}             -- se escribe una vez y nunca se toca
   takenByName, takenByUid, at
 
 config/packing                   -- cómo se reparte el empaque
-  lines [{ id, name, farmIds }]  -- exactamente dos libretas
+  lines [{ id, name, placeIds, farmIds }]
+                                 -- exactamente dos libretas
+    placeIds ['f1:loc_a', 'f1:'] -- "rancho:ubicación"; vacío = sin ubicación
+    farmIds  ['f1']              -- la forma vieja: el rancho entero. Se sigue
+                                    leyendo, y el primer guardado del selector
+                                    la convierte en placeIds
   autoPrint                      -- si la etiqueta sale sola al avanzar
   updatedAt, updatedByName
 
