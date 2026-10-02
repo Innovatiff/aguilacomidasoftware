@@ -245,11 +245,12 @@ export function runFlow({ title, steps, state = {}, subject, commit, done, onExi
    * A counter keyboard, if there is one, should work: Enter goes forward,
    * Escape steps back. Enter is ignored while the pointer is in a textarea,
    * and never fires the commit by accident — the last step needs a real click
-   * or an explicit Enter on the focused button.
+   * or an explicit Enter on the focused button. A field that answers Enter
+   * itself (a list that adds a row on Enter) keeps it: one key, one action.
    */
   function onKey(event) {
     if (event.key === 'Escape') { event.preventDefault(); goBack(); return; }
-    if (event.key !== 'Enter') return;
+    if (event.key !== 'Enter' || event.defaultPrevented) return;
     const el = document.activeElement;
     if (el && (el.tagName === 'TEXTAREA' || el.tagName === 'BUTTON')) return;
     event.preventDefault();

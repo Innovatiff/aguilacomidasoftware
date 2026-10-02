@@ -51,10 +51,10 @@ import { toastBad } from '../ui/overlay.js';
 import { go } from '../lib/router.js';
 import { store, subscribe, activeClients, isReady, firstError, startStore } from '../data/store.js';
 import {
-  watchPacking, startRun, finishRun, noteProgress, seatedPacker,
+  watchPacking, watchPackers, startRun, finishRun, noteProgress, seatedPacker,
 } from '../data/packing.js';
 import { printLabel } from '../ui/print.js';
-import { packingSequence, lineOf } from '../lib/packing.js';
+import { packingSequence, lineOf, canDo } from '../lib/packing.js';
 import { today, formatDayLong, capitalize } from '../lib/dates.js';
 import { plural, number } from '../lib/format.js';
 import { errorText } from '../firebase.js';
@@ -82,6 +82,16 @@ export function renderPackingRun(context) {
   const stops = [
     watchPacking((found) => { setup = found; rebuild(); paint(); },
       (error) => { failure = error; paint(); }),
+    // Permission to pack can be taken away while somebody is halfway through a
+    // libreta. They are sent back to where the libretas are offered, which
+    // says why; the record of what they already packed stays as it is.
+    watchPackers((rows) => {
+      if (!rows.length) return;
+      const record = rows.find((row) => row.id === packer.id);
+      if (!record || record.active === false || !canDo(record, 'pack')) {
+        go('/empaque', { replace: true });
+      }
+    }, () => {}),
   ];
 
   /** The order of the morning, and where we are in it. */
@@ -255,7 +265,7 @@ export function renderPackingRun(context) {
 
   function farmSlide(slide) {
     return h('div.pkfarm',
-      h('div.pkfarm__eyebrow', 'Sigue este rancho'),
+      h('div.pkfarm__eyebrow', 'Sigue esta farma'),
       h('h2.pkfarm__name', slide.farm.name),
       // One line instead of two stacked columns of figures. It is the size of
       // what is coming, read once; the line under the name is enough for that.
@@ -305,7 +315,7 @@ export function renderPackingRun(context) {
       h('p.pkdone__text',
         `Empacaste ${plural(plan.people, 'persona', 'personas')} `
         + `y ${plural(plan.plates, 'comida', 'comidas')} de `
-        + `${plural(plan.farms.length, 'rancho', 'ranchos')}.`),
+        + `${plural(plan.farms.length, 'farma', 'farmas')}.`),
       h('p.pkdone__who', `Queda registrado a nombre de ${packer.name}.`));
   }
 

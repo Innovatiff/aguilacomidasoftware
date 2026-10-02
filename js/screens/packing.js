@@ -22,7 +22,7 @@ import { store, subscribe, activeClients, isReady, firstError, startStore } from
 import {
   watchPacking, watchPackers, watchPackRuns, seatedPacker, sitDown,
 } from '../data/packing.js';
-import { packingSequence, packerByPin, unassignedPlaces } from '../lib/packing.js';
+import { packingSequence, packerByPin, unassignedPlaces, canDo } from '../lib/packing.js';
 import { today, formatDayLong, formatTime, capitalize } from '../lib/dates.js';
 import { kitchen } from '../lib/mode.js';
 import { plural, number } from '../lib/format.js';
@@ -62,7 +62,10 @@ export function renderPacking() {
       // button people press twice before deciding the app is broken.
       backTo: kitchen() && !asking ? '/rapido' : undefined,
       sunken: true,
-      actions: [topbarButton('settings', {
+      // The setup — libretas, users, what each user may do — is the manager's,
+      // and it is done from the panel. On the kitchen computer a gear here
+      // would let anybody who walks past give themselves every permission.
+      actions: kitchen() ? [] : [topbarButton('settings', {
         label: 'Configurar el empaque', onClick: () => go('/empaque/ajustes'),
       })],
       body: h(`div.page__inner.pk.stack.stack-5${asking ? '.pk--asking' : ''}`, content),
@@ -82,11 +85,14 @@ export function renderPacking() {
   function noPackers() {
     return emptyState({
       icon: 'users',
-      title: 'Todavía no hay nadie dado de alta',
-      text: 'El encargado tiene que agregar a quién empaca, y su número, antes de '
-        + 'poder usar esta pantalla.',
-      action: button('Configurar el empaque', {
-        variant: 'primary', size: 'lg', icon: 'settings', onClick: () => go('/empaque/ajustes'),
+      title: 'Todavía no hay usuarios',
+      text: kitchen()
+        ? 'El encargado tiene que crear los usuarios desde el panel, cada uno con su PIN, '
+          + 'antes de poder entrar aquí.'
+        : 'Crea los usuarios —nombre, PIN y lo que puede hacer cada uno— antes de poder '
+          + 'usar esta pantalla.',
+      action: kitchen() ? null : button('Crear usuarios', {
+        variant: 'primary', size: 'lg', icon: 'userPlus', onClick: () => go('/empaque/ajustes'),
       }),
     });
   }
@@ -160,6 +166,16 @@ export function renderPacking() {
   /* --- Which libreta ------------------------------------------------------- */
 
   function pickLine() {
+    // Read from the live list, not from when the PIN was typed: switched off,
+    // removed, or no longer allowed to pack, and this screen stops offering.
+    const record = packers.find((one) => one.id === packer.id);
+    if (!record || record.active === false) {
+      packer = null;
+      sitDown(null);
+      return askPin();
+    }
+    if (!canDo(record, 'pack')) return notAllowed();
+
     const roster = activeClients();
     const orphans = unassignedPlaces(setup.lines, store.farms, store.clients);
 
@@ -185,6 +201,23 @@ export function renderPacking() {
         : null,
 
       runs.length ? doneToday() : null);
+  }
+
+  /** A user who is here, but whose permissions do not include packing. */
+  function notAllowed() {
+    return emptyState({
+      icon: 'lock',
+      title: `${packer.name}, no tienes permiso para empacar`,
+      text: 'Si te toca empacar hoy, pídele al encargado que te lo active desde el panel.',
+      action: kitchen()
+        ? button('Volver al menú', {
+          variant: 'primary', size: 'lg', icon: 'chevronL', onClick: () => go('/rapido'),
+        })
+        : button('No soy yo', {
+          variant: 'ghost', size: 'lg',
+          onClick: () => { packer = null; sitDown(null); typed = ''; paint(); },
+        }),
+    });
   }
 
   function lineCard(line, roster) {
@@ -222,7 +255,7 @@ export function renderPacking() {
           h('span.pkline__l', 'comidas')),
         h('div.pkline__num',
           h('span.pkline__n', number(plan.farms.length)),
-          h('span.pkline__l', plan.farms.length === 1 ? 'rancho' : 'ranchos'))),
+          h('span.pkline__l', plan.farms.length === 1 ? 'farma' : 'farmas'))),
 
       h('div.pkline__foot',
         run

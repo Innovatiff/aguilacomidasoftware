@@ -28,12 +28,14 @@ import { WEEKDAYS_SHORT, today as todayKey } from '../lib/dates.js';
  *   the same from two steps back; three colours make the board scannable
  *   before a single word has been read. The label still says everything the
  *   colour does.
+ * @param {boolean} [options.band]  across the whole width, icon and words on
+ *   one line — for the one action that has its row to itself.
  */
 export const posTile = ({
-  icon: name, title, sub, onClick, on = false, hero = false, family,
+  icon: name, title, sub, onClick, on = false, hero = false, band = false, family,
 }) =>
-  h(`button.postile${hero ? '.postile--hero' : ''}${family ? `.postile--${family}` : ''}`
-    + `${on ? '.is-on' : ''}`,
+  h(`button.postile${hero ? '.postile--hero' : ''}${band ? '.postile--band' : ''}`
+    + `${family ? `.postile--${family}` : ''}${on ? '.is-on' : ''}`,
   { type: 'button', onclick: onClick },
   name ? h('span.postile__ico', icon(name)) : null,
   h('span.postile__name', title),

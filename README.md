@@ -328,19 +328,25 @@ la cuenta se pueda verificar después.
 
 ### 10. Empacar la comida
 
-Todas las mañanas hay que llenar las charolas rancho por rancho, y eso se hace
+Todas las mañanas hay que llenar las charolas farma por farma, y eso se hace
 en dos computadoras a la vez: una colaboradora lleva la **Libreta 1** y otra la
 **Libreta 2**.
 
-**Configurarlo** — *Empaque → el engrane de arriba*. Ahí se da de alta a quién
-empaca (nombre y número) y se reparten las **ubicaciones** entre las dos
-libretas.
+> En toda la parte de empaque se dice **farma**, que es como le dicen en la
+> cocina. El resto del panel todavía dice *rancho*: es lo mismo.
 
-La unidad es la ubicación, no el rancho: un rancho como #332 Morsea tiene casas
+**Configurarlo** — en el panel, *Empaque → el engrane de arriba*. Ahí se
+reparten las **ubicaciones** entre las dos libretas, se da de alta a cada
+persona que trabaja en la cocina con su PIN y lo que puede hacer (ver
+[Usuarios y permisos](#usuarios-y-permisos)), y se prende o apaga la etiqueta
+automática. En la computadora de la cocina el engrane no aparece: la
+configuración es del panel.
+
+La unidad es la ubicación, no la farma: una farma como #332 Morsea tiene casas
 repartidas por kilómetros, y la cocina las divide entre las dos personas por
 dónde están, no por de quién es el portón. **Casa 1 puede ir en la Libreta 1 y
-Casa 4 en la Libreta 2.** Si un rancho entero va a una sola libreta, hay un
-botón *Todo el rancho* que lo hace de un toque.
+Casa 4 en la Libreta 2.** Si una farma entera va a una sola libreta, hay un
+botón *Toda la farma* que lo hace de un toque.
 
 Cada ubicación va en una sola libreta, o la misma comida se empaca dos veces.
 **Una libreta no le puede quitar una ubicación a la otra:** lo que ya está
@@ -360,29 +366,88 @@ Quien no tenga ubicación puesta, o la tenga borrada, cae en un cajón llamado
 *Sin ubicación* que también se asigna a una libreta. Así nadie desaparece de la
 única lista que decide si come.
 
-**Empacar** — se escribe el número, se elige la libreta, y la pantalla va
-pasando de uno en uno: primero el rancho («One Floral · 8 personas») y después
+**Empacar** — desde el menú de la cocina, *Empacar* → la libreta, y la pantalla
+va pasando de uno en uno: primero la farma («One Floral · 8 personas») y después
 cada persona, con sus **restricciones en rojo** y su nota. Se avanza con el
 botón grande, con la barra espaciadora o con →; se regresa con ←.
 
 Las dos computadoras se ven entre ellas: quien llega segunda alcanza a ver que
 la primera ya va por la mitad de la Libreta 1, que es lo que evita que la misma
-comida se empaque dos veces y el otro rancho no se empaque nunca.
+comida se empaque dos veces y la otra farma no se empaque nunca.
 
-El número **no es una contraseña**. Sirve para que quede escrito quién empacó
-cada libreta; la pantalla ya está dentro del panel, detrás de una cuenta de la
-cocina, y quien puede escribir el número ya podía entrar sin él.
+#### Usuarios y permisos
+
+Cada persona que trabaja en la cocina tiene su usuario: su **nombre**, su
+**PIN** y **qué puede hacer**. Se dan de alta sólo desde el panel, en
+*Empaque → Configurar → Usuarios → Nuevo usuario*:
+
+1. **El nombre**, como lo va a ver en la pantalla.
+2. **El PIN**, de 4 a 8 números. Dos personas activas no pueden tener el mismo:
+   el panel no deja guardarlo y dice quién ya lo usa.
+3. **Qué puede hacer**: un interruptor por cada botón del menú de la cocina.
+   *Todo* y *Nada* los prenden o apagan juntos.
+
+| Permiso | Qué abre |
+|---|---|
+| Empacar | Escoger una libreta y empacarla, con sus etiquetas |
+| Nueva farma | Dar de alta una farma con sus ubicaciones |
+| Calendario semanal | Cambiar qué días tiene pedido una persona |
+| Cantidad de pedidos | Cambiar cuántos pedidos lleva al día (1 ó 2) |
+| Nuevo cliente | Dar de alta a una persona en una farma |
+| Pausar o reactivar | Poner a alguien en pausa, o volverlo a activar |
+| Último día de pedido | Poner hasta qué día recibe pedido una persona |
+
+En la cocina, la persona escribe su PIN y cae directo en su menú, que trae
+**sólo los botones que tiene permitidos**. No es sólo el menú: si alguien sin
+*Empacar* entra a una libreta escribiendo la dirección a mano, tampoco le abre.
+
+Los cambios llegan solos. Si el encargado le apaga un permiso a alguien que
+está trabajando, el botón desaparece de su pantalla en ese momento; si lo
+desactiva, la pantalla regresa al teclado y su PIN deja de servir. La lista del
+panel nunca enseña los PIN: dice cuánto puede hacer cada quien —«Puede hacer
+todo», «Solo empacar», «5 de 7 permisos»— y nada más.
+
+**Quien ya existía puede hacer todo.** Los usuarios dados de alta antes de los
+permisos no tienen ninguno guardado y siguen viendo los siete botones, como
+hasta hoy. La primera vez que alguien los edite y guarde, quedan escritos uno
+por uno.
+
+Lo que se hace desde el menú de la cocina queda **firmado con el nombre de
+quien lo hizo**, no con el de la cuenta de la cocina.
+
+> **El PIN y los permisos no son un candado.** Deciden qué enseña la pantalla
+> de la cocina, que ya está dentro de una cuenta compartida: con esa cuenta,
+> en esa misma computadora, también abre el panel completo. Sirven para que
+> cada quien vea sólo lo suyo y para que quede escrito quién hizo qué. Si
+> alguien de verdad no debe poder hacer algo, la respuesta es que esa
+> computadora no tenga la cuenta, no un interruptor apagado.
+
+#### Nueva farma desde la cocina
+
+*Nueva farma* da de alta una farma en tres pasos: el **nombre**, sus
+**ubicaciones** —se escribe una, *Agregar* o Enter, y así hasta tenerlas
+todas— y revisar.
+
+- No deja repetir una farma que ya existe, ni la misma ubicación dos veces,
+  aunque cambien las mayúsculas.
+- No deja darla de alta sin ubicaciones: nadie podría registrarse ahí.
+- Lo demás —contacto, teléfono, horario, ciclo de cobro— queda con los valores
+  de siempre (pedidos de lunes a sábado) y se completa después desde el panel,
+  en *Ranchos*. Desde ese momento ya aparece en *Nuevo cliente*.
+- Una farma nueva todavía no está en ninguna libreta. En cuanto alguien se
+  registre ahí, el aviso de ubicaciones sin libreta lo dice, y se asigna en
+  *Empaque → Configurar*.
 
 #### La etiqueta que sale sola
 
 Cada vez que aparece una persona en la pantalla, su etiqueta sale de la
-impresora. La libreta **siempre empieza desde cero**, la diapositiva del rancho
+impresora. La libreta **siempre empieza desde cero**, la diapositiva de la farma
 no imprime nada, y regresar tampoco: eso es para revisar un nombre ya empacado,
 y una etiqueta por cada revisión es un rollo perdido para el miércoles. Volver a
 avanzar sí imprime, que es como se repone una etiqueta atorada.
 
 La etiqueta es de **100 × 50 mm** y lleva, de arriba abajo: el nombre grande en
-mayúsculas, una raya, el rancho y la ubicación, las preferencias, la nota, y al
+mayúsculas, una raya, la farma y la ubicación, las preferencias, la nota, y al
 pie el día, la libreta y el número de la persona. A la izquierda un **QR de
 32 mm** que lleva a la página donde esa persona instala su propia app, con su
 correo ya escrito.
@@ -434,8 +499,15 @@ Dirección de la app del cliente*.
 #### Instalar la app de empaque en las computadoras de la cocina
 
 La cocina tiene su propia puerta — **`/empaque`** — con su propio icono, su
-propio nombre y nada del panel adentro: abre directo en «¿Quién eres?» y
-después en el menú, con **Empacar** de primero y el mostrador completo debajo.
+propio nombre y nada del panel adentro: abre directo en «¿Quién eres?» y, con
+el PIN, en el menú de esa persona —sólo con lo que tiene permitido—:
+
+- **Empacar**, arriba y de lado a lado: es lo que se hace todas las mañanas.
+- Debajo, dos columnas: *Nueva farma*, *Calendario semanal* y *Cantidad de
+  pedidos*; *Nuevo cliente*, *Pausar o reactivar* y *Último día de pedido*.
+
+Cobrar, la caja y lo cobrado hoy no están: son del mostrador, y la *Acción
+rápida* del panel sigue igual que siempre.
 
 En cada computadora, una sola vez:
 
@@ -543,7 +615,8 @@ js/
     model.js          estados de entrega, métodos de pago, respuestas rápidas
     icons.js          set de iconos SVG
     mode.js           por cuál de las dos puertas se abrió la app
-    packing.js        el orden en que se empaca: rancho, lugar, persona
+    packing.js        el orden en que se empaca —farma, lugar, persona— y
+                      los permisos de cada quien en la cocina
     qr.js             códigos QR, escritos aquí: sin paquetes y sin internet
   data/               una capa por colección de Firestore
     session.js  staff.js  pricing.js  farms.js  clients.js
@@ -699,15 +772,18 @@ receipts/{receiptId}             -- se escribe una vez y nunca se toca
 config/packing                   -- cómo se reparte el empaque
   lines [{ id, name, placeIds, farmIds }]
                                  -- exactamente dos libretas
-    placeIds ['f1:loc_a', 'f1:'] -- "rancho:ubicación"; vacío = sin ubicación
-    farmIds  ['f1']              -- la forma vieja: el rancho entero. Se sigue
+    placeIds ['f1:loc_a', 'f1:'] -- "farma:ubicación"; vacío = sin ubicación
+    farmIds  ['f1']              -- la forma vieja: la farma entera. Se sigue
                                     leyendo, y el primer guardado del selector
                                     la convierte en placeIds
   autoPrint                      -- si la etiqueta sale sola al avanzar
   updatedAt, updatedByName
 
-packers/{packerId}               -- quién empaca y con qué número entra
-  name, pin, active              -- el número es una etiqueta, no una contraseña
+packers/{packerId}               -- cada persona que trabaja en la cocina
+  name, pin, active              -- el PIN es una etiqueta, no una contraseña
+  can { pack, newFarm, week,     -- qué botones ve en la cocina. Una llave
+        meals, newClient,           que falta vale sí: así quien ya existía
+        status, lastDay }           sigue pudiendo todo. Se guardan las siete
   createdAt, updatedAt, updatedByName
 
 packRuns/{YYYY-MM-DD_lineId}     -- una libreta, una mañana; nunca se borra
@@ -754,6 +830,9 @@ Las reglas en `firestore.rules` descansan en tres cosas:
 - **Trabajar en el mismo rancho no da acceso a nadie.** Dos personas de Casa 1
   comparten exactamente un documento —el del rancho, que sólo se lee— y nada
   más: ni la ficha, ni la factura, ni el chat del compañero.
+- **Los permisos de la cocina no son reglas.** El PIN y lo que cada quien
+  puede hacer viven en `packers` y los aplica la pantalla, sobre una cuenta
+  compartida que es de administrador. Las reglas no saben quién está sentado.
 - **El dinero es de un solo sentido.** Los clientes leen `invoices`, `receipts`
   y `deliveries`; sólo la cocina escribe. Un mensaje enviado y un recibo emitido
   no se editan ni se borran, ni siquiera por un administrador.

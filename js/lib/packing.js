@@ -311,6 +311,84 @@ export function packerByPin(packers, pin) {
     && String(packer.pin || '').trim() === typed) || null;
 }
 
+/* --- What each person may do ------------------------------------------------ */
+
+/**
+ * The actions on the kitchen's menu, each one something a user can be allowed
+ * or not.
+ *
+ * One entry per button, in the order the buttons appear, and nothing that is
+ * not a button: a permission nobody can see the effect of is a setting the
+ * manager has to take on trust.
+ *
+ * **This is about what each person is given, not about who can break in.**
+ * Everyone at the kitchen computer works under the same signed-in account, and
+ * the number they type is a name tag. These decide what a person's menu shows
+ * and which screens open for them — the same job as giving the new hire only
+ * the keys they need — and they are honest about being exactly that.
+ */
+export const ABILITIES = [
+  { key: 'pack', title: 'Empacar',
+    hint: 'Escoger una libreta y empacarla, con sus etiquetas.' },
+  { key: 'newFarm', title: 'Nueva farma',
+    hint: 'Dar de alta una farma con sus ubicaciones.' },
+  { key: 'week', title: 'Calendario semanal',
+    hint: 'Cambiar qué días tiene pedido una persona.' },
+  { key: 'meals', title: 'Cantidad de pedidos',
+    hint: 'Cambiar cuántos pedidos lleva al día.' },
+  { key: 'newClient', title: 'Nuevo cliente',
+    hint: 'Dar de alta a una persona en una farma.' },
+  { key: 'status', title: 'Pausar o reactivar',
+    hint: 'Poner a alguien en pausa, o volverlo a activar.' },
+  { key: 'lastDay', title: 'Último día de pedido',
+    hint: 'Poner hasta qué día recibe pedido una persona.' },
+];
+
+/**
+ * Everything one user is allowed, as `{ pack: true, newFarm: false, … }`.
+ *
+ * A permission that was never saved counts as allowed. That is what keeps the
+ * people who were already packing on the morning this arrived packing exactly
+ * as they did — their records have no permissions on them at all. The first
+ * time the manager opens and saves one, every permission is written out, so
+ * after that nothing about that person rests on a default.
+ */
+export function abilitiesOf(packer) {
+  const stored = packer?.can && typeof packer.can === 'object' ? packer.can : {};
+  const out = {};
+  for (const { key } of ABILITIES) out[key] = stored[key] !== false;
+  return out;
+}
+
+/** Whether one user may do one thing. */
+export const canDo = (packer, key) => abilitiesOf(packer)[key] === true;
+
+/** In words, for the list of users: "Puede hacer todo", "Solo empacar", "5 de 7 permisos". */
+export function abilitiesInWords(packer) {
+  const mine = abilitiesOf(packer);
+  const allowed = ABILITIES.filter(({ key }) => mine[key]);
+  if (allowed.length === ABILITIES.length) return 'Puede hacer todo';
+  if (!allowed.length) return 'Sin permisos';
+  if (allowed.length === 1) return `Solo ${allowed[0].title.toLowerCase()}`;
+  if (allowed.length === 2) return allowed.map((one) => one.title).join(' y ');
+  return `${allowed.length} de ${ABILITIES.length} permisos`;
+}
+
+/**
+ * Another active user already using this number, or null.
+ *
+ * Two people with the same number is a coin toss over whose name goes on the
+ * morning — and now also over whose permissions open. So it is refused when
+ * saving rather than warned about afterwards.
+ */
+export function pinTakenBy(packers, pin, exceptId) {
+  const wanted = String(pin || '').trim();
+  if (!wanted) return null;
+  return (packers || []).find((packer) => packer.id !== exceptId
+    && packer.active !== false
+    && String(packer.pin || '').trim() === wanted) || null;
+}
+
 /** True when two packers share a number, which would make the name a coin toss. */
 export const duplicatePins = (packers) => {
   const seen = new Set();

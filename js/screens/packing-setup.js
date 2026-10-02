@@ -26,7 +26,7 @@ import { icon } from '../lib/icons.js';
 import { screen } from '../ui/shell.js';
 import {
   card, button, asyncButton, input, field, sectionLabel, alert,
-  skeletonRows, dataErrorCard, emptyState, list, itemRow, badge, switchRow,
+  skeletonRows, dataErrorCard, emptyState, list, itemRow, badge, switchRow, avatar,
 } from '../ui/kit.js';
 import { sheet, confirm, toastOk, toastBad } from '../ui/overlay.js';
 import { go } from '../lib/router.js';
@@ -37,12 +37,39 @@ import {
 } from '../data/packing.js';
 import {
   lineOfPlace, allPlaces, placesOf, unassignedPlaces, duplicatePins,
+  ABILITIES, abilitiesOf, abilitiesInWords,
 } from '../lib/packing.js';
 import { lifetime } from '../ui/shell.js';
 import { plural } from '../lib/format.js';
 import { errorText } from '../firebase.js';
+import { kitchen } from '../lib/mode.js';
 
 export function renderPackingSetup() {
+  /*
+   * Not on the kitchen computer.
+   *
+   * This is where users are created and given their permissions. Open on the
+   * machine those users sit at, it would let any of them give themselves
+   * every permission there is — the whole setup would be decoration. The
+   * manager does it from the panel, which is the only place it is reachable.
+   */
+  if (kitchen()) {
+    screen({
+      title: 'Configurar el empaque',
+      backTo: '/rapido',
+      body: h('div.page__inner', emptyState({
+        icon: 'lock',
+        title: 'Esto se configura desde el panel',
+        text: 'Las libretas, los usuarios y lo que puede hacer cada uno los cambia el '
+          + 'encargado desde el panel de administración, no desde esta computadora.',
+        action: button('Volver al menú', {
+          variant: 'primary', size: 'lg', icon: 'chevronL', onClick: () => go('/rapido'),
+        }),
+      })),
+    });
+    return () => {};
+  }
+
   const life = lifetime();
   let setup = null;
   let packers = null;
@@ -59,7 +86,7 @@ export function renderPackingSetup() {
     if (!life.alive()) return;
     screen({
       title: 'Configurar el empaque',
-      subtitle: 'Las libretas y quién las empaca',
+      subtitle: 'Las libretas, los usuarios y lo que puede hacer cada uno',
       backTo: '/empaque',
       tab: 'packing',
       sunken: true,
@@ -94,20 +121,25 @@ export function renderPackingSetup() {
 
       h('div.stack.stack-3',
         sectionLabel('Las libretas'),
-        h('p.rnote', 'Cada ubicación va en una sola libreta, y las de un mismo rancho pueden '
+        h('p.rnote', 'Cada ubicación va en una sola libreta, y las de una misma farma pueden '
           + 'repartirse entre las dos. Para mover una, primero quítala de la libreta donde '
           + 'está y después escógela en la otra.'),
         setup.lines.map(lineCard)),
 
       h('div.stack.stack-3',
-        sectionLabel(`Quién empaca · ${packers.length}`, h('button.btn.btn--soft.btn--sm', {
+        sectionLabel(`Usuarios · ${packers.length}`, h('button.btn.btn--soft.btn--sm', {
           type: 'button', onclick: () => editPacker(null),
-        }, icon('plus'), 'Agregar')),
+        }, icon('userPlus'), 'Nuevo usuario')),
+        h('p.rnote', 'Cada persona entra a la computadora de la cocina con su PIN, y ve '
+          + 'solo los botones que tiene permitidos.'),
         packers.length ? packerList() : emptyState({
           icon: 'users',
-          title: 'Nadie dado de alta',
-          text: 'Agrega a quién empaca y dale un número de cuatro dígitos. '
-            + 'Con ese número su nombre queda en la lista de cada mañana.',
+          title: 'Todavía no hay usuarios',
+          text: 'Crea uno por persona: su nombre, un PIN de cuatro dígitos y lo que '
+            + 'puede hacer. Con eso ya entra a la computadora de la cocina.',
+          action: button('Nuevo usuario', {
+            variant: 'primary', icon: 'userPlus', onClick: () => editPacker(null),
+          }),
         })));
   }
 
@@ -161,7 +193,7 @@ export function renderPackingSetup() {
         h('div',
           h('div.rmenu__t', line.name),
           h('div.rmenu__s', mine.length
-            ? `${plural(farms.size, 'rancho', 'ranchos')} · `
+            ? `${plural(farms.size, 'farma', 'farmas')} · `
               + `${plural(mine.length, 'ubicación', 'ubicaciones')} · `
               + `${plural(people, 'cliente', 'clientes')}`
             : 'Sin ubicaciones')),
@@ -268,7 +300,7 @@ export function renderPackingSetup() {
           h('div.grow',
             h('div.pkgroup__name', farm.name),
             h('div.pkgroup__meta', [
-              mine === here.length ? 'Todo el rancho'
+              mine === here.length ? 'Toda la farma'
                 : mine ? `${mine} de ${here.length}`
                   : 'Ninguna',
               locked.length ? `${locked.length} en ${heldElsewhere(locked[0]).name}` : null,
@@ -286,7 +318,7 @@ export function renderPackingSetup() {
                 }
                 paintRows();
               },
-            }, allFree ? 'Quitar todo' : 'Todo el rancho')
+            }, allFree ? 'Quitar todo' : 'Toda la farma')
             : null),
 
         h('div.stack.stack-2', here.map((one) => {
@@ -323,8 +355,8 @@ export function renderPackingSetup() {
     const done = await sheet({
       title: `Ubicaciones de ${line.name}`,
       build: (close) => h('div.stack.stack-4',
-        h('p.t-sm.c-soft', 'Toca las ubicaciones que van en esta libreta. Las de un mismo '
-          + 'rancho pueden repartirse entre las dos. Lo que ya tiene la otra sale con '
+        h('p.t-sm.c-soft', 'Toca las ubicaciones que van en esta libreta. Las de una misma '
+          + 'farma pueden repartirse entre las dos. Lo que ya tiene la otra sale con '
           + 'candado: para traerlo, quítalo de allá primero.'),
         rows,
         button('Guardar', {
@@ -371,65 +403,131 @@ export function renderPackingSetup() {
 
   /* --- Who packs -------------------------------------------------------------- */
 
+  /**
+   * The users, one row each.
+   *
+   * The PIN is not printed here. It is not a password, but it is still the
+   * thing that puts somebody's name on the morning, and a list that shows every
+   * number to whoever is looking over the manager's shoulder is not a list that
+   * looks like it was made by people who thought about it. It is one tap away,
+   * in the user's own sheet.
+   */
   function packerList() {
-    return list(packers.map((packer) => itemRow({
-      lead: h('span.pkpin', packer.pin || '····'),
-      title: packer.name,
-      meta: packer.active === false ? 'Dada de baja' : 'Puede empacar',
-      end: packer.active === false ? badge('Inactiva', 'muted') : null,
-      onClick: () => editPacker(packer),
-    })), { card: true });
+    return list(packers.map((packer) => {
+      const off = packer.active === false;
+      return itemRow({
+        lead: avatar(packer.name),
+        title: packer.name,
+        meta: off ? 'Sin acceso' : `PIN •••• · ${abilitiesInWords(packer)}`,
+        end: off ? badge('Desactivado', 'muted') : null,
+        onClick: () => editPacker(packer),
+      });
+    }), { card: true });
   }
 
+  /**
+   * Creating or editing one user: who they are, their PIN, and what they can
+   * do.
+   *
+   * The permissions are one switch per button on the kitchen's menu, each with
+   * a line saying what it opens, so the manager is choosing between things
+   * they can picture rather than between names. "Todo" and "Nada" are there
+   * because most people get one or the other, and seven switches to say so is
+   * seven chances to miss one.
+   *
+   * A new user starts with everything on. Most people in a kitchen do most of
+   * the jobs, and the manager is here to take away the one or two that a
+   * person should not have — not to build their day up from nothing.
+   */
   async function editPacker(packer) {
-    const name = input({ value: packer?.name || '', placeholder: 'Nombre y apellido' });
-    const pin = input({
-      value: packer?.pin || '', inputmode: 'numeric', maxlength: 8,
-      placeholder: '4 dígitos',
+    const name = input({
+      value: packer?.name || '', placeholder: 'Nombre y apellido', autocomplete: 'off',
     });
+    const pin = input({
+      value: packer?.pin || '', inputmode: 'numeric', maxlength: 8, autocomplete: 'off',
+      placeholder: '4 dígitos', pattern: '[0-9]*',
+      // Digits only, as they are typed — a letter in a PIN is a PIN nobody
+      // can type on the kitchen's keypad.
+      oninput: (event) => { event.target.value = event.target.value.replace(/\D/g, ''); },
+    });
+    const can = abilitiesOf(packer);
     let active = packer ? packer.active !== false : true;
 
+    const switches = h('div.stack.stack-2');
+    const paintSwitches = () => switches.replaceChildren(...ABILITIES.map((one) =>
+      switchRow(one.title, {
+        checked: can[one.key],
+        hint: one.hint,
+        onChange: (value) => { can[one.key] = value; },
+      })));
+    paintSwitches();
+
+    const setAll = (value) => {
+      for (const { key } of ABILITIES) can[key] = value;
+      paintSwitches();
+    };
+
+    const others = packers.filter((one) => one.id !== packer?.id);
+
     const saved = await sheet({
-      title: packer ? 'Editar a quien empaca' : 'Agregar a quien empaca',
-      build: (close) => h('div.stack.stack-4',
-        field({ label: 'Nombre', control: name }),
-        field({
-          label: 'Su número',
-          hint: 'Lo escribe al empezar para que su nombre quede en la lista del día. '
-            + 'No es una contraseña: no abre nada que no se pueda abrir sin él.',
-          control: pin,
-        }),
-        switchRow('Puede empacar', {
+      title: packer ? 'Editar usuario' : 'Nuevo usuario',
+      build: (close) => h('div.stack.stack-5',
+        h('div.stack.stack-4',
+          field({ label: 'Nombre', control: name }),
+          field({
+            label: 'PIN',
+            hint: 'Con esto entra a la computadora de la cocina. De 4 a 8 números, '
+              + 'y cada persona tiene el suyo.',
+            control: pin,
+          })),
+
+        h('div.stack.stack-3',
+          h('div.row.row--between',
+            h('div',
+              h('div.w-700', 'Qué puede hacer'),
+              h('div.t-sm.c-soft', 'Lo que no tenga permitido no le aparece en el menú.')),
+            h('div.btn-group',
+              button('Todo', { variant: 'ghost', size: 'sm', onClick: () => setAll(true) }),
+              button('Nada', { variant: 'ghost', size: 'sm', onClick: () => setAll(false) }))),
+          card(switches)),
+
+        card(switchRow('Activo', {
           checked: active,
           onChange: (value) => { active = value; },
-          hint: 'Apágalo cuando alguien deje de trabajar aquí.',
-        }),
-        asyncButton('Guardar', {
+          hint: 'Apágalo cuando alguien deje de trabajar aquí. Su PIN deja de servir, '
+            + 'y lo que ya empacó queda guardado con su nombre.',
+        })),
+
+        asyncButton(packer ? 'Guardar cambios' : 'Crear usuario', {
           variant: 'primary', size: 'lg', block: true,
           onClick: async () => {
             try {
-              await savePacker({ id: packer?.id, name: name.value, pin: pin.value, active }, author());
+              await savePacker({
+                id: packer?.id, name: name.value, pin: pin.value, active, can,
+              }, author(), others);
               close(true);
             } catch (error) { toastBad(errorText(error)); }
           },
         }),
+
         packer
-          ? button('Quitar de la lista', {
-              variant: 'danger-soft', block: true,
-              onClick: async () => {
-                const sure = await confirm({
-                  title: `¿Quitar a ${packer.name}?`,
-                  message: 'Las mañanas que ya empacó siguen guardadas con su nombre.',
-                  confirmLabel: 'Quitar', tone: 'danger', icon: 'alert',
-                });
-                if (!sure) return;
-                try { await removePacker(packer.id); close(true); }
-                catch (error) { toastBad(errorText(error)); }
-              },
-            })
+          ? button('Eliminar usuario', {
+            variant: 'danger-soft', block: true, icon: 'ban',
+            onClick: async () => {
+              const sure = await confirm({
+                title: `¿Eliminar a ${packer.name}?`,
+                message: 'Su PIN deja de servir. Las mañanas que ya empacó siguen guardadas '
+                  + 'con su nombre. Si solo va a dejar de venir un tiempo, mejor desactívalo.',
+                confirmLabel: 'Eliminar', tone: 'danger', icon: 'alert',
+              });
+              if (!sure) return;
+              try { await removePacker(packer.id); close(true); }
+              catch (error) { toastBad(errorText(error)); }
+            },
+          })
           : null),
     });
-    if (saved) toastOk('Listo');
+    if (saved) toastOk(packer ? 'Usuario actualizado' : 'Usuario creado');
   }
 
   const unsubscribe = subscribe(paint);

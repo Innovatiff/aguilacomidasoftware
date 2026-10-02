@@ -24,7 +24,9 @@ import {
   db, doc, collection, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot,
   query, where, orderBy, serverTimestamp, docData, listData,
 } from '../firebase.js';
-import { normalizePacking } from '../lib/packing.js';
+import {
+  normalizePacking, ABILITIES, pinTakenBy,
+} from '../lib/packing.js';
 import { today } from '../lib/dates.js';
 
 const packingRef = () => doc(db, 'config', 'packing');
@@ -76,22 +78,42 @@ export function watchPackers(onData, onError) {
     (snap) => onData(listData(snap)), onError);
 }
 
-export async function savePacker({ id, name, pin, active = true }, author) {
-  const clean = String(name || '').trim();
+/**
+ * Creates or updates one user.
+ *
+ * Every permission is written out, every time. A record that carries only the
+ * ones somebody happened to touch would depend on a default for the rest, and
+ * a default is a thing that can be changed later by somebody who has never
+ * met this person.
+ *
+ * @param {object} user
+ * @param {object} [user.can]  `{ pack: true, newFarm: false, … }`
+ * @param {object[]} [others]  everyone else, to refuse a number already in use
+ */
+export async function savePacker({ id, name, pin, active = true, can = {} }, author, others = []) {
+  const clean = String(name || '').trim().replace(/\s+/g, ' ');
   const number = String(pin || '').replace(/\D/g, '');
   if (!clean) throw new Error('Escribe el nombre de la persona.');
-  if (number.length < 4) throw new Error('El número debe tener al menos 4 dígitos.');
+  if (number.length < 4) throw new Error('El PIN debe tener al menos 4 dígitos.');
+  if (number.length > 8) throw new Error('El PIN no puede tener más de 8 dígitos.');
+
+  const clash = active ? pinTakenBy(others, number, id) : null;
+  if (clash) throw new Error(`Ese PIN ya lo usa ${clash.name}. Escoge otro.`);
+
+  const permissions = {};
+  for (const { key } of ABILITIES) permissions[key] = can[key] !== false;
 
   const ref = id ? doc(db, 'packers', id) : doc(packersRef());
   await setDoc(ref, {
     name: clean,
     pin: number,
     active: !!active,
+    can: permissions,
     updatedAt: serverTimestamp(),
     updatedByName: author?.name || '',
     ...(id ? {} : { createdAt: serverTimestamp() }),
   }, { merge: true });
-  return { id: ref.id, name: clean, pin: number, active: !!active };
+  return { id: ref.id, name: clean, pin: number, active: !!active, can: permissions };
 }
 
 export const removePacker = (id) => deleteDoc(doc(db, 'packers', id));

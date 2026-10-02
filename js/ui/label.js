@@ -68,6 +68,12 @@ export function installUrl(appUrl, email) {
 
 const upper = (value) => String(value || '').trim().toUpperCase();
 
+/** "02 OCT": the footer's day always takes two digits, so every label reads alike. */
+function footerDay(day) {
+  const [date, month] = formatDayShort(day).split(' ');
+  return `${date.padStart(2, '0')} ${upper(month)}`;
+}
+
 /** "Sentence case": the kitchen types in whatever case it likes. */
 function sentence(value) {
   const text = String(value || '').trim().replace(/\s+/g, ' ');
@@ -106,7 +112,7 @@ export function labelSheet({
       preferences.length ? h('div.lbl__pref', preferences.join(' · ')) : null,
       note ? h('div.lbl__note', note) : null,
       h('div.lbl__foot',
-        `${upper(formatDayShort(day))} · R${route} · ${String(sequence).padStart(3, '0')}`)));
+        `${footerDay(day)} · R${route} · ${String(sequence).padStart(3, '0')}`)));
 }
 
 /**

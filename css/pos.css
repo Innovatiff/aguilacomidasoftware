@@ -257,6 +257,7 @@
 /* --- Tiles: the grid on the home screen and every pick-one step ----------- */
 
 .postiles { display: grid; gap: 14px; }
+.postiles--1 { grid-template-columns: minmax(0, 1fr); }
 .postiles--2 { grid-template-columns: repeat(2, 1fr); }
 .postiles--3 { grid-template-columns: repeat(3, 1fr); }
 .postiles--4 { grid-template-columns: repeat(4, 1fr); }
@@ -315,6 +316,13 @@
 .postiles--lead > :first-child .postile__name { font-size: 40px; }
 @media (max-width: 720px) { .postiles--lead { grid-template-columns: 1fr; } }
 
+/* The kitchen's menu: two columns under Empacar, each its own stack, so a
+   button that one person is not allowed only shortens its own column instead
+   of shuffling everything after it into a different place. */
+.poscols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.poscol { display: flex; flex-direction: column; gap: 14px; }
+@media (max-width: 720px) { .poscols { grid-template-columns: minmax(0, 1fr); } }
+
 /* The one action that is most of the day. */
 .postile--hero {
   min-height: 152px;
@@ -323,6 +331,23 @@
   box-shadow: 0 var(--pos-key) 0 var(--pos-brand-dark);
 }
 .postile--hero:active { box-shadow: 0 0 0 var(--pos-brand-dark); }
+
+/* Across the whole width, on one line. A tile this wide stacked the normal way
+   is a slab of orange with a word in its corner; lying down, the icon, the
+   name and what it does read left to right like a sentence. */
+.postile--band {
+  flex-direction: row;
+  align-items: center;
+  gap: 20px;
+  min-height: 104px;
+  padding: 18px 26px;
+}
+.postile--band .postile__ico { flex: none; }
+.postile--band .postile__name { font-size: 36px; }
+.postile--band .postile__sub { margin-left: auto; text-align: right; font-size: 20px; }
+@media (max-width: 720px) {
+  .postile--band .postile__sub { display: none; }
+}
 
 /* Inverted on the orange: solid white with the brand glyph, which reads at a
    distance where a translucent panel just looks like a smudge. */
@@ -664,6 +689,8 @@
 
   .postile { min-height: 112px; padding: 14px; }
   .postile--hero { min-height: 128px; }
+  .postile--band { min-height: 92px; padding: 14px 22px; }
+  .postile--band .postile__name { font-size: 32px; }
   .postiles--lead > :first-child .postile__name { font-size: 36px; }
   .postile__ico svg { width: 34px; height: 34px; }
   .postile--pick { min-height: 88px; }
@@ -1145,3 +1172,42 @@
 }
 .pkgroup__name { font-size: var(--fs-md); font-weight: 700; }
 .pkgroup__meta { font-size: var(--fs-xs); color: var(--text-soft); }
+
+/* --- Nueva farma: the list of locations being built ------------------------- */
+
+.posadd { display: flex; align-items: flex-end; gap: 12px; }
+/* As tall as the box beside it, so the two read as one row. */
+.posbtn--add {
+  flex: none;
+  min-height: 68px;
+  padding: 0 22px;
+  background: var(--pos-brand);
+  color: #ffffff;
+  border: 3px solid var(--pos-brand-dark);
+  box-shadow: 0 var(--pos-key) 0 var(--pos-brand-dark);
+}
+.posbtn--add:active { box-shadow: 0 0 0 var(--pos-brand-dark); }
+
+.posplaces { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.posplace {
+  display: flex; align-items: center; gap: 14px;
+  min-height: 58px; padding: 8px 10px 8px 16px;
+  background: var(--pos-fill);
+  border: 3px solid var(--pos-line);
+  border-radius: var(--pos-r);
+}
+.posplace__n {
+  flex: none; display: grid; place-items: center;
+  width: 32px; height: 32px; border-radius: 999px;
+  background: var(--pos-plan); color: #ffffff;
+  font-weight: 800; font-size: 16px;
+}
+.posplace__name { flex: 1; min-width: 0; font-size: 21px; font-weight: 700; }
+.posplace__x {
+  flex: none; display: grid; place-items: center;
+  width: 44px; height: 44px;
+  background: transparent; border: 0; border-radius: 10px;
+  color: var(--pos-soft); cursor: pointer;
+}
+.posplace__x:hover { background: rgba(0, 0, 0, .06); }
+.posplace__x svg { width: 24px; height: 24px; }

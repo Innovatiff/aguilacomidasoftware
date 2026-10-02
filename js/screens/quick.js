@@ -28,7 +28,7 @@ import {
   posTile, posPick, posFind, posMoney, posDays, posSummary, posNote, posField, posText,
 } from '../ui/pos-kit.js';
 import {
-  store, subscribe, billingFor, farmById, periodPrice, printContext,
+  store, subscribe, billingFor, farmById, periodPrice, printContext, activeClients,
 } from '../data/store.js';
 import {
   createClient, updateClient, setClientStatus, setEndsOn, cycleIsSet, emptyClient,
@@ -43,7 +43,9 @@ import {
 import { periodCharge, tierFor } from '../lib/pricing.js';
 import { money, plural } from '../lib/format.js';
 import { kitchen } from '../lib/mode.js';
-import { seatedPacker, sitDown } from '../data/packing.js';
+import { seatedPacker, sitDown, watchPackers } from '../data/packing.js';
+import { abilitiesOf } from '../lib/packing.js';
+import { createFarm, newLocationId } from '../data/farms.js';
 import { paymentMethodMeta } from '../lib/model.js';
 import {
   today, addDays, formatDay, formatDayLong, weekdayName, capitalize, WEEKDAYS_SHORT,
@@ -65,7 +67,18 @@ export const POS_MIN_WIDTH = 900;
 
 const wideEnough = () => window.innerWidth >= POS_MIN_WIDTH;
 
-const author = () => ({ uid: session.uid, name: session.displayName });
+/**
+ * Whose name goes on what is done here.
+ *
+ * At the counter that is the signed-in account. In the kitchen everybody works
+ * under the same account, so the account's name says nothing — the person who
+ * typed their PIN does, and theirs is the name that goes on the farm they
+ * registered or the client they put on pause.
+ */
+const author = () => {
+  const person = kitchen() ? seatedPacker() : null;
+  return { uid: session.uid, name: person?.name || session.displayName };
+};
 const round2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
 const owedBy = (client) => billingFor(client)?.balance || 0;
 
@@ -80,10 +93,45 @@ export function renderQuick() {
   // threshold can close it rather than leave it squeezed.
   let flow = null;
   // What has come in today. A till closes on this number, and the tile grid
-  // was leaving the room for it empty.
+  // was leaving the room for it empty. The kitchen's menu takes no money and
+  // shows no takings, so it does not read the receipts at all.
   let takings = [];
 
-  const stopTill = watchReceiptsOn(today(), (rows) => { takings = rows; paintTiles(); }, () => {});
+  const stopTill = kitchen()
+    ? null
+    : watchReceiptsOn(today(), (rows) => { takings = rows; paintTiles(); }, () => {});
+
+  /*
+   * Who is sitting at the kitchen computer, and what they are allowed — read
+   * live, not remembered from when they typed their number.
+   *
+   * The manager changes a permission in the panel and the next tile this
+   * person reaches for is already gone, without anybody having to log out.
+   * Switched off or removed while still sitting here, they go back to the
+   * keypad: a menu for somebody who no longer works here is not a menu that
+   * should still be open.
+   */
+  const me = seatedPacker();
+  let allowed = null;
+  const stopUsers = kitchen()
+    ? watchPackers((rows) => {
+      // An empty list is the cache answering before the server has; a real
+      // list always contains the person who just typed their number.
+      if (!rows.length) return;
+      const found = rows.find((row) => row.id === me?.id);
+      if (!found || found.active === false) {
+        sitDown(null);
+        go('/empaque');
+        return;
+      }
+      allowed = abilitiesOf(found);
+      paintTiles();
+    }, () => {})
+    : null;
+
+  /** Panel wording at the counter, kitchen wording in the kitchen. */
+  const w = (panelWords, kitchenWords) => (kitchen() ? kitchenWords : panelWords);
+  const mealsWord = (n) => plural(n, w('comida', 'pedido'), w('comidas', 'pedidos'));
 
   const stop = subscribe(() => {
     // Only the tile grid depends on the store; a flow running on top owns its
@@ -201,33 +249,21 @@ export function renderQuick() {
       onClick: () => ready && flowMeals(),
     });
 
+    if (kitchen()) {
+      mount(host, ...kitchenBoard(ready));
+      return;
+    }
+
     mount(host,
       h('h2.pos__q', '¿Qué vas a hacer?'),
       h('p.pos__hint', ready
         ? `${plural(store.clients.length, 'cliente', 'clientes')} · se cobra en ${payDaysInWords()}`
         : 'Cargando…'),
 
-      /*
-       * The top row.
-       *
-       * At the counter it is Cobrar, twice the size of anything else. In the
-       * kitchen, Empacar goes in front of it — wider than both the tiles
-       * beside it, which is what says it is the one that matters, and in the
-       * same row rather than a band of its own: the board has to fit a 768px
-       * panel with the day's takings still visible under it, and a row of its
-       * own costs a hundred pixels that panel does not have.
-       */
-      kitchen()
-        ? h('div.postiles.postiles--lead', { style: { marginBottom: '14px' } },
-            posTile({
-              icon: 'box', title: 'Empacar',
-              sub: 'La comida de hoy, rancho por rancho',
-              hero: true,
-              onClick: () => go('/empaque'),
-            }),
-            tileCharge(), tileMeals())
-        : h('div.postiles.postiles--2', { style: { marginBottom: '14px' } },
-            tileCharge(), tileMeals()),
+      // At the counter the top row is Cobrar, twice the size of anything else,
+      // because at a counter that is most of the day.
+      h('div.postiles.postiles--2', { style: { marginBottom: '14px' } },
+        tileCharge(), tileMeals()),
 
       h('div.postiles.postiles--4',
         posTile({
@@ -270,6 +306,115 @@ export function renderQuick() {
         })),
 
       tillStrip());
+  }
+
+  /**
+   * The kitchen's menu: packing first, then what the kitchen looks after.
+   *
+   * It is a different menu from the counter's, not the same one with things
+   * hidden. The kitchen takes no money, so there is no Cobrar, no debts or
+   * balances and no takings strip; what it does is pack, register farms and
+   * people, and keep each person's week of orders straight — so those are the
+   * buttons, and in the kitchen's own words: pedidos, farmas.
+   *
+   * Laid out as two columns under Empacar, each a thing you can find without
+   * reading: the farm and the schedule on the left — with Cantidad de pedidos
+   * right under Calendario semanal, because they are the same question asked
+   * two ways — and the people on the right.
+   *
+   * **Each person sees only what they are allowed.** A button somebody may not
+   * use is not shown greyed out; it is not shown. A menu full of things you
+   * cannot press is a menu you have to read every morning to find the ones you
+   * can.
+   */
+  function kitchenBoard(ready) {
+    const tile = {
+      pack: () => posTile({
+        icon: 'box', title: 'Empacar',
+        sub: 'La comida de hoy, farma por farma',
+        hero: true, band: true,
+        onClick: () => go('/empaque'),
+      }),
+      newFarm: () => posTile({
+        icon: 'farm', title: 'Nueva farma', family: 'plan',
+        sub: 'Darla de alta con sus ubicaciones',
+        onClick: () => ready && flowNewFarm(),
+      }),
+      week: () => posTile({
+        icon: 'calendar', title: 'Calendario semanal', family: 'plan',
+        sub: 'Qué días hay pedido',
+        onClick: () => ready && flowWeek(),
+      }),
+      meals: () => posTile({
+        icon: 'utensils', title: 'Cantidad de pedidos', family: 'plan',
+        sub: '1 ó 2 al día',
+        onClick: () => ready && flowMeals(),
+      }),
+      newClient: () => posTile({
+        icon: 'userPlus', title: 'Nuevo cliente', family: 'who',
+        sub: 'Dar de alta',
+        onClick: () => ready && flowNew(),
+      }),
+      status: () => posTile({
+        icon: 'pause', title: 'Pausar o reactivar', family: 'who',
+        sub: 'Deja o vuelve a pedir',
+        onClick: () => ready && flowStatus(),
+      }),
+      lastDay: () => posTile({
+        icon: 'ban', title: 'Último día de pedido', family: 'who',
+        sub: 'Hasta cuándo pide',
+        onClick: () => ready && flowLastDay(),
+      }),
+    };
+
+    // Until the user's record has loaded, nothing is offered — better a beat
+    // of "cargando" than a button that vanishes as somebody reaches for it.
+    if (!allowed) return [h('h2.pos__q', 'Un momento…'), h('p.pos__hint', 'Cargando tu menú.')];
+
+    const ok = (key) => allowed[key] === true;
+    const left = ['newFarm', 'week', 'meals'].filter(ok);
+    const right = ['newClient', 'status', 'lastDay'].filter(ok);
+
+    // Counted over the same people as the number beside it: a farm whose
+    // people have all stopped ordering is not one the kitchen packs for.
+    const eating = activeClients();
+    const farmsCount = new Set(eating.map((client) => client.farmId)).size;
+
+    const nothing = !ok('pack') && !left.length && !right.length;
+    if (nothing) {
+      return [
+        h('h2.pos__q', `Hola, ${firstName(me)}`),
+        h('div.posnote.posnote--warn', icon('alert'),
+          h('div', 'Todavía no tienes nada asignado. Pídele al encargado que te dé '
+            + 'permisos desde el panel.')),
+      ];
+    }
+
+    // Two columns when there is something on both sides. When there is not,
+    // what is left is laid out across instead, so one person's menu is never
+    // a single column hugging the left edge of a wide screen.
+    const both = left.length && right.length;
+    const rest = [...left, ...right];
+
+    return [
+      h('h2.pos__q', `¿Qué vas a hacer, ${firstName(me)}?`),
+      h('p.pos__hint', ready
+        ? `${plural(eating.length, 'cliente', 'clientes')} en `
+          + `${plural(farmsCount, 'farma', 'farmas')}`
+        : 'Cargando…'),
+
+      ok('pack')
+        ? h('div.postiles.postiles--1', { style: { marginBottom: '14px' } }, tile.pack())
+        : null,
+
+      both
+        ? h('div.poscols',
+            h('div.poscol', left.map((key) => tile[key]())),
+            h('div.poscol', right.map((key) => tile[key]())))
+        : rest.length
+          ? h(`div.postiles.postiles--${Math.min(3, rest.length)}`, rest.map((key) => tile[key]()))
+          : null,
+    ];
   }
 
   /**
@@ -479,14 +624,14 @@ export function renderQuick() {
 
   function flowMeals() {
     start({
-      title: 'Cambiar comidas',
+      title: w('Cambiar comidas', 'Cantidad de pedidos'),
       subject: subjectOf,
       steps: (s) => [
         whoStep(),
         {
           id: 'meals',
-          title: '¿Cuántas comidas al día?',
-          hint: s.client ? `Ahora lleva ${plural(s.client.mealsPerDay, 'comida', 'comidas')}.` : '',
+          title: w('¿Cuántas comidas al día?', '¿Cuántos pedidos al día?'),
+          hint: s.client ? `Ahora lleva ${mealsWord(s.client.mealsPerDay)}.` : '',
           ready: (st) => st.meals > 0,
           build: (st, api) => posPick({
             columns: 3,
@@ -507,8 +652,8 @@ export function renderQuick() {
           build: (st) => h('div',
             posSummary([
               ...whoRows(st.client),
-              ['Antes', `${plural(st.client.mealsPerDay, 'comida', 'comidas')} · ${priceLabel(st.client)}`],
-              ['Ahora', `${plural(st.meals, 'comida', 'comidas')} · ${priceLabel(st.client, { mealsPerDay: st.meals })}`,
+              ['Antes', `${mealsWord(st.client.mealsPerDay)} · ${priceLabel(st.client)}`],
+              ['Ahora', `${mealsWord(st.meals)} · ${priceLabel(st.client, { mealsPerDay: st.meals })}`,
                 { total: true }],
             ]),
             tierFor(store.pricing, st.meals)
@@ -519,7 +664,7 @@ export function renderQuick() {
       ],
       commit: (s) => updateClient(s.client.id, { mealsPerDay: s.meals }),
       done: (s) => ({
-        what: `${plural(s.meals, 'comida', 'comidas')} al día`,
+        what: `${mealsWord(s.meals)} al día`,
         who: s.client.name,
       }),
     });
@@ -529,13 +674,13 @@ export function renderQuick() {
 
   function flowWeek() {
     start({
-      title: 'Cambiar días',
+      title: w('Cambiar días', 'Calendario semanal'),
       subject: subjectOf,
       steps: (s) => [
         whoStep(),
         {
           id: 'days',
-          title: '¿Qué días come?',
+          title: w('¿Qué días come?', '¿Qué días tiene pedido?'),
           hint: 'Toca un día para prenderlo o apagarlo. El precio se ajusta solo.',
           ready: (st) => (st.days || st.client.deliveryDays || []).length > 0,
           build: (st, api) => {
@@ -567,7 +712,10 @@ export function renderQuick() {
         },
       ],
       commit: (s) => updateClient(s.client.id, { deliveryDays: s.days }),
-      done: (s) => ({ what: 'Días actualizados', who: `${s.client.name} · ${dayWords(s.days)}` }),
+      done: (s) => ({
+        what: w('Días actualizados', 'Calendario actualizado'),
+        who: `${s.client.name} · ${dayWords(s.days)}`,
+      }),
     });
   }
 
@@ -687,7 +835,7 @@ export function renderQuick() {
           },
           {
             id: 'farm',
-            title: '¿En qué rancho está?',
+            title: w('¿En qué rancho está?', '¿En qué farma está?'),
             ready: (st) => !!st.farmId,
             build: (st, api) => posPick({
               columns: 2,
@@ -702,7 +850,7 @@ export function renderQuick() {
           },
           {
             id: 'place',
-            title: '¿En qué parte del rancho?',
+            title: w('¿En qué parte del rancho?', '¿En qué parte de la farma?'),
             hint: farm ? `Ubicaciones de ${farm.name}.` : '',
             ready: (st) => !!st.locationId,
             build: (st, api) => ((farm?.locations || []).length
@@ -713,12 +861,13 @@ export function renderQuick() {
                   advance: api.next,
                   options: farm.locations.map((loc) => ({ value: loc.id, label: loc.name })),
                 })
-              : posNote('Ese rancho no tiene ubicaciones todavía. Se agregan desde el panel, '
-                + 'en Ranchos.', 'bad')),
+              : posNote(w('Ese rancho no tiene ubicaciones todavía. Se agregan desde el panel, '
+                + 'en Ranchos.', 'Esa farma no tiene ubicaciones todavía. Pídele al encargado '
+                + 'que se las agregue desde el panel.'), 'bad')),
           },
           {
             id: 'meals',
-            title: '¿Cuántas comidas al día?',
+            title: w('¿Cuántas comidas al día?', '¿Cuántos pedidos al día?'),
             ready: (st) => st.meals > 0,
             build: (st, api) => posPick({
               columns: 3,
@@ -735,15 +884,16 @@ export function renderQuick() {
           {
             id: 'confirm',
             title: 'Revisa antes de darlo de alta',
-            hint: 'Come de lunes a sábado y paga cada quincena. Los días y el periodo se '
-              + 'ajustan después si hace falta.',
+            hint: w('Come de lunes a sábado y paga cada quincena. Los días y el periodo se '
+              + 'ajustan después si hace falta.', 'Tiene pedido de lunes a sábado. Los días se '
+              + 'cambian después con Calendario semanal si hace falta.'),
             last: true,
             next: 'Dar de alta',
             build: (st) => posSummary([
               ['Nombre', st.name.trim()],
-              ['Rancho', farm?.name || '—'],
+              [w('Rancho', 'Farma'), farm?.name || '—'],
               ['Ubicación', (farm?.locations || []).find((l) => l.id === st.locationId)?.name || '—'],
-              ['Comidas', plural(st.meals, 'comida al día', 'comidas al día')],
+              [w('Comidas', 'Pedidos'), `${mealsWord(st.meals)} al día`],
               ['Su quincena', money(tierFor(store.pricing, st.meals)?.price || 0), { total: true }],
             ]),
           },
@@ -753,6 +903,139 @@ export function renderQuick() {
         { ...emptyClient(farmById(s.farmId)), name: s.name.trim(), locationId: s.locationId, mealsPerDay: s.meals },
         farmById(s.farmId), author()),
       done: (s) => ({ what: 'Cliente dado de alta', who: s.name.trim() }),
+    });
+  }
+
+  /* --- Nueva farma -------------------------------------------------------- */
+
+  /**
+   * A farm, from the kitchen: its name and its locations, and nothing else.
+   *
+   * That is all the kitchen needs to start registering people there today.
+   * Everything a farm also has — who to call, the delivery window, when it is
+   * billed — takes the values every new farm starts with and is filled in from
+   * the panel by somebody sitting down; the last slide says so, so nobody
+   * leaves thinking the farm is finished when it is only started.
+   *
+   * At least one location, because a person cannot be registered at a farm
+   * that has nowhere to put them, and the next thing anybody does after this
+   * is register a person.
+   */
+  function flowNewFarm() {
+    const sameName = (a, b) => String(a || '').trim().toLowerCase()
+      === String(b || '').trim().toLowerCase();
+
+    start({
+      title: 'Nueva farma',
+      state: { name: '', places: [] },
+      steps: () => [
+        {
+          id: 'name',
+          title: '¿Cómo se llama la farma?',
+          hint: 'Como la conocen en la cocina. Ej. #332 Morsea.',
+          ready: (st) => st.name.trim().length > 1
+            && !store.farms.some((farm) => sameName(farm.name, st.name)),
+          build: (st, api) => {
+            // The warning is redrawn as they type, not the box — rebuilding the
+            // box would take the cursor out of it after every letter.
+            const warning = h('div');
+            const paintWarning = () => {
+              const taken = store.farms.find((farm) => sameName(farm.name, st.name));
+              mount(warning, taken
+                ? posNote(`Ya hay una farma que se llama ${taken.name}.`, 'bad')
+                : null);
+            };
+            paintWarning();
+            return h('div',
+              posField('Nombre de la farma', posText({
+                value: st.name,
+                placeholder: 'Ej. #332 Morsea',
+                onChange: (v) => { st.name = v; paintWarning(); api.revalidate(); },
+              })),
+              warning);
+          },
+        },
+        {
+          id: 'places',
+          title: '¿Qué ubicaciones tiene?',
+          hint: 'Escribe una y toca Agregar. Casa 1, Bloque Norte, Invernadero 3…',
+          ready: (st) => st.places.length > 0,
+          build: (st, api) => {
+            const list = h('div.posplaces');
+            const warning = h('div');
+            const box = posText({
+              value: '',
+              placeholder: 'Ej. Casa 1',
+              onChange: () => mount(warning),
+              onkeydown: (event) => {
+                if (event.key !== 'Enter') return;
+                event.preventDefault();
+                add();
+              },
+            });
+
+            function add() {
+              const label = box.value.trim().replace(/\s+/g, ' ');
+              if (!label) return;
+              if (st.places.some((one) => sameName(one, label))) {
+                mount(warning, posNote(`${label} ya está en la lista.`, 'bad'));
+                return;
+              }
+              st.places.push(label);
+              box.value = '';
+              box.focus();
+              paint();
+              api.revalidate();
+            }
+
+            function paint() {
+              mount(list, st.places.map((label, i) => h('div.posplace',
+                h('span.posplace__n', String(i + 1)),
+                h('span.posplace__name', label),
+                h('button.posplace__x', {
+                  type: 'button',
+                  'aria-label': `Quitar ${label}`,
+                  onclick: () => {
+                    st.places.splice(i, 1);
+                    paint();
+                    api.revalidate();
+                  },
+                }, icon('x')))));
+            }
+            paint();
+
+            return h('div',
+              h('div.posadd',
+                h('div.grow', posField('Ubicación', box)),
+                h('button.posbtn.posbtn--add', { type: 'button', onclick: add },
+                  icon('plus'), 'Agregar')),
+              warning,
+              list);
+          },
+        },
+        {
+          id: 'confirm',
+          title: 'Revisa antes de darla de alta',
+          last: true,
+          next: 'Dar de alta',
+          build: (st) => h('div',
+            posSummary([
+              ['Farma', st.name.trim()],
+              ['Ubicaciones', st.places.join(' · ')],
+              ['Días de pedido', 'Lunes a sábado', { total: true }],
+            ]),
+            posNote('El contacto, el teléfono y el horario de entrega se completan '
+              + 'después desde el panel. Ya puedes darle de alta gente aquí.', 'ok')),
+        },
+      ],
+      commit: (s) => createFarm({
+        name: s.name.trim(),
+        locations: s.places.map((label) => ({ id: newLocationId(), name: label })),
+      }, author()),
+      done: (s) => ({
+        what: 'Farma dada de alta',
+        who: `${s.name.trim()} · ${plural(s.places.length, 'ubicación', 'ubicaciones')}`,
+      }),
     });
   }
 
@@ -919,9 +1202,9 @@ export function renderQuick() {
             onPick: (v) => { st.status = v; api.revalidate(); },
             advance: api.next,
             options: [
-              { value: 'active', label: 'Sigue', sub: 'Recibe comida', icon: 'play' },
+              { value: 'active', label: 'Sigue', sub: w('Recibe comida', 'Recibe pedido'), icon: 'play' },
               { value: 'paused', label: 'En pausa', sub: 'Se fue un tiempo', icon: 'pause' },
-              { value: 'inactive', label: 'Ya no', sub: 'Dejó de comer', icon: 'ban' },
+              { value: 'inactive', label: 'Ya no', sub: w('Dejó de comer', 'Ya no pide'), icon: 'ban' },
             ],
           }),
         },
@@ -950,13 +1233,13 @@ export function renderQuick() {
 
   function flowLastDay() {
     start({
-      title: 'Último día',
+      title: w('Último día', 'Último día de pedido'),
       subject: subjectOf,
       steps: (s) => [
         whoStep(),
         {
           id: 'day',
-          title: '¿Hasta qué día come?',
+          title: w('¿Hasta qué día come?', '¿Hasta qué día tiene pedido?'),
           hint: 'Al día siguiente sale solo de la libreta. No se le borra lo que deba.',
           ready: (st) => !!st.endsOn,
           build: (st, api) => posPick({
@@ -988,7 +1271,10 @@ export function renderQuick() {
         },
       ],
       commit: (s) => setEndsOn(s.client.id, s.endsOn),
-      done: (s) => ({ what: `Come hasta el ${formatDay(s.endsOn)}`, who: s.client.name }),
+      done: (s) => ({
+        what: w(`Come hasta el ${formatDay(s.endsOn)}`, `Pedidos hasta el ${formatDay(s.endsOn)}`),
+        who: s.client.name,
+      }),
     });
   }
 
@@ -997,6 +1283,7 @@ export function renderQuick() {
     clearTimeout(resizeTimer);
     stop();
     stopTill?.();
+    stopUsers?.();
     unmountPos();
   };
 }

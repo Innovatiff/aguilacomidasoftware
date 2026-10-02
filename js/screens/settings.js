@@ -297,8 +297,9 @@ export function renderSettings() {
       list([
         itemRow({
           lead: h('span.c-faint', icon('box')),
-          title: 'Las libretas y quién las empaca',
-          meta: 'Qué ranchos van en cada libreta, y el número de cada persona',
+          title: 'Libretas y usuarios de empaque',
+          meta: 'Qué ubicaciones van en cada libreta, y quién entra a la cocina con qué PIN '
+            + 'y qué puede hacer',
           onClick: () => go('/empaque/ajustes'),
         }),
         // Only while there is anybody left to copy. Once it is done it stops
