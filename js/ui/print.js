@@ -23,7 +23,7 @@
  */
 
 import { h, mount } from '../lib/dom.js';
-import { labelSheet, fitLabel } from './label.js';
+import { labelSheet, fitLabel, mountBag } from './label.js';
 import { money } from '../lib/format.js';
 import { appliedTitle } from '../lib/billing.js';
 import { paymentMethodMeta } from '../lib/model.js';
@@ -284,6 +284,24 @@ export function printLabel(spec) {
   const root = printRoot();
   mount(root, labelSheet(spec));
   fitLabel(root);
+  requestAnimationFrame(() => window.print());
+}
+
+/**
+ * Prints the sticker for a farm's bag: the farm, who is in it, and how many
+ * plates, on the same paper as everybody's own label.
+ *
+ * Measured like the person's sticker, for the same reason, and then some: how
+ * large the names can be and how many columns they need depends on how many
+ * there are and how long they run, and only the browser can tell. A bag too
+ * big for one sticker comes out as two, in a single print job.
+ *
+ * @param {object} spec  the farm, everybody in the bag, the day and the libreta
+ *   (see `mountBag` in js/ui/label.js)
+ */
+export function printBagLabel(spec) {
+  paper('label');
+  mountBag(printRoot(), spec);
   requestAnimationFrame(() => window.print());
 }
 

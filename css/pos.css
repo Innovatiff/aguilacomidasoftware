@@ -947,6 +947,24 @@
 .pkfarm__nums b { font-weight: 800; color: var(--text); }
 .pkfarm__dot { color: var(--text-faint); }
 
+/* Quiet, and next to what it is about rather than down by Siguiente, where a
+   wet thumb aiming for the big button would find it. */
+.pkreprint {
+  align-self: flex-start;
+  display: inline-flex; align-items: center; gap: var(--s2);
+  margin-top: var(--s6);
+  min-height: 48px; padding: 0 var(--s4);
+  font: inherit; font-size: var(--fs-md); font-weight: 700;
+  color: var(--text-soft);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  cursor: pointer;
+}
+.pkreprint:hover { color: var(--text); background: var(--ink-50); }
+.pkreprint:focus-visible { outline: 3px solid var(--brand-500); outline-offset: 2px; }
+.pkreprint svg { width: 20px; height: 20px; }
+
 /* --- One person ------------------------------------------------------------- */
 
 /* Set large on purpose. This is read from a step or two back, by somebody

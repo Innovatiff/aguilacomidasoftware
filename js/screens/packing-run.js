@@ -26,14 +26,21 @@
  * card, and inside it two tinted blocks that only appear when they have
  * something to say.
  *
- * **Each person's label prints as they come up.** The libreta always starts at
- * the beginning, the farm slide prints nothing, and every Siguiente that lands
- * on a person sends their sticker to the label printer — so the container is
- * labelled while the food is going into it rather than at the end from a pile.
+ * **The stickers print as the slides come up.** A farm's plates go out in one
+ * bag, so a farm's slide prints the bag's sticker — the farm, everybody in it,
+ * how many plates — and every Siguiente after it that lands on a person sends
+ * that person's sticker, for the lid. The container is labelled while the food
+ * is going into it, and the bag before the first plate goes in, rather than at
+ * the end from a pile. The libreta always starts at the beginning, which is
+ * its first farm, so opening it prints that farm's bag.
+ *
  * Going back never prints: that is how somebody checks a name they already
  * packed, and a sticker for every check is a roll of labels gone by Wednesday.
- * The whole thing can be switched off in Empaque → Configurar, which is what a
- * machine without a label printer wants — and the morning the printer dies.
+ * Going forward again does, which is how a jammed sticker is replaced; the
+ * farm's slide also has a button for its bag, because the first farm has no
+ * slide before it to go back to. The whole thing can be switched off in
+ * Empaque → Configurar, which is what a machine without a label printer wants
+ * — and the morning the printer dies.
  *
  * The keyboard moves it too: space, enter or the right arrow go forward, the
  * left arrow goes back. On a counter machine with a cheap mouse that is the
@@ -53,8 +60,10 @@ import { store, subscribe, activeClients, isReady, firstError, startStore } from
 import {
   watchPacking, watchPackers, startRun, finishRun, noteProgress, seatedPacker,
 } from '../data/packing.js';
-import { printLabel } from '../ui/print.js';
-import { packingSequence, lineOf, canDo } from '../lib/packing.js';
+import { printLabel, printBagLabel } from '../ui/print.js';
+import {
+  packingSequence, lineOf, canDo, bagOf,
+} from '../lib/packing.js';
 import { today, formatDayLong, capitalize } from '../lib/dates.js';
 import { plural, number } from '../lib/format.js';
 import { errorText } from '../firebase.js';
@@ -71,6 +80,7 @@ export function renderPackingRun(context) {
   let plan = null;         // the sequence, rebuilt when the roster changes
   let runId = null;        // the record this morning is being written to
   let opening = false;
+  let bagOnOpen = false;   // the first farm's bag, printed once when it opens
 
   // Nobody at the keyboard: the record would have no name on it, which is the
   // whole reason the number is asked for. Back to the door.
@@ -111,6 +121,14 @@ export function renderPackingRun(context) {
     // eighteen containers with nothing on them.
     if (at > plan.slides.length - 1) at = Math.max(0, plan.slides.length - 1);
     open();
+
+    // The libreta opens on its first farm, and arriving there is the same as
+    // pressing Siguiente onto it: that farm's bag gets its sticker. Once — the
+    // roster changing later rebuilds the plan, and that is not an arrival.
+    if (!bagOnOpen && plan.slides.length) {
+      bagOnOpen = true;
+      printFor(at);
+    }
   }
 
   /**
@@ -147,7 +165,7 @@ export function renderPackingRun(context) {
     // Forward only. Going back is how somebody checks a name they already
     // packed, and a second sticker coming out of the printer every time they
     // do that is how a roll of labels disappears by Wednesday.
-    if (step > 0) labelFor(plan.slides[at]);
+    if (step > 0) printFor(at);
 
     // The record keeps the count, not every step: it is written when a farm
     // starts or ends, and every fifth person in between. Often enough that the
@@ -160,25 +178,37 @@ export function renderPackingRun(context) {
   }
 
   /**
-   * The sticker for whoever is on screen, if this machine prints them.
+   * The sticker for the slide at `index`, if this machine prints them: a
+   * farm's slide prints its bag, a person's prints theirs, and the last slide
+   * is a summary that goes on nothing.
    *
-   * Only people: a farm slide is a heading and the last slide is a summary,
-   * and neither one goes on a container. Wrapped, because a printer that is
-   * off or out of paper must not stop the morning — the screen is the job, the
-   * label is the convenience.
+   * Wrapped, because a printer that is off or out of paper must not stop the
+   * morning — the screen is the job, the stickers are the convenience.
    */
-  function labelFor(slide) {
-    if (!setup?.autoPrint || slide?.kind !== 'client') return;
+  function printFor(index) {
+    const slide = plan?.slides[index];
+    if (!setup?.autoPrint || !slide) return;
     try {
-      printLabel({
-        client: slide.client,
-        farmName: slide.farm?.name || '',
-        placeName: slide.place?.name || '',
-        day,
-        lineName: plan?.line?.name || '',
-        sequence: packedSoFar(),
-        appUrl: store.business?.appUrl || '',
-      });
+      if (slide.kind === 'farm') {
+        const bag = bagOf(plan.slides, index);
+        printBagLabel({
+          farmName: bag.farm?.name || '',
+          people: bag.people,
+          day,
+          lineName: plan.line?.name || '',
+        });
+      } else if (slide.kind === 'client') {
+        printLabel({
+          client: slide.client,
+          farmName: slide.farm?.name || '',
+          placeName: slide.place?.name || '',
+          day,
+          lineName: plan.line?.name || '',
+          // Their place in the libreta: the people up to and including them.
+          sequence: plan.slides.slice(0, index + 1).filter((one) => one.kind === 'client').length,
+          appUrl: store.business?.appUrl || '',
+        });
+      }
     } catch (error) {
       toastBad(`No se pudo imprimir la etiqueta: ${errorText(error)}`);
     }
@@ -272,7 +302,17 @@ export function renderPackingRun(context) {
       h('div.pkfarm__nums',
         h('span', h('b', number(slide.people)), slide.people === 1 ? ' persona' : ' personas'),
         h('span.pkfarm__dot', '·'),
-        h('span', h('b', number(slide.plates)), ' comidas')));
+        h('span', h('b', number(slide.plates)), slide.plates === 1 ? ' comida' : ' comidas')),
+
+      // The bag's sticker came out when this slide did. This is for when it
+      // jammed — and for the first farm, which has no slide before it to step
+      // back to and come forward from.
+      setup?.autoPrint
+        ? h('button.pkreprint', {
+          type: 'button',
+          onclick: (event) => { event.currentTarget.blur(); printFor(at); },
+        }, icon('printer'), 'Volver a imprimir la etiqueta de la bolsa')
+        : null);
   }
 
   function clientSlide(slide) {

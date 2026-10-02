@@ -159,16 +159,17 @@ export function renderPackingSetup() {
     return card(h('div.stack.stack-3',
       h('div.row.row--between',
         h('div',
-          h('div.w-700', 'Imprimir la etiqueta sola'),
+          h('div.w-700', 'Imprimir las etiquetas solas'),
           h('div.t-sm.c-soft', on
-            ? 'Al pasar a cada persona sale su etiqueta, sin tocar nada.'
+            ? 'Al llegar a cada farma sale la etiqueta de su bolsa, con todos los nombres, '
+              + 'y al pasar a cada persona sale la suya, sin tocar nada.'
             : 'Apagado: nadie imprime nada durante el empaque.')),
         h('button.btn.btn--soft', {
           type: 'button',
           onclick: async () => {
             try {
               await setAutoPrint(!on, author());
-              toastOk(on ? 'Ya no se imprime sola' : 'Ahora se imprime sola');
+              toastOk(on ? 'Ya no se imprimen solas' : 'Ahora se imprimen solas');
             } catch (error) { toastBad(errorText(error)); }
           },
         }, on ? 'Apagar' : 'Encender')),
@@ -176,7 +177,7 @@ export function renderPackingSetup() {
       on
         ? alert('Para que salga sin preguntar nada, Chrome tiene que abrirse con '
           + '--kiosk-printing y la impresora de etiquetas tiene que ser la '
-          + 'predeterminada de esa computadora. Sin eso, cada persona abre un '
+          + 'predeterminada de esa computadora. Sin eso, cada etiqueta abre un '
           + 'cuadro de diálogo.', 'info', 'printer')
         : null));
   }

@@ -500,3 +500,68 @@
 
 /* One label per page: the printer cuts between them. */
 .lbl + .lbl { break-before: page; page-break-before: always; }
+
+/* --- The bag's sticker -------------------------------------------------------
+   The same paper, read another way: no QR, the farm across the top, everybody
+   in the bag in columns, and the totals along the bottom. How large the names
+   are and how many columns they take is decided by fitBag() in
+   js/ui/label.js, by measuring; these are only where it starts. */
+
+.lbl--bag {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+}
+.bag__farm {
+  flex: none;
+  font-size: 6mm;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lbl--bag .lbl__rule { flex: none; margin: 1.2mm 0 1.4mm; }
+
+.bag__names {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-auto-flow: column;           /* down the first column, then the next */
+  grid-template-columns: minmax(0, 1fr);
+  column-gap: 3mm;
+  align-content: start;
+  overflow: hidden;
+  font-size: 4mm;
+}
+.bag__who {
+  display: flex;
+  align-items: baseline;
+  gap: 0.8mm;
+  min-width: 0;
+  line-height: 1.2;
+}
+.bag__name {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* ×2 is what the plates are counted by, so it is the one thing in the list in
+   bold. */
+.bag__x { flex: none; font-weight: 800; }
+
+.bag__foot {
+  flex: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 3mm;
+  margin-top: 1.2mm;
+  font-size: 2.6mm;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+.bag__foot b { font-size: 3mm; font-weight: 800; letter-spacing: 0.02em; }

@@ -294,6 +294,33 @@ export function packingSequence({
 
 const byName = (a, b) => String(a.name).localeCompare(String(b.name), 'es');
 
+/**
+ * What goes in one farm's bag: the people on the slides that follow a farm's
+ * slide, up to the next farm, in the order they are packed — with how many
+ * plates each one takes, and the totals the bag is checked against.
+ *
+ * Read off the slides rather than worked out again, so the sticker on the bag
+ * can never list somebody the screen did not show, or miss somebody it did.
+ * When a farm is split between the two libretas, each bag holds its own
+ * libreta's half, which is exactly what each packer puts in it.
+ *
+ * @returns {{ farm: object, people: { name: string, plates: number }[],
+ *   plates: number } | null}  null when the slide is not a farm
+ */
+export function bagOf(slides, index) {
+  const head = slides?.[index];
+  if (head?.kind !== 'farm') return null;
+  const people = [];
+  for (let at = index + 1; at < slides.length && slides[at].kind === 'client'; at += 1) {
+    people.push({ name: slides[at].client.name, plates: slides[at].plates });
+  }
+  return {
+    farm: head.farm,
+    people,
+    plates: people.reduce((sum, one) => sum + one.plates, 0),
+  };
+}
+
 /* --- Who is at the keyboard -------------------------------------------------- */
 
 /**
