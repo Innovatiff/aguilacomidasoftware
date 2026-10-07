@@ -1,8 +1,9 @@
 /**
  * Configuring the empaque — the manager's side of it.
  *
- * Two things get set here and they are set rarely: which locations belong to
- * which libreta, and who is allowed to pack with what number. Unlike the
+ * Three things get set here and they are set rarely: which locations belong to
+ * which libreta, the order each libreta is packed in, and who is allowed to
+ * pack with what number. Unlike the
  * packing screen itself this is an ordinary panel screen, because the person
  * using it is sitting down with the roster in front of them.
  *
@@ -21,7 +22,7 @@
  * rather than letting somebody pack the same food twice.
  */
 
-import { h } from '../lib/dom.js';
+import { h, mount } from '../lib/dom.js';
 import { icon } from '../lib/icons.js';
 import { screen } from '../ui/shell.js';
 import {
@@ -29,6 +30,7 @@ import {
   skeletonRows, dataErrorCard, emptyState, list, itemRow, badge, switchRow, avatar,
 } from '../ui/kit.js';
 import { sheet, confirm, toastOk, toastBad } from '../ui/overlay.js';
+import { sortable } from '../ui/sortable.js';
 import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
 import { store, subscribe, isReady } from '../data/store.js';
@@ -36,7 +38,7 @@ import {
   watchPacking, savePacking, setAutoPrint, watchPackers, savePacker, removePacker,
 } from '../data/packing.js';
 import {
-  lineOfPlace, allPlaces, placesOf, unassignedPlaces, duplicatePins,
+  lineOfPlace, allPlaces, orderedPlaces, unassignedPlaces, duplicatePins,
   ABILITIES, abilitiesOf, abilitiesInWords,
 } from '../lib/packing.js';
 import { lifetime } from '../ui/shell.js';
@@ -185,7 +187,9 @@ export function renderPackingSetup() {
   /* --- One libreta ----------------------------------------------------------- */
 
   function lineCard(line) {
-    const mine = placesOf(setup.lines, line.id, store.farms, store.clients);
+    // In the order the libreta is packed, because that is the other thing
+    // this card is for.
+    const mine = orderedPlaces(setup.lines, line.id, store.farms, store.clients);
     const farms = new Set(mine.map((one) => one.farm.id));
     const people = mine.reduce((sum, one) => sum + peopleAt(one), 0);
 
@@ -204,14 +208,22 @@ export function renderPackingSetup() {
 
       mine.length
         // Farm and place together on the chip. "Casa 1" on its own says
-        // nothing on a screen where three farms have a Casa 1.
-        ? h('div.pkchips', mine.map((one) =>
-          h('span.pkchip', `${one.farm.name} · ${one.place.name}`)))
+        // nothing on a screen where three farms have a Casa 1. Numbered,
+        // because the order they are in is the order they are packed in.
+        ? h('div.pkchips', mine.map((one, at) =>
+          h('span.pkchip', h('b.pkchip__n', String(at + 1)), `${one.farm.name} · ${one.place.name}`)))
         : h('p.t-sm.c-soft', 'Todavía no le has puesto ubicaciones.'),
 
-      button('Escoger sus ubicaciones', {
-        variant: 'soft', block: true, icon: 'pin', onClick: () => pickPlaces(line),
-      })));
+      h('div.pkline-actions',
+        button('Escoger sus ubicaciones', {
+          variant: 'soft', block: true, icon: 'pin', onClick: () => pickPlaces(line),
+        }),
+        // Only worth offering once there is something to put in order.
+        mine.length > 1
+          ? button('Orden de empaque', {
+            variant: 'soft', block: true, icon: 'sort', onClick: () => orderPlaces(line),
+          })
+          : null)));
   }
 
   /** How many people are packed from one location today and every other day. */
@@ -264,9 +276,11 @@ export function renderPackingSetup() {
   async function pickPlaces(line) {
     const every = allPlaces(store.farms, store.clients);
     // What this libreta owns right now, with any whole-farm assignment from
-    // the old shape already written out as its locations.
+    // the old shape already written out as its locations — in the order it is
+    // packed, so saving the picks does not reshuffle the morning. A location
+    // picked here for the first time goes after the ones it already had.
     const chosen = new Set(
-      placesOf(setup.lines, line.id, store.farms, store.clients).map((one) => one.key),
+      orderedPlaces(setup.lines, line.id, store.farms, store.clients).map((one) => one.key),
     );
 
     /*
@@ -388,10 +402,10 @@ export function renderPackingSetup() {
 
     const next = setup.lines.map((row) => {
       if (row.id === line.id) return { ...row, farmIds: [], placeIds: mine };
-      // The other libreta keeps exactly what it had. Nothing on this sheet can
-      // take from it — that is the whole point of the lock.
-      const theirs = every
-        .filter((one) => lineOfPlace(setup.lines, one.farm.id, one.place.id)?.id === row.id)
+      // The other libreta keeps exactly what it had, in the order it had it.
+      // Nothing on this sheet can take from it — that is the whole point of
+      // the lock.
+      const theirs = orderedPlaces(setup.lines, row.id, store.farms, store.clients)
         .map((one) => one.key);
       return { ...row, farmIds: [], placeIds: theirs };
     });
@@ -399,6 +413,120 @@ export function renderPackingSetup() {
     try {
       await savePacking(next, author());
       toastOk('Libreta guardada');
+    } catch (error) { toastBad(errorText(error)); }
+  }
+
+  /**
+   * The order this libreta is packed in, location by location.
+   *
+   * The kitchen packs in the order the van is loaded, and the van goes house
+   * by house, not farm by farm — so the list here is of locations, and two
+   * houses of the same farm can be anywhere in it. Where the order leaves a
+   * farm and comes back to it later, the packing screen says so and the bag
+   * label follows: one bag per stretch.
+   *
+   * Dragged by the handle, or moved one place at a time with the arrows, which
+   * is easier for a single house on a phone. Nothing is saved until Guardar,
+   * and "Ordenar por farma" puts it back the way the paper book had it, also
+   * unsaved — a way back for somebody who dragged something and lost track of
+   * where it came from.
+   */
+  async function orderPlaces(line) {
+    let order = orderedPlaces(setup.lines, line.id, store.farms, store.clients);
+    // The paper book's order: the same libreta with no order of its own.
+    const book = () => orderedPlaces(
+      setup.lines.map((row) => (row.id === line.id ? { ...row, order: [] } : row)),
+      line.id, store.farms, store.clients);
+
+    const list = h('ol.pkorder');
+    let focus = null;   // the row to put the cursor back on after a redraw
+
+    const move = (key, step) => {
+      const at = order.findIndex((one) => one.key === key);
+      const to = at + step;
+      if (at === -1 || to < 0 || to >= order.length) return;
+      const next = order.slice();
+      [next[at], next[to]] = [next[to], next[at]];
+      order = next;
+      focus = { key, part: step < 0 ? 'up' : 'down' };
+      paintOrder();
+    };
+
+    function paintOrder() {
+      mount(list, order.map((one, at) => {
+        const count = peopleAt(one);
+        const first = at === 0;
+        const last = at === order.length - 1;
+        return h('li.pkorder__row', { dataset: { key: one.key } },
+          h('button.pkorder__grip', {
+            type: 'button',
+            'data-grip': '',
+            title: 'Arrastrar para mover',
+            'aria-label': `Mover ${one.place.name} de ${one.farm.name}. `
+              + 'Usa las flechas del teclado para subirla o bajarla.',
+          }, icon('grip')),
+          h('span.pkorder__n', String(at + 1)),
+          h('span.pkorder__text',
+            h('span.pkorder__place', one.place.name),
+            h('span.pkorder__farm', `${one.farm.name} · `
+              + `${count ? plural(count, 'cliente', 'clientes') : 'sin clientes'}`)),
+          h('button.pkorder__step', {
+            type: 'button', disabled: first, 'data-part': 'up',
+            'aria-label': `Subir ${one.place.name}`,
+            onclick: () => move(one.key, -1),
+          }, icon('chevronU')),
+          h('button.pkorder__step', {
+            type: 'button', disabled: last, 'data-part': 'down',
+            'aria-label': `Bajar ${one.place.name}`,
+            onclick: () => move(one.key, 1),
+          }, icon('chevronD')));
+      }));
+
+      // The arrow that was pressed is gone after the redraw; the cursor goes
+      // back to the same row, on the same arrow if it can still be pressed.
+      if (focus) {
+        const row = [...list.children].find((el) => el.dataset.key === focus.key);
+        const target = row?.querySelector(`[data-part="${focus.part}"]:not(:disabled)`)
+          || row?.querySelector('[data-grip]');
+        target?.focus({ preventScroll: false });
+        focus = null;
+      }
+    }
+
+    sortable(list, {
+      onChange: (keys, moved) => {
+        const byKey = new Map(order.map((one) => [one.key, one]));
+        order = keys.map((key) => byKey.get(key)).filter(Boolean);
+        focus = { key: moved, part: 'grip' };
+        paintOrder();
+      },
+    });
+    paintOrder();
+
+    const saved = await sheet({
+      title: `Orden de ${line.name}`,
+      build: () => h('div.stack.stack-4',
+        h('p.t-sm.c-soft', 'Así se empaca esta libreta, de arriba abajo: ubicación por '
+          + 'ubicación. Arrastra cada una de la manija, o súbela y bájala con las flechas.'),
+        list,
+        h('button.btn.btn--ghost.btn--sm', {
+          type: 'button',
+          onclick: () => { order = book(); paintOrder(); },
+        }, icon('refresh'), 'Ordenar por farma')),
+      foot: (close) => button('Guardar orden', {
+        variant: 'primary', size: 'lg', block: true, onClick: () => close(true),
+      }),
+    });
+    if (!saved) return;
+
+    // Only this libreta's order changes. Which locations it has, and anything
+    // about the other one, is left exactly as it was.
+    const next = setup.lines.map((row) => (row.id === line.id
+      ? { ...row, order: order.map((one) => one.key) }
+      : row));
+    try {
+      await savePacking(next, author());
+      toastOk('Orden guardado');
     } catch (error) { toastBad(errorText(error)); }
   }
 

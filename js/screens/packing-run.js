@@ -144,7 +144,7 @@ export function renderPackingRun(context) {
     opening = true;
     startRun({
       line: plan.line, packer, day,
-      people: plan.people, plates: plan.plates, farms: plan.farms.length,
+      people: plan.people, plates: plan.plates, farms: plan.farmCount,
     })
       .then((run) => { if (life.alive()) runId = run.id; })
       .catch((error) => { if (life.alive()) toastBad(errorText(error)); })
@@ -297,6 +297,12 @@ export function renderPackingRun(context) {
     return h('div.pkfarm',
       h('div.pkfarm__eyebrow', 'Sigue esta farma'),
       h('h2.pkfarm__name', slide.farm.name),
+      // Which of its locations come now, in the order they come. The libreta
+      // goes location by location, so a farm can come back later in the
+      // morning for its other houses; this says which part of it this is.
+      (slide.places || []).length
+        ? h('div.pkfarm__places', slide.places.map((place) => place.name).join(' · '))
+        : null,
       // One line instead of two stacked columns of figures. It is the size of
       // what is coming, read once; the line under the name is enough for that.
       h('div.pkfarm__nums',
@@ -355,7 +361,7 @@ export function renderPackingRun(context) {
       h('p.pkdone__text',
         `Empacaste ${plural(plan.people, 'persona', 'personas')} `
         + `y ${plural(plan.plates, 'comida', 'comidas')} de `
-        + `${plural(plan.farms.length, 'farma', 'farmas')}.`),
+        + `${plural(plan.farmCount, 'farma', 'farmas')}.`),
       h('p.pkdone__who', `Queda registrado a nombre de ${packer.name}.`));
   }
 

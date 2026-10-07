@@ -46,6 +46,7 @@ import { kitchen } from '../lib/mode.js';
 import { seatedPacker, sitDown, watchPackers } from '../data/packing.js';
 import { abilitiesOf } from '../lib/packing.js';
 import { createFarm, newLocationId } from '../data/farms.js';
+import { openDayBoard } from '../ui/day-board.js';
 import { paymentMethodMeta } from '../lib/model.js';
 import {
   today, addDays, formatDay, formatDayLong, weekdayName, capitalize, WEEKDAYS_SHORT,
@@ -331,7 +332,7 @@ export function renderQuick() {
     const tile = {
       pack: () => posTile({
         icon: 'box', title: 'Empacar',
-        sub: 'La comida de hoy, farma por farma',
+        sub: 'La comida de hoy, en el orden de su libreta',
         hero: true, band: true,
         onClick: () => go('/empaque'),
       }),
@@ -380,10 +381,26 @@ export function renderQuick() {
     const eating = activeClients();
     const farmsCount = new Set(eating.map((client) => client.farmId)).size;
 
+    /*
+     * The greeting, and beside it the day's board — what the two whiteboards on
+     * the wall say, counted from the clients. It is for everybody who works
+     * here, whatever they are allowed to change: reading how many plates go
+     * without chicken changes nothing.
+     */
+    const heading = (title, hint) => h('div.poshead',
+      h('div.poshead__text',
+        h('h2.pos__q', title),
+        hint ? h('p.pos__hint', hint) : null),
+      h('button.posinfo', {
+        type: 'button',
+        disabled: !ready,
+        onclick: () => openDayBoard(),
+      }, icon('clipboard'), h('span', 'Tablero de hoy')));
+
     const nothing = !ok('pack') && !left.length && !right.length;
     if (nothing) {
       return [
-        h('h2.pos__q', `Hola, ${firstName(me)}`),
+        heading(`Hola, ${firstName(me)}`),
         h('div.posnote.posnote--warn', icon('alert'),
           h('div', 'Todavía no tienes nada asignado. Pídele al encargado que te dé '
             + 'permisos desde el panel.')),
@@ -397,8 +414,7 @@ export function renderQuick() {
     const rest = [...left, ...right];
 
     return [
-      h('h2.pos__q', `¿Qué vas a hacer, ${firstName(me)}?`),
-      h('p.pos__hint', ready
+      heading(`¿Qué vas a hacer, ${firstName(me)}?`, ready
         ? `${plural(eating.length, 'cliente', 'clientes')} en `
           + `${plural(farmsCount, 'farma', 'farmas')}`
         : 'Cargando…'),

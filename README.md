@@ -336,7 +336,9 @@ en dos computadoras a la vez: una colaboradora lleva la **Libreta 1** y otra la
 > cocina. El resto del panel todavía dice *rancho*: es lo mismo.
 
 **Configurarlo** — en el panel, *Empaque → el engrane de arriba*. Ahí se
-reparten las **ubicaciones** entre las dos libretas, se da de alta a cada
+reparten las **ubicaciones** entre las dos libretas, se pone el **orden** en
+que se empaca cada una (ver [El orden de empaque](#el-orden-de-empaque)), se
+da de alta a cada
 persona que trabaja en la cocina con su PIN y lo que puede hacer (ver
 [Usuarios y permisos](#usuarios-y-permisos)), y se prende o apaga la etiqueta
 automática. En la computadora de la cocina el engrane no aparece: la
@@ -361,6 +363,34 @@ arriba lo dice, que es justo lo que alguien a media mudanza tiene que poder ver.
 Y si una ubicación **con gente adentro** queda fuera de las dos, la pantalla lo
 avisa, porque esa comida no se empacaría. Una ubicación vacía no se avisa — una
 casa sin nadie no es un problema.
+
+#### El orden de empaque
+
+Las señoras empacan en un orden, y no es farma por farma: es **ubicación por
+ubicación**, en el orden en que se carga la camioneta. En cada libreta,
+*Orden de empaque* abre la lista de sus ubicaciones, numerada, y se acomoda
+arrastrando cada una de la manija (⠿) o subiéndola y bajándola con las
+flechas. Nada se guarda hasta *Guardar orden*; *Ordenar por farma* la deja
+como el cuaderno, por si alguien se pierde moviendo cosas.
+
+- **Las ubicaciones de distintas farmas se pueden intercalar.** Casa 1 de
+  Mucci, luego el Bloque de Morsea, luego Casa 2 de Mucci. La pantalla de
+  empaque dice cada vez qué farma sigue y qué ubicaciones de ella vienen; si el
+  orden sale de una farma y regresa a ella después, es otro tramo, con su
+  propia etiqueta de bolsa — los platos se empacaron en otro momento.
+- **Una ubicación nueva no se pierde.** Si después se agrega una casa a la
+  libreta, entra justo después de la última ubicación de su farma (o al final,
+  si su farma no tenía ninguna). Se empaca igual, y se puede mover cuando
+  convenga.
+- **Escoger ubicaciones no revuelve el orden.** Qué ubicaciones tiene una
+  libreta y en qué orden se empacan son dos cosas guardadas aparte; guardar una
+  no toca la otra, ni nada de la otra libreta.
+- **Mientras nadie ponga un orden, sigue el de siempre:** las farmas en el
+  orden en que se agregaron y, dentro de cada una, sus ubicaciones como en el
+  cuaderno. La gente de una misma ubicación va por nombre.
+
+Las tarjetas de las libretas, en *Configurar*, enseñan sus ubicaciones con su
+número en ese orden.
 
 Quien no tenga ubicación puesta, o la tenga borrada, cae en un cajón llamado
 *Sin ubicación* que también se asigna a una libreta. Así nadie desaparece de la
@@ -534,6 +564,30 @@ el PIN, en el menú de esa persona —sólo con lo que tiene permitido—:
 Cobrar, la caja y lo cobrado hoy no están: son del mostrador, y la *Acción
 rápida* del panel sigue igual que siempre.
 
+**Tablero de hoy** — el botón al lado del saludo. Es lo que dicen los dos
+pizarrones de la pared, MEDIAS y COMPLETAS, pero contado por la computadora,
+cliente por cliente, cada vez que se abre:
+
+- Arriba, cuántas **medias** (quien lleva una comida hoy), cuántas
+  **completas** (quien lleva dos o más) y cuántas **comidas** en total, cada
+  número partido por libreta.
+- Debajo, un tablero para medias y otro para completas: una línea por cada
+  cosa que alguien no puede comer — Pollo, Cerdo, Espagueti… — con cuántos de
+  la Libreta 1, cuántos de la Libreta 2 y el total.
+
+Lo que no pueden comer sale de la ficha de cada persona: todo lo de *No puede
+comer*, y lo de sus *Preferencias* que empieza con «sin» o «no» («doble
+tortilla» no cuenta). «Sin pollo», «No Pollo» y «pollo» son la misma línea, con
+acento o sin él, y cada persona cuenta una vez aunque lo tenga escrito en las
+dos listas. Si alguien come hoy pero su ubicación no está en ninguna libreta,
+sale un aviso arriba con su nombre: no se empaca, así que no entra en las
+cuentas.
+
+Las columnas llevan el nombre de cada libreta. Si se prefiere ver ahí el
+nombre de quien la empaca («Monse», «Clau»), basta con ponérselo a la libreta
+en *Configurar → Nombre*. El tablero se actualiza solo si un cliente cambia
+mientras está abierto, y no cambia nada: es para leer.
+
 En cada computadora, una sola vez:
 
 1. Abre Chrome o Edge en `https://TUSITIO.netlify.app/empaque`.
@@ -640,8 +694,10 @@ js/
     model.js          estados de entrega, métodos de pago, respuestas rápidas
     icons.js          set de iconos SVG
     mode.js           por cuál de las dos puertas se abrió la app
-    packing.js        el orden en que se empaca —farma, lugar, persona— y
+    packing.js        el orden en que se empaca —ubicación por ubicación— y
                       los permisos de cada quien en la cocina
+    board.js          el tablero de hoy: medias, completas y lo que no
+                      pueden comer, contado cliente por cliente
     qr.js             códigos QR, escritos aquí: sin paquetes y sin internet
   data/               una capa por colección de Firestore
     session.js  staff.js  pricing.js  farms.js  clients.js
@@ -653,6 +709,8 @@ js/
     print.js          recibos, reportes y etiquetas, por el diálogo del navegador
     label.js          las etiquetas de 100 × 50 mm: la del plato de cada
                       persona y la de la bolsa de cada farma
+    day-board.js      el tablero de hoy, en la computadora de la cocina
+    sortable.js       ordenar una lista arrastrando, o con el teclado
   screens/            una pantalla por archivo
 ```
 
@@ -799,6 +857,9 @@ config/packing                   -- cómo se reparte el empaque
   lines [{ id, name, placeIds, farmIds }]
                                  -- exactamente dos libretas
     placeIds ['f1:loc_a', 'f1:'] -- "farma:ubicación"; vacío = sin ubicación
+    order    ['f1:loc_c', …]     -- el orden de empaque, ubicación por
+                                    ubicación. Vacío = el de siempre. Lo que no
+                                    está aquí entra después de su farma
     farmIds  ['f1']              -- la forma vieja: la farma entera. Se sigue
                                     leyendo, y el primer guardado del selector
                                     la convierte en placeIds

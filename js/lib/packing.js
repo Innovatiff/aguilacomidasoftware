@@ -25,9 +25,12 @@
  *   Monday to Friday — and a Saturday list that includes her is a plate that
  *   gets made and thrown away.
  *
- *   **In the order of the paper book.** Farm, then location, then name. The
- *   people doing this worked from that book for years; the machine should not
- *   ask them to learn a new order to do the same job.
+ *   **In the order the kitchen packs.** Location by location, in the order
+ *   the manager set for that libreta — the order the van is loaded in, which
+ *   does not care whose name is on a gate. Until somebody sets one it is the
+ *   order of the paper book: farm, then its locations, then the people by
+ *   name. The people doing this worked from that book for years; the machine
+ *   does not ask them to learn a new order until they choose one.
  */
 
 import { mealsOn } from './pricing.js';
@@ -97,6 +100,18 @@ export function normalizePacking(data) {
         // De-duplicated, because a location packed twice is a location whose
         // people get two plates each and a count that never reconciles.
         placeIds: [...new Set((Array.isArray(line.placeIds) ? line.placeIds : []).filter(Boolean))],
+        /*
+         * The order the libreta is packed in, location by location — set by
+         * hand in Empaque → Configurar → Orden de empaque.
+         *
+         * Kept apart from `placeIds` on purpose. Which locations a libreta has
+         * and in what order it walks them are two decisions made on two
+         * screens, and keeping them in one list meant that picking a house for
+         * one libreta quietly rewrote the other's order. Empty means nobody set
+         * one, and the morning runs in the paper book's order — see
+         * `orderedPlaces`.
+         */
+        order: [...new Set((Array.isArray(line.order) ? line.order : []).filter(Boolean))],
       };
     }),
   };
@@ -165,6 +180,66 @@ export const placesOf = (lines, lineId, farms, clients) =>
     .filter((entry) => lineOfPlace(lines, entry.farm.id, entry.place.id)?.id === lineId);
 
 /**
+ * The locations of one libreta, in the order they are packed.
+ *
+ * Location by location, in the order the manager set (`line.order`), because
+ * the kitchen packs in the order the van is loaded and the van goes house by
+ * house, not farm by farm. Until somebody sets one it is the order the morning
+ * always had: farms in the order they were first added to the libreta, and
+ * inside a farm its own list of locations, which is the paper book's.
+ *
+ * A location that arrives after the order was set — a new house, or one
+ * brought over from the other libreta — goes right after the last location of
+ * its own farm, which is where somebody would have put it by hand nine times
+ * out of ten; with nothing of its farm here, it goes at the end. Either way it
+ * is packed. An order that left a location out would be a quieter way of
+ * losing a house than not assigning it at all, and this file exists to make
+ * that impossible.
+ *
+ * @returns {{ key: string, farm: object, place: object }[]}
+ */
+export function orderedPlaces(lines, lineId, farms, clients) {
+  const line = lineOf(lines, lineId);
+  const members = placesOf(lines, lineId, farms, clients);
+
+  // The book's order: farms by first appearance, then each farm's own list.
+  // `placesOf` already has each farm's locations in its own order, so a
+  // stable sort by farm is all it takes.
+  const farmOrder = [];
+  for (const key of line?.placeIds || []) {
+    const { farmId } = readPlaceKey(key);
+    if (farmId && !farmOrder.includes(farmId)) farmOrder.push(farmId);
+  }
+  for (const farmId of line?.farmIds || []) {
+    if (!farmOrder.includes(farmId)) farmOrder.push(farmId);
+  }
+  const rank = (entry) => {
+    const at = farmOrder.indexOf(entry.farm.id);
+    return at === -1 ? farmOrder.length : at;
+  };
+  const book = members
+    .map((entry, at) => ({ entry, at }))
+    .sort((a, b) => rank(a.entry) - rank(b.entry) || a.at - b.at)
+    .map(({ entry }) => entry);
+
+  if (!line?.order?.length) return book;
+
+  // A key that no longer names a location of this libreta is skipped, not an
+  // error: the order outlives the houses in it.
+  const byKey = new Map(members.map((entry) => [entry.key, entry]));
+  const out = line.order.map((key) => byKey.get(key)).filter(Boolean);
+  const placed = new Set(out.map((entry) => entry.key));
+  for (const entry of book) {
+    if (placed.has(entry.key)) continue;
+    let after = -1;
+    out.forEach((other, at) => { if (other.farm.id === entry.farm.id) after = at; });
+    out.splice(after === -1 ? out.length : after + 1, 0, entry);
+    placed.add(entry.key);
+  }
+  return out;
+}
+
+/**
  * Locations nobody assigned to a libreta, and that have people in them.
  *
  * The thing that goes wrong with a setup like this is a house added in March
@@ -196,10 +271,13 @@ export function unassignedPlaces(lines, farms, clients = []) {
  * @param {object[]} input.clients  the roster, already filtered to who is served
  * @param {string}   [input.day]    the day being packed
  *
- * @returns {object} `{ farms, slides, people, plates, missing }`
- *   farms    `[{ farm, groups: [{ place, clients }], people, plates }]`
- *   slides   what the screen walks through, one thing per screen
- *   missing  ids in the libreta that no longer match a farm
+ * @returns {object} `{ farms, farmCount, slides, people, plates, missing }`
+ *   farms      `[{ farm, groups: [{ place, clients }], people, plates }]` — one
+ *              per stretch of the morning spent on one farm. A farm whose
+ *              locations the order splits up appears once per stretch.
+ *   farmCount  how many different farms, for anything that counts them
+ *   slides     what the screen walks through, one thing per screen
+ *   missing    ids in the libreta that no longer match a farm
  */
 export function packingSequence({
   line, lines, farms = [], clients = [], day = todayKey(),
@@ -207,60 +285,52 @@ export function packingSequence({
   const weekday = weekdayOf(day);
   const all = lines || (line ? [line] : []);
   const byId = new Map(farms.map((farm) => [farm.id, farm]));
+
+  // A farm that was deleted while it was still on a libreta is reported, not
+  // dropped: an empty stretch of the morning nobody can explain is worse.
   const missing = [];
-  const out = [];
+  for (const farmId of [
+    ...(line?.placeIds || []).map((key) => readPlaceKey(key).farmId),
+    ...(line?.farmIds || []),
+  ]) {
+    if (farmId && !byId.has(farmId) && !missing.includes(farmId)) missing.push(farmId);
+  }
+
+  const roster = clients.filter((client) => mealsOn(client, weekday) > 0);
 
   /*
-   * Which farm comes first, and the one thing this ordering has to protect.
-   *
-   * The morning runs in the order the manager built the libreta in, not
-   * alphabetically — they know which farm the van loads first. So farms appear
-   * in the order their first location was added, and a farm assigned whole
-   * under the old shape keeps the place it had. Inside a farm the order is the
-   * farm's own list of locations, which is the order of the paper book.
+   * Location by location, in the libreta's order, with each location's people
+   * by name. Consecutive locations of the same farm are one stretch, which is
+   * one "Sigue esta farma" slide and one bag. When the order leaves a farm and
+   * comes back to it later, that is a second stretch with its own slide and
+   * its own bag — the plates were packed at different moments, and a bag
+   * labelled with people who are not in it yet is a bag that gets closed
+   * short.
    */
-  const order = [];
-  for (const key of line?.placeIds || []) {
-    const { farmId } = readPlaceKey(key);
-    if (farmId && !order.includes(farmId)) order.push(farmId);
-  }
-  for (const farmId of line?.farmIds || []) {
-    if (!order.includes(farmId)) order.push(farmId);
-  }
+  const out = [];
+  for (const entry of orderedPlaces(all, line?.id, farms, roster)) {
+    const known = new Set((entry.farm.locations || []).map((place) => place.id));
+    const here = roster
+      .filter((client) => client.farmId === entry.farm.id)
+      .filter((client) => (entry.place.id
+        ? client.locationId === entry.place.id
+        // Anybody whose location was removed still has to be packed for, or
+        // they vanish from the only list that decides whether they eat.
+        : !known.has(client.locationId)))
+      .sort(byName);
+    if (!here.length) continue;
 
-  for (const farmId of order) {
-    const farm = byId.get(farmId);
-    if (!farm) { missing.push(farmId); continue; }
-
-    const roster = clients
-      .filter((client) => client.farmId === farm.id)
-      .filter((client) => mealsOn(client, weekday) > 0);
-
-    const groups = [];
-    for (const place of farm.locations || []) {
-      if (lineOfPlace(all, farm.id, place.id)?.id !== line?.id) continue;
-      const here = roster.filter((client) => client.locationId === place.id);
-      if (here.length) groups.push({ place, clients: here.sort(byName) });
+    const last = out[out.length - 1];
+    if (last && last.farm.id === entry.farm.id) {
+      last.groups.push({ place: entry.place, clients: here });
+    } else {
+      out.push({ farm: entry.farm, groups: [{ place: entry.place, clients: here }] });
     }
-
-    // Anybody whose location was removed still has to be packed for, or they
-    // vanish from the only list that decides whether they eat.
-    const known = new Set((farm.locations || []).map((place) => place.id));
-    const adrift = roster.filter((client) => !known.has(client.locationId));
-    if (adrift.length && lineOfPlace(all, farm.id, '')?.id === line?.id) {
-      groups.push({ place: { id: '', name: 'Sin ubicación' }, clients: adrift.sort(byName) });
-    }
-
-    const people = groups.reduce((sum, group) => sum + group.clients.length, 0);
-    if (!people) continue;
-
-    out.push({
-      farm,
-      groups,
-      people,
-      plates: groups.reduce((sum, group) =>
-        sum + group.clients.reduce((n, client) => n + mealsOn(client, weekday), 0), 0),
-    });
+  }
+  for (const stretch of out) {
+    stretch.people = stretch.groups.reduce((sum, group) => sum + group.clients.length, 0);
+    stretch.plates = stretch.groups.reduce((sum, group) =>
+      sum + group.clients.reduce((n, client) => n + mealsOn(client, weekday), 0), 0);
   }
 
   // One screen per thing: the farm you are starting, then its people one at a
@@ -268,7 +338,15 @@ export function packingSequence({
   // 34" are read from, so it is worked out once here rather than by the screen.
   const slides = [];
   for (const entry of out) {
-    slides.push({ kind: 'farm', farm: entry.farm, people: entry.people, plates: entry.plates });
+    slides.push({
+      kind: 'farm',
+      farm: entry.farm,
+      people: entry.people,
+      plates: entry.plates,
+      // Which of the farm's locations this stretch covers, in order — so a
+      // farm that comes back later in the morning says which part it is.
+      places: entry.groups.map((group) => group.place),
+    });
     for (const group of entry.groups) {
       for (const client of group.clients) {
         slides.push({
@@ -285,6 +363,7 @@ export function packingSequence({
 
   return {
     farms: out,
+    farmCount: new Set(out.map((entry) => entry.farm.id)).size,
     slides,
     people: out.reduce((sum, entry) => sum + entry.people, 0),
     plates: out.reduce((sum, entry) => sum + entry.plates, 0),

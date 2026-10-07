@@ -228,6 +228,8 @@ export function renderPacking() {
     const mine = run && run.packerId === packer.id;
     const state = !run ? 'libre' : (run.done ? 'lista' : 'empezada');
 
+    // In the order the morning goes. A farm the order comes back to later is
+    // named again where it comes back — that is the route, not a repeat.
     const farmNames = plan.farms.map((entry) => entry.farm.name);
 
     return h(`button.pkline.pkline--${state}`, {
@@ -254,8 +256,8 @@ export function renderPacking() {
           h('span.pkline__n', number(plan.plates)),
           h('span.pkline__l', 'comidas')),
         h('div.pkline__num',
-          h('span.pkline__n', number(plan.farms.length)),
-          h('span.pkline__l', plan.farms.length === 1 ? 'farma' : 'farmas'))),
+          h('span.pkline__n', number(plan.farmCount)),
+          h('span.pkline__l', plan.farmCount === 1 ? 'farma' : 'farmas'))),
 
       h('div.pkline__foot',
         run

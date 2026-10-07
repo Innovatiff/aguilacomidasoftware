@@ -940,6 +940,10 @@
   font-size: clamp(2.25rem, 6.4vw, 4.5rem);
   font-weight: 800; letter-spacing: -.035em; line-height: 1.02;
 }
+.pkfarm__places {
+  margin: calc(var(--s2) * -1) 0 var(--s4);
+  font-size: var(--fs-xl); font-weight: 700; color: var(--text);
+}
 .pkfarm__nums {
   display: flex; gap: var(--s3);
   font-size: var(--fs-2xl); color: var(--text-soft);
@@ -1101,10 +1105,84 @@
 
 .pkchips { display: flex; flex-wrap: wrap; gap: var(--s2); }
 .pkchip {
+  display: inline-flex; align-items: center; gap: 6px;
   font-size: var(--fs-sm); font-weight: 600;
   background: var(--brand-50); color: var(--brand-700);
-  border-radius: var(--r-full); padding: 4px 12px;
+  border-radius: var(--r-full); padding: 4px 12px 4px 4px;
 }
+/* The place in the morning's order. */
+.pkchip__n {
+  display: inline-grid; place-items: center;
+  min-width: 22px; height: 22px; padding: 0 6px;
+  border-radius: var(--r-full);
+  background: var(--brand-600); color: #ffffff;
+  font-size: var(--fs-xs); font-weight: 800;
+}
+
+/* Escoger and Ordenar side by side when there is room, stacked when not. */
+.pkline-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--s2); }
+
+/* --- The order of a libreta ---------------------------------------------------
+   One row per location: a handle to drag it by, its place in the morning, the
+   house and its farm, and an arrow up and down for moving one place at a time.
+   The row being dragged lifts off the list so it reads as picked up. */
+
+.pkorder {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: var(--s2);
+}
+.pkorder.is-sorting { user-select: none; -webkit-user-select: none; }
+.pkorder__row {
+  display: flex; align-items: center; gap: var(--s2);
+  min-height: 60px; padding: 6px var(--s2) 6px 4px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+}
+.pkorder__row.is-dragging {
+  position: relative; z-index: 2;
+  border-color: var(--brand-500);
+  box-shadow: var(--sh-3);
+  background: var(--surface);
+}
+.pkorder__grip {
+  flex: none; display: grid; place-items: center;
+  width: 40px; height: 48px;
+  color: var(--text-faint);
+  background: transparent; border: 0; border-radius: var(--r-sm);
+  cursor: grab;
+  /* The finger drags the row; it does not scroll the sheet. */
+  touch-action: none;
+}
+.pkorder.is-sorting .pkorder__grip { cursor: grabbing; }
+.pkorder__grip:hover { color: var(--text-soft); background: var(--ink-50); }
+.pkorder__grip:focus-visible { outline: 3px solid var(--brand-500); outline-offset: 1px; }
+.pkorder__n {
+  flex: none; display: grid; place-items: center;
+  width: 30px; height: 30px; border-radius: var(--r-full);
+  background: var(--brand-50); color: var(--brand-700);
+  font-size: var(--fs-sm); font-weight: 800;
+}
+.pkorder__text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.pkorder__place {
+  font-size: var(--fs-md); font-weight: 700;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pkorder__farm {
+  font-size: var(--fs-xs); color: var(--text-soft);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pkorder__step {
+  flex: none; display: grid; place-items: center;
+  width: 40px; height: 40px;
+  color: var(--text-soft);
+  background: var(--ink-50);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.pkorder__step:hover:not(:disabled) { color: var(--text); background: var(--ink-100); }
+.pkorder__step:disabled { opacity: .35; cursor: default; }
+.pkorder__step:focus-visible { outline: 3px solid var(--brand-500); outline-offset: 1px; }
 
 .pkpick {
   display: flex; align-items: center; gap: var(--s3);
@@ -1190,6 +1268,98 @@
 }
 .pkgroup__name { font-size: var(--fs-md); font-weight: 700; }
 .pkgroup__meta { font-size: var(--fs-xs); color: var(--text-soft); }
+
+/* --- The kitchen menu's heading ----------------------------------------------
+   The greeting on the left and the day's board on the right, on one line, so
+   the button costs the menu no height: the board has to fit a 768px screen. */
+
+.poshead { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.poshead__text { min-width: 0; }
+.posinfo {
+  flex: none;
+  display: inline-flex; align-items: center; gap: 10px;
+  min-height: 52px; padding: 0 18px;
+  font: inherit; font-size: 18px; font-weight: 800;
+  color: var(--pos-text); background: var(--pos-fill);
+  border: 3px solid var(--pos-line); border-radius: var(--pos-r);
+  box-shadow: 0 var(--pos-key) 0 var(--pos-line);
+  cursor: pointer;
+  transition: transform 60ms linear, box-shadow 60ms linear;
+}
+.posinfo:active { transform: translateY(var(--pos-key)); box-shadow: 0 0 0 var(--pos-line); }
+.posinfo:focus-visible { outline: 4px solid var(--pos-brand); outline-offset: 3px; }
+.posinfo:disabled { opacity: .5; cursor: default; }
+.posinfo svg { width: 24px; height: 24px; color: var(--pos-plan); }
+
+/* --- Tablero de hoy -----------------------------------------------------------
+   Three numbers across the top, then the two whiteboards side by side, the way
+   they hang on the wall. Black heads on white boards, because that is what
+   the wall looks like and what a cook will look for. */
+
+.pos--board .pos__inner { max-width: 1180px; margin: 0 auto; padding-top: 20px; }
+.pos--board .posnote { margin: 0 0 16px; }
+
+.dboard__stats {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px; margin-bottom: 18px;
+}
+.dstat {
+  padding: 12px 18px 14px;
+  background: var(--pos-fill);
+  border: 3px solid var(--pos-line); border-radius: var(--pos-r);
+}
+.dstat--dark { background: var(--pos-line); color: #ffffff; }
+.dstat__head { display: flex; align-items: baseline; gap: 10px; }
+.dstat__title { font-size: 19px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.dstat__note { font-size: 15px; font-weight: 700; color: var(--pos-soft); }
+.dstat--dark .dstat__note { color: #cfd5dd; }
+.dstat__n { margin: 2px 0 4px; font-size: 46px; font-weight: 800; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.dstat__lines { display: flex; flex-wrap: wrap; gap: 2px 18px; font-size: 17px; color: var(--pos-soft); }
+.dstat__lines b { color: var(--pos-text); font-weight: 800; font-variant-numeric: tabular-nums; }
+.dstat--dark .dstat__lines { color: #cfd5dd; }
+.dstat--dark .dstat__lines b { color: #ffffff; }
+.dstat__extra { margin-top: 4px; font-size: 15px; font-weight: 700; color: var(--pos-plan); }
+
+.dboard__boards {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px; align-items: start;
+}
+.dtable {
+  background: var(--pos-fill);
+  border: 3px solid var(--pos-line); border-radius: var(--pos-r);
+  overflow: hidden;
+}
+.dtable__head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding: 10px 16px;
+  background: var(--pos-line); color: #ffffff;
+}
+.dtable__head h3 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.dtable__head span { font-size: 15px; font-weight: 700; color: #cfd5dd; }
+.dtable__grid { width: 100%; border-collapse: collapse; font-size: 19px; }
+.dtable__grid th, .dtable__grid td {
+  padding: 8px 14px; text-align: left;
+  border-bottom: 1px solid #dde2e7;
+}
+.dtable__grid thead th {
+  font-size: 13px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--pos-soft); background: var(--pos-sunken);
+}
+.dtable__grid tbody th { font-weight: 700; }
+.dtable__grid tbody tr:nth-child(even) { background: #f7f8fa; }
+.dtable__grid tbody tr:last-child > * { border-bottom: 0; }
+.dtable__grid .num {
+  width: 1%; text-align: right; white-space: nowrap;
+  font-weight: 800; font-variant-numeric: tabular-nums;
+}
+.dtable__zero { color: #b3bac3; font-weight: 600; }
+.dtable__total { color: var(--pos-brand-dark); }
+.dtable__empty { margin: 0; padding: 16px; font-size: 18px; color: var(--pos-soft); }
+.dboard__foot { margin: 16px 0 0; font-size: 15px; color: var(--pos-soft); }
+
+@media (max-width: 860px) {
+  .dboard__stats, .dboard__boards { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* --- Nueva farma: the list of locations being built ------------------------- */
 
