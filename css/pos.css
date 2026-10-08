@@ -1157,11 +1157,40 @@
 .pkorder.is-sorting .pkorder__grip { cursor: grabbing; }
 .pkorder__grip:hover { color: var(--text-soft); background: var(--ink-50); }
 .pkorder__grip:focus-visible { outline: 3px solid var(--brand-500); outline-offset: 1px; }
+/* The number is a button: tap it, type where the location goes. Dashed
+   underline on hover, so a mouse finds out it does something. */
 .pkorder__n {
   flex: none; display: grid; place-items: center;
-  width: 30px; height: 30px; border-radius: var(--r-full);
+  min-width: 36px; height: 36px; padding: 0 6px;
+  border-radius: var(--r-full);
   background: var(--brand-50); color: var(--brand-700);
-  font-size: var(--fs-sm); font-weight: 800;
+  border: 2px solid transparent;
+  font: inherit; font-size: var(--fs-sm); font-weight: 800;
+  cursor: pointer;
+}
+.pkorder__n:hover { border-color: var(--brand-400); }
+.pkorder__n:focus-visible { outline: 3px solid var(--brand-500); outline-offset: 1px; }
+.pkorder__num {
+  flex: none; width: 70px; height: 40px;
+  padding: 0 6px; text-align: center;
+  font: inherit; font-size: var(--fs-md); font-weight: 800;
+  border: 2px solid var(--brand-500); border-radius: var(--r-md);
+  background: var(--surface); color: var(--text);
+}
+.pkorder__out {
+  flex: none; display: grid; place-items: center;
+  width: 40px; height: 40px;
+  color: var(--text-faint);
+  background: transparent;
+  border: 1px solid transparent; border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.pkorder__out:hover { color: var(--bad-600); background: #fdecec; border-color: #f3c2c2; }
+.pkorder__out:focus-visible { outline: 3px solid var(--brand-500); outline-offset: 1px; }
+/* Just arrived — from "Por acomodar", or sent to a new number. */
+.pkorder__row.is-new { animation: pkarrive 1.4s var(--ease); }
+@keyframes pkarrive {
+  0%, 35% { background: var(--brand-50); border-color: var(--brand-500); }
 }
 .pkorder__text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .pkorder__place {
@@ -1269,6 +1298,79 @@
 .pkgroup__name { font-size: var(--fs-md); font-weight: 700; }
 .pkgroup__meta { font-size: var(--fs-xs); color: var(--text-soft); }
 
+/* --- The order sheet: finding forty locations ----------------------------------
+   A search across the top, the order on the left and what is still to be
+   placed on the right, each column scrolling on its own on a computer.
+   Stacked on a phone, where the sheet itself scrolls. */
+
+.pkord { display: flex; flex-direction: column; gap: var(--s3); }
+.pkord__intro { margin: 0; font-size: var(--fs-sm); color: var(--text-soft); }
+.pkord__tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
+.pkord__search { flex: 1 1 280px; width: auto; }
+.pkord__cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s5); }
+.pkord__col { display: flex; flex-direction: column; gap: var(--s2); min-width: 0; }
+.pkord__head {
+  position: sticky; top: 0; z-index: 3;
+  display: flex; align-items: center; gap: var(--s2);
+  padding: var(--s1) 0;
+  background: var(--surface);
+}
+.pkord__title { font-size: var(--fs-md); font-weight: 800; }
+.pkord__count {
+  min-width: 26px; padding: 1px 8px;
+  border-radius: var(--r-full);
+  background: var(--ink-100); color: var(--text-soft);
+  font-size: var(--fs-xs); font-weight: 800; text-align: center;
+}
+.pkord__hint { margin: 0 0 var(--s1); font-size: var(--fs-xs); color: var(--text-soft); }
+.pkord__empty {
+  list-style: none; margin: 0;
+  padding: var(--s5) var(--s4);
+  text-align: center; color: var(--text-soft); font-size: var(--fs-sm);
+  border: 1px dashed var(--border-strong); border-radius: var(--r-md);
+}
+.pkord__foot { display: flex; flex-direction: column; gap: var(--s2); }
+.pkord__left { margin: 0; font-size: var(--fs-sm); color: var(--text-soft); text-align: center; }
+
+/* "Por acomodar": under each farm, its locations as buttons to tap. */
+.pkpool { display: flex; flex-direction: column; gap: var(--s4); }
+.pkpool__farm { display: flex; flex-direction: column; gap: var(--s2); }
+.pkpool__name {
+  font-size: var(--fs-xs); font-weight: 800; letter-spacing: .05em;
+  text-transform: uppercase; color: var(--text-soft);
+  padding-bottom: 4px; border-bottom: 1px solid var(--border);
+}
+.pkpool__items { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.pkpool__item {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 44px; padding: 6px 10px 6px 8px;
+  font: inherit; font-size: var(--fs-sm); font-weight: 700; color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong); border-radius: var(--r-md);
+  cursor: pointer;
+}
+.pkpool__item:hover { border-color: var(--brand-500); background: var(--brand-50); }
+.pkpool__item:focus-visible { outline: 3px solid var(--brand-500); outline-offset: 1px; }
+.pkpool__item svg { width: 18px; height: 18px; color: var(--brand-600); }
+.pkpool__meta {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 1px 7px 1px 5px;
+  border-radius: var(--r-full);
+  background: var(--ink-100); color: var(--text-soft);
+  font-size: var(--fs-xs); font-weight: 800;
+}
+.pkpool__item .pkpool__meta svg { width: 13px; height: 13px; color: var(--text-soft); }
+
+@media (min-width: 900px) {
+  .pkord { flex: 1; min-height: 0; }
+  .pkord__cols {
+    flex: 1; min-height: 0;
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  }
+  .pkord__col { overflow-y: auto; min-height: 0; padding-right: 6px; }
+  .pkord__col--shelf { padding-left: var(--s4); border-left: 1px solid var(--border); }
+}
+
 /* --- The kitchen menu's heading ----------------------------------------------
    The greeting on the left and the day's board on the right, on one line, so
    the button costs the menu no height: the board has to fit a 768px screen. */
@@ -1292,73 +1394,117 @@
 .posinfo svg { width: 24px; height: 24px; color: var(--pos-plan); }
 
 /* --- Tablero de hoy -----------------------------------------------------------
-   Three numbers across the top, then the two whiteboards side by side, the way
-   they hang on the wall. Black heads on white boards, because that is what
-   the wall looks like and what a cook will look for. */
+   Three numbers across the top, then the two whiteboards, one under the other
+   and the full width, so each line has room to say its numbers in words.
+   Every number sits beside the name of its libreta, and each libreta keeps
+   one colour: orange for the first, teal for the second. */
 
-.pos--board .pos__inner { max-width: 1180px; margin: 0 auto; padding-top: 20px; }
+.pos--board .pos__inner { max-width: 1080px; margin: 0 auto; padding-top: 20px; }
 .pos--board .posnote { margin: 0 0 16px; }
+
+.dot { flex: none; display: inline-block; width: 12px; height: 12px; border-radius: 999px; }
+.dot--1 { background: var(--pos-brand); }
+.dot--2 { background: var(--pos-plan); }
+.dot--3 { background: var(--pos-who); }
+
+/* "● Libreta 1: 2" — a name and its number, never one without the other. */
+.dcount { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.dcount__name { font-weight: 600; }
+.dcount__n { font-size: 1.15em; font-weight: 800; font-variant-numeric: tabular-nums; }
+.dcount.is-zero { color: #8a929c; }
+.dcount.is-zero .dot { opacity: .35; }
+.dcount.is-zero .dcount__n { font-weight: 600; }
 
 .dboard__stats {
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px; margin-bottom: 18px;
+  gap: 14px; margin-bottom: 20px;
 }
 .dstat {
-  padding: 12px 18px 14px;
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 14px 18px 16px;
   background: var(--pos-fill);
   border: 3px solid var(--pos-line); border-radius: var(--pos-r);
 }
 .dstat--dark { background: var(--pos-line); color: #ffffff; }
-.dstat__head { display: flex; align-items: baseline; gap: 10px; }
+.dstat__head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; }
 .dstat__title { font-size: 19px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
-.dstat__note { font-size: 15px; font-weight: 700; color: var(--pos-soft); }
+.dstat__note { font-size: 16px; font-weight: 700; color: var(--pos-soft); }
 .dstat--dark .dstat__note { color: #cfd5dd; }
-.dstat__n { margin: 2px 0 4px; font-size: 46px; font-weight: 800; line-height: 1.05; font-variant-numeric: tabular-nums; }
-.dstat__lines { display: flex; flex-wrap: wrap; gap: 2px 18px; font-size: 17px; color: var(--pos-soft); }
-.dstat__lines b { color: var(--pos-text); font-weight: 800; font-variant-numeric: tabular-nums; }
-.dstat--dark .dstat__lines { color: #cfd5dd; }
-.dstat--dark .dstat__lines b { color: #ffffff; }
-.dstat__extra { margin-top: 4px; font-size: 15px; font-weight: 700; color: var(--pos-plan); }
+.dstat__n { font-size: 34px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.dstat__lines { display: flex; flex-direction: column; gap: 4px; font-size: 18px; }
+.dstat--dark .dcount { color: #ffffff; }
+.dstat--dark .dcount.is-zero { color: #aab2bc; }
+.dstat__extra { font-size: 15px; font-weight: 700; color: var(--pos-plan); }
 
-.dboard__boards {
-  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px; align-items: start;
-}
-.dtable {
+/* One whiteboard. A black head like the frame of the ones on the wall. */
+.dwb {
+  margin-bottom: 18px;
   background: var(--pos-fill);
   border: 3px solid var(--pos-line); border-radius: var(--pos-r);
   overflow: hidden;
 }
-.dtable__head {
-  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
-  padding: 10px 16px;
+.dwb__head {
+  display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap;
+  gap: 4px 14px;
+  padding: 12px 18px;
   background: var(--pos-line); color: #ffffff;
 }
-.dtable__head h3 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
-.dtable__head span { font-size: 15px; font-weight: 700; color: #cfd5dd; }
-.dtable__grid { width: 100%; border-collapse: collapse; font-size: 19px; }
-.dtable__grid th, .dtable__grid td {
-  padding: 8px 14px; text-align: left;
-  border-bottom: 1px solid #dde2e7;
+.dwb__title { margin: 0; font-size: 24px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.dwb__who { font-size: 17px; font-weight: 700; color: #cfd5dd; }
+.dwb__lead {
+  display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px 14px;
+  margin: 0; padding: 12px 18px 6px;
+  font-size: 15px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--pos-soft);
 }
-.dtable__grid thead th {
-  font-size: 13px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
-  color: var(--pos-soft); background: var(--pos-sunken);
+.dwb__tip { font-size: 14px; font-weight: 600; letter-spacing: 0; text-transform: none; }
+.dwb__empty { margin: 0; padding: 18px; font-size: 19px; color: var(--pos-soft); }
+.dwb__lines { display: flex; flex-direction: column; }
+
+/* One line: what, then each libreta's number with its name, then the total. */
+.dline { border-top: 1px solid #e3e7ec; }
+.dline:nth-child(even) { background: #f7f8fa; }
+.dline__sum {
+  display: grid;
+  grid-template-columns: minmax(170px, 1fr) auto auto 34px;
+  align-items: center; gap: 10px 22px;
+  padding: 12px 14px 12px 18px;
+  list-style: none; cursor: pointer;
+  font-size: 19px;
 }
-.dtable__grid tbody th { font-weight: 700; }
-.dtable__grid tbody tr:nth-child(even) { background: #f7f8fa; }
-.dtable__grid tbody tr:last-child > * { border-bottom: 0; }
-.dtable__grid .num {
-  width: 1%; text-align: right; white-space: nowrap;
-  font-weight: 800; font-variant-numeric: tabular-nums;
+.dline__sum::-webkit-details-marker { display: none; }
+.dline__sum:hover { background: var(--pos-brand-wash); }
+.dline__sum:focus-visible { outline: 4px solid var(--pos-brand); outline-offset: -4px; }
+.dline__what { font-size: 21px; font-weight: 800; }
+.dline__sin { font-weight: 600; color: var(--pos-soft); }
+.dline__counts { display: flex; flex-wrap: wrap; gap: 6px 26px; }
+.dline__total {
+  display: inline-flex; align-items: baseline; gap: 8px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--pos-sunken);
+  white-space: nowrap;
 }
-.dtable__zero { color: #b3bac3; font-weight: 600; }
-.dtable__total { color: var(--pos-brand-dark); }
-.dtable__empty { margin: 0; padding: 16px; font-size: 18px; color: var(--pos-soft); }
-.dboard__foot { margin: 16px 0 0; font-size: 15px; color: var(--pos-soft); }
+.dline__total span { font-size: 15px; font-weight: 700; color: var(--pos-soft); }
+.dline__total b { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.dline__more { display: grid; place-items: center; color: var(--pos-soft); }
+.dline__more svg { width: 24px; height: 24px; transition: transform 120ms linear; }
+.dline[open] .dline__more svg { transform: rotate(180deg); }
+.dline__who {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 2px 18px 14px 18px;
+  font-size: 17px;
+}
+.dline__group { display: flex; align-items: baseline; gap: 8px; }
+.dline__group .dot { transform: translateY(1px); }
+.dline__groupname { flex: none; font-weight: 800; }
+
+.dboard__foot { margin: 4px 0 0; font-size: 15px; color: var(--pos-soft); }
 
 @media (max-width: 860px) {
-  .dboard__stats, .dboard__boards { grid-template-columns: minmax(0, 1fr); }
+  .dboard__stats { grid-template-columns: minmax(0, 1fr); }
+  .dline__sum { grid-template-columns: minmax(0, 1fr) auto 34px; }
+  .dline__counts { grid-column: 1 / -1; grid-row: 2; }
 }
 
 /* --- Nueva farma: the list of locations being built ------------------------- */

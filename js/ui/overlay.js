@@ -41,7 +41,7 @@ export const toastBad = (m) => toast(m, 'bad');
  * Opens a bottom sheet. `build(close)` returns the body; the returned promise
  * resolves with whatever `close(value)` was called with (undefined if dismissed).
  */
-export function sheet({ title, build, foot, dismissible = true }) {
+export function sheet({ title, build, foot, dismissible = true, wide = false }) {
   return new Promise((resolve) => {
     let settled = false;
 
@@ -66,7 +66,9 @@ export function sheet({ title, build, foot, dismissible = true }) {
      */
     const onLeave = () => close(undefined);
 
-    const panel = h('div.sheet', { role: 'dialog', 'aria-modal': 'true', 'aria-label': title || 'Diálogo' },
+    // `wide` is for the rare sheet that is a workspace rather than a question —
+    // putting forty locations in order wants the whole screen, not 560px of it.
+    const panel = h(`div.sheet${wide ? '.sheet--wide' : ''}`, { role: 'dialog', 'aria-modal': 'true', 'aria-label': title || 'Diálogo' },
       h('div.sheet__grip'),
       title ? h('div.sheet__head',
         h('h2.sheet__title', title),

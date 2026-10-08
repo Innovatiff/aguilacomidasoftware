@@ -86,8 +86,9 @@ export function restrictionsOf(client) {
  *   lines    `[{ id, name }]` — one column each
  *   people   `{ total, byLine }` and plates the same, for the whole day
  *   kinds    `[{ id, title, note, people, plates, more, rows }]` — medias and
- *            completas; `rows` is `[{ key, label, total, byLine }]`,
- *            alphabetical, and `more` is how many completas take three or more
+ *            completas; `rows` is `[{ key, label, total, byLine, names }]`,
+ *            alphabetical, with `names` the people behind each number by
+ *            libreta; `more` is how many completas take three or more
  *   outside  who eats today but is in no libreta
  */
 export function dayBoard({ lines = [], farms = [], clients = [], day = todayKey() }) {
@@ -163,9 +164,22 @@ export function dayBoard({ lines = [], farms = [], clients = [], day = todayKey(
       if (one.plates > 2) more += 1;
 
       for (const key of linesOf.get(one)) {
-        if (!rows.has(key)) rows.set(key, { key, label: labelOf(key), ...tally() });
-        add(rows.get(key), one.line);
+        if (!rows.has(key)) {
+          rows.set(key, {
+            key, label: labelOf(key), ...tally(),
+            names: Object.fromEntries(columns.map((line) => [line.id, []])),
+          });
+        }
+        const row = rows.get(key);
+        add(row, one.line);
+        // Who the number is. A number on a board is believed when you can see
+        // who is behind it.
+        row.names[one.line].push(one.client.name);
       }
+    }
+
+    for (const row of rows.values()) {
+      for (const list of Object.values(row.names)) list.sort((a, b) => a.localeCompare(b, 'es'));
     }
 
     return {

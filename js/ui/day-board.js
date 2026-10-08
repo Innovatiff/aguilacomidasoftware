@@ -7,6 +7,15 @@
  * the way the two whiteboards on the wall have them: a line for each thing
  * somebody cannot eat, and how many plates of each libreta go without it.
  *
+ * **Every number carries its own label.** The first version was a table —
+ * "Cerdo  —  1  1" under small grey column heads — and a table asks the reader
+ * to look up and across to know what a number means. The whiteboard never did
+ * that: it says "Cerdo: Monse 5, Clau 6", the name right beside the number. So
+ * each line here reads the same way, as a sentence — "Sin cerdo · Libreta 1: 0
+ * · Libreta 2: 1 · Total 1" — a zero is written as 0 rather than left blank,
+ * each libreta keeps one colour everywhere on the screen, and tapping a line
+ * shows who the people are, so a number can be checked rather than trusted.
+ *
  * Nothing on it is typed in. Every number is counted from the clients each
  * time it is drawn (see js/lib/board.js), and it is drawn again whenever a
  * client changes — so the board on the screen is never a week behind the way
@@ -32,6 +41,10 @@ export function openDayBoard() {
   let setup = null;
   let failure = null;
   let open = true;
+  // Lines somebody opened to see who is in them. Kept across redraws: the
+  // board redraws when a client changes, and a line should not snap shut
+  // under the finger that opened it.
+  const opened = new Set();
 
   const body = h('div.pos__body');
   const exit = h('button.pos__exit', { type: 'button', onclick: () => close() },
@@ -107,19 +120,26 @@ export function openDayBoard() {
 
       h('div.dboard__stats',
         stat({
-          title: 'Medias', note: '1 comida', tally: medias.people, lines: board.lines,
+          title: 'Medias', note: 'llevan 1 comida',
+          big: plural(medias.people.total, 'persona', 'personas'),
+          tally: medias.people, lines: board.lines,
         }),
         stat({
-          title: 'Completas', note: '2 comidas', tally: completas.people, lines: board.lines,
+          title: 'Completas', note: 'llevan 2 comidas',
+          big: plural(completas.people.total, 'persona', 'personas'),
+          tally: completas.people, lines: board.lines,
           extra: completas.more
-            ? `${plural(completas.more, 'lleva', 'llevan')} 3 o más`
+            ? `${completas.more === 1 ? 'Una de ellas lleva' : `${number(completas.more)} de ellas llevan`} `
+              + '3 comidas o más.'
             : null,
         }),
         stat({
-          title: 'Comidas', note: 'en total', tally: board.plates, lines: board.lines, dark: true,
+          title: 'Comidas', note: 'para empacar hoy',
+          big: plural(board.plates.total, 'comida', 'comidas'),
+          tally: board.plates, lines: board.lines, dark: true,
         })),
 
-      h('div.dboard__boards', board.kinds.map((kind) => table(kind, board.lines))),
+      board.kinds.map((kind) => whiteboard(kind, board.lines, opened)),
 
       h('p.dboard__foot',
         'Cuenta a cada persona que se empaca hoy, en su libreta. Media es quien lleva una '
@@ -131,41 +151,78 @@ export function openDayBoard() {
   return close;
 }
 
-/** One of the three numbers across the top, split by libreta. */
-function stat({ title, note, tally, lines, extra, dark = false }) {
+/*
+ * Each libreta keeps one colour on this screen — the dot beside its name on
+ * the cards and on every line — so after the first look the eye goes to its
+ * own libreta's numbers without reading the name.
+ */
+const tone = (lines, id) => `dot--${Math.max(0, lines.findIndex((line) => line.id === id)) + 1}`;
+
+/** "● Libreta 1: 2" — the libreta's name right beside its number. */
+function perLine(lines, line, n) {
+  return h(`span.dcount${n ? '' : '.is-zero'}`,
+    h(`span.dot.${tone(lines, line.id)}`),
+    h('span.dcount__name', `${line.name}:`),
+    h('b.dcount__n', number(n || 0)));
+}
+
+/** One of the three numbers across the top, said in words, split by libreta. */
+function stat({ title, note, big, tally, lines, extra, dark = false }) {
   return h(`div.dstat${dark ? '.dstat--dark' : ''}`,
     h('div.dstat__head',
       h('span.dstat__title', title),
       h('span.dstat__note', note)),
-    h('div.dstat__n', number(tally.total)),
-    h('div.dstat__lines', lines.map((line) =>
-      h('span', h('b', number(tally.byLine[line.id] || 0)), ` ${line.name}`))),
+    h('div.dstat__n', big),
+    h('div.dstat__lines', lines.map((line) => perLine(lines, line, tally.byLine[line.id]))),
     extra ? h('div.dstat__extra', extra) : null);
 }
 
-/** One whiteboard: a line for each thing somebody in the group cannot eat. */
-function table(kind, lines) {
+/**
+ * One whiteboard: who in the group cannot eat what, a line per thing.
+ *
+ * Each line is a `<details>`: the line is what you read, and opening it shows
+ * the names behind its numbers, libreta by libreta.
+ */
+function whiteboard(kind, lines, opened) {
   const word = kind.title.toLowerCase();
-  return h('section.dtable', { 'aria-label': kind.title },
-    h('div.dtable__head',
-      h('h3', kind.title),
-      h('span', `${number(kind.people.total)} · lo que no pueden comer`)),
+  const who = kind.id === 'medias' ? 'llevan 1 comida' : 'llevan 2 comidas o más';
+
+  return h(`section.dwb.dwb--${kind.id}`, { 'aria-label': kind.title },
+    h('div.dwb__head',
+      h('h3.dwb__title', kind.title),
+      h('span.dwb__who', `${plural(kind.people.total, 'persona', 'personas')} que ${who}`)),
 
     !kind.people.total
-      ? h('p.dtable__empty', `Hoy no hay ${word}.`)
+      ? h('p.dwb__empty', `Hoy no hay ${word}.`)
       : !kind.rows.length
-        ? h('p.dtable__empty', `Nadie de las ${word} tiene algo que no pueda comer.`)
-        : h('table.dtable__grid',
-          h('thead', h('tr',
-            h('th', { scope: 'col' }, 'Sin'),
-            lines.map((line) => h('th.num', { scope: 'col' }, line.name)),
-            h('th.num', { scope: 'col' }, 'Total'))),
-          h('tbody', kind.rows.map((row) => h('tr',
-            h('th', { scope: 'row' }, row.label),
-            // A blank, the way the board on the wall has it, but a visible
-            // one: an empty cell reads as "forgot to count".
-            lines.map((line) => h('td.num', row.byLine[line.id]
-              ? number(row.byLine[line.id])
-              : h('span.dtable__zero', '—'))),
-            h('td.num.dtable__total', number(row.total)))))));
+        ? h('p.dwb__empty', `Todas las ${word} pueden comer de todo.`)
+        : [
+          h('p.dwb__lead', 'Cuántas NO pueden comer',
+            h('span.dwb__tip', 'Toca una línea para ver quiénes son')),
+          h('div.dwb__lines', kind.rows.map((row) => {
+            const key = `${kind.id}:${row.key}`;
+            const line = h('details.dline', {
+              open: opened.has(key),
+              ontoggle: () => { if (line.open) opened.add(key); else opened.delete(key); },
+            },
+            h('summary.dline__sum',
+              h('span.dline__what', h('span.dline__sin', 'Sin '), lowerFirst(row.label)),
+              h('span.dline__counts', lines.map((libreta) => perLine(lines, libreta, row.byLine[libreta.id]))),
+              h('span.dline__total', h('span', 'Total'), h('b', number(row.total))),
+              h('span.dline__more', icon('chevronD'))),
+            h('div.dline__who', lines
+              .filter((libreta) => (row.names?.[libreta.id] || []).length)
+              .map((libreta) => h('div.dline__group',
+                h(`span.dot.${tone(lines, libreta.id)}`),
+                h('span.dline__groupname', `${libreta.name}:`),
+                h('span', row.names[libreta.id].join(', '))))));
+            return line;
+          })),
+        ]);
+}
+
+/** "Pollo" → "pollo", for "Sin pollo"; the rest of what was typed is kept. */
+function lowerFirst(text) {
+  const value = String(text || '');
+  return value ? value[0].toLocaleLowerCase('es') + value.slice(1) : value;
 }

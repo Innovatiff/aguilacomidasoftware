@@ -368,10 +368,29 @@ casa sin nadie no es un problema.
 
 Las señoras empacan en un orden, y no es farma por farma: es **ubicación por
 ubicación**, en el orden en que se carga la camioneta. En cada libreta,
-*Orden de empaque* abre la lista de sus ubicaciones, numerada, y se acomoda
-arrastrando cada una de la manija (⠿) o subiéndola y bajándola con las
-flechas. Nada se guarda hasta *Guardar orden*; *Ordenar por farma* la deja
-como el cuaderno, por si alguien se pierde moviendo cosas.
+*Orden de empaque* abre una ventana grande con dos columnas: a la izquierda
+**El orden**, numerado; a la derecha **Por acomodar**, lo que todavía no está
+en el orden, agrupado por farma.
+
+Una libreta puede tener cuarenta ubicaciones, así que todo está hecho para
+encontrar rápido:
+
+- **El buscador** de arriba busca en las dos columnas por ubicación y por farma
+  a la vez: «casa 4», «morsea», «mucci casa 2». Si lo escrito apunta a una sola
+  ubicación por acomodar, Enter la pone en el orden.
+- **Armar el orden tocando.** *Empezar de cero* pasa todas a *Por acomodar*, y
+  se van tocando en el orden en que se empacan: cada una entra al final. Es la
+  forma más fácil de poner el orden la primera vez — se recorre la ruta y se
+  toca.
+- **Mandar una a otro lugar.** El número de cada ubicación es un botón: se toca,
+  se escribe a dónde va (por ejemplo 3) y se va ahí, venga de donde venga. Para
+  moverla uno o dos lugares están las flechas, o arrastrarla de la manija (⠿).
+- **✕** la saca del orden y la regresa a *Por acomodar*.
+
+Nada se guarda hasta *Guardar orden*, y cerrar la ventana deja todo como
+estaba. Lo que quede en *Por acomodar* al guardar se va al final, en el orden
+de siempre — ninguna ubicación se queda fuera de la libreta. *Ordenar por
+farma* la deja como el cuaderno.
 
 - **Las ubicaciones de distintas farmas se pueden intercalar.** Casa 1 de
   Mucci, luego el Bloque de Morsea, luego Casa 2 de Mucci. La pantalla de
@@ -570,10 +589,14 @@ cliente por cliente, cada vez que se abre:
 
 - Arriba, cuántas **medias** (quien lleva una comida hoy), cuántas
   **completas** (quien lleva dos o más) y cuántas **comidas** en total, cada
-  número partido por libreta.
-- Debajo, un tablero para medias y otro para completas: una línea por cada
-  cosa que alguien no puede comer — Pollo, Cerdo, Espagueti… — con cuántos de
-  la Libreta 1, cuántos de la Libreta 2 y el total.
+  número con el nombre de su libreta al lado: «Libreta 1: 2».
+- Debajo, el tablero de medias y el de completas, uno debajo del otro. Cada
+  línea se lee sola, como en el pizarrón: **«Sin pollo · Libreta 1: 1 ·
+  Libreta 2: 0 · Total 1»**. Ningún número aparece sin el nombre de su
+  libreta, un cero se escribe 0, y cada libreta tiene un color en toda la
+  pantalla (la 1 naranja, la 2 verde azulado).
+- **Tocar una línea enseña quiénes son**, libreta por libreta — para que un
+  número se pueda revisar y no solo creer.
 
 Lo que no pueden comer sale de la ficha de cada persona: todo lo de *No puede
 comer*, y lo de sus *Preferencias* que empieza con «sin» o «no» («doble

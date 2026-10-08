@@ -26,8 +26,15 @@ export function sortable(list, { onChange }) {
     const box = el.getBoundingClientRect();
     return box.top + box.height / 2;
   };
-  // The sheet scrolls, not the page — a long libreta is taller than a phone.
-  const scroller = () => list.closest('.sheet__body') || document.scrollingElement;
+  // Whatever is actually scrolling the list: a column of a wide sheet on a
+  // computer, the sheet itself on a phone, or the page.
+  const scroller = () => {
+    for (let el = list.parentElement; el && el !== document.body; el = el.parentElement) {
+      const { overflowY } = getComputedStyle(el);
+      if ((overflowY === 'auto' || overflowY === 'scroll') && el.scrollHeight > el.clientHeight) return el;
+    }
+    return document.scrollingElement;
+  };
 
   function begin(event) {
     const grip = event.target.closest('[data-grip]');
