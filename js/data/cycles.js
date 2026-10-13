@@ -25,7 +25,9 @@
 import { getDocs, query, where, collection, db, listData } from '../firebase.js';
 import { issueInvoice } from './invoices.js';
 import { servingSince } from './clients.js';
-import { periodOf, periodOfIndex, invoiceId } from '../lib/billing.js';
+import {
+  periodOf, periodOfIndex, invoiceId, isCovered, isPayable, paidThroughOn,
+} from '../lib/billing.js';
 import { periodCharge } from '../lib/pricing.js';
 import { today } from '../lib/dates.js';
 
@@ -41,9 +43,10 @@ const LOOK_BACK = 4;
  * reason and must never be swept up here:
  *
  *   - one already settled in cash before this software existed. The cuaderno
- *     said "pagó el 3 de julio", that date is on the client as `paidThrough`,
- *     and no invoice was ever written for what it covered — which reads
- *     exactly like an unbilled fortnight and is the opposite of one.
+ *     said "pagó el 21 de julio", that payment was for the fortnight that
+ *     ended on the 20th, the 20th is on the client as `paidThrough`, and no
+ *     invoice was ever written for what it covered — which reads exactly like
+ *     an unbilled fortnight and is the opposite of one.
  *   - one that closed before the person started eating here. Their billing
  *     anchor belongs to the rancho, not to them, so it runs back through
  *     fortnights in which they were not yet a client.
@@ -108,10 +111,11 @@ export async function pendingBilling(clients, pricing, day = today()) {
     for (const client of group) {
       if (issued.has(invoiceId(client.id, period.start))) continue;
 
-      // Covered by what they paid in cash before the system. The same test
-      // `owedSince` uses, so the cuaderno and this scan can never disagree
-      // about which fortnight a notebook payment reached.
-      if (client.paidThrough && period.start <= client.paidThrough) {
+      // Covered by what they have paid: `paidThrough` is the last day paid
+      // for, so a fortnight is covered when it ends by then. The same test
+      // `owedSince` and the counter use, so the cuaderno, this scan and a
+      // payment can never disagree about which fortnight is paid.
+      if (isCovered(period, client.paidThrough)) {
         skipped.paid += 1;
         continue;
       }
@@ -180,36 +184,41 @@ export function byFarm(rows) {
  * What somebody owes since the last time they paid.
  *
  * These clients were on paper for years. All the kitchen knows about each of
- * them is a name and a date — "last paid July 3" — so that is the only thing
+ * them is a name and a date — "last paid July 21" — so that is the only thing
  * this asks for. From it and their billing anchor, the fortnights in between
  * are arithmetic.
  *
- * Every candidate period is returned, closed or not, with `owed` marking the
- * ones that would be billed by default: those that both started after the last
- * payment and have already ended. The fortnight in progress is offered but not
- * assumed, and the whole list is checkable, because a notebook is not a
- * database and the person holding it knows things this does not — a month
- * somebody was away, a fortnight already settled in cash.
+ * Nobody pays ahead here, so a payment made on the 21st paid for the fortnight
+ * that ended on the 20th — `paidThroughOn` — and every fortnight served after
+ * that is owed. The one still running is not: it is paid the day it ends, like
+ * anybody else's. Every period returned is checkable, because a notebook is
+ * not a database and the person holding it knows things this does not — a
+ * month somebody was away, a fortnight settled in cash and never written down.
+ *
+ * @returns {{ periods, amount, charge, total, paidThrough }}  `paidThrough` is
+ *   the last day the notebook payment paid for — what to write on the client
  */
 export function owedSince(client, lastPaidOn, pricing, day = today()) {
   const charge = periodCharge(client, pricing);
   const amount = charge.amount;
-  if (!lastPaidOn || lastPaidOn >= day) return { periods: [], amount, charge, total: 0 };
+  if (!lastPaidOn || lastPaidOn > day) {
+    return { periods: [], amount, charge, total: 0, paidThrough: null };
+  }
 
-  const from = periodOf(client, lastPaidOn).index;
+  const paidThrough = paidThroughOn(client, lastPaidOn);
+  const from = periodOf(client, paidThrough).index + 1;
   const current = periodOf(client, day).index;
 
   const periods = [];
   for (let index = from; index <= current; index += 1) {
     const period = periodOfIndex(client, index);
-    // A fortnight that was already running when they last paid is theirs to
-    // judge: the payment may or may not have covered it.
-    if (period.start <= lastPaidOn) continue;
+    // Still being served: not owed yet.
+    if (!isPayable(period, client, day)) continue;
     periods.push({
       ...period,
       id: invoiceId(client.id, period.start),
-      closed: period.end < day,
-      owed: period.end < day,
+      closed: true,
+      owed: true,
       amount,
       charge,
     });
@@ -220,6 +229,7 @@ export function owedSince(client, lastPaidOn, pricing, day = today()) {
     amount,
     charge,
     total: round2(periods.filter((p) => p.owed).length * amount),
+    paidThrough,
   };
 }
 

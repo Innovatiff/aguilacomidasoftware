@@ -14,18 +14,14 @@
  * characters rather than pixels: two columns that align by padding, rules made
  * of dashes, nothing that depends on a font the store's machine may not have.
  *
- * **A receipt is a record.** Almost everything printed comes off the receipt
- * document itself, frozen at the moment the money changed hands, so reprinting
- * one from three weeks ago prints what happened three weeks ago. The only live
- * figure is the next collection day, which is forward-looking information the
- * client is being handed, not a claim about the past — and it is labelled as
- * such.
+ * **A receipt is a record.** Everything printed comes off the receipt document
+ * itself, frozen at the moment the money changed hands, so reprinting one from
+ * three weeks ago prints what happened three weeks ago.
  */
 
 import { h, mount } from '../lib/dom.js';
 import { labelSheet, fitLabel, mountBag } from './label.js';
 import { money } from '../lib/format.js';
-import { appliedTitle } from '../lib/billing.js';
 import { paymentMethodMeta } from '../lib/model.js';
 import { parseDay } from '../lib/dates.js';
 import { toDate } from '../firebase.js';
@@ -43,22 +39,28 @@ const pair = (k, v, className = '') =>
 /* --- The receipt ------------------------------------------------------------ */
 
 /**
+ * What the paper says: who paid, how much, how, and where that leaves them.
+ *
+ * **Not** which fortnights it covered, and not when they pay next. Both used to
+ * be printed, and both were read as promises: a slip saying "cubre 10–23 oct"
+ * looks like food paid for in advance, and the kitchen never takes money in
+ * advance — every payment is for the fortnight that has already been served.
+ * The fortnights stay on the bills, where the kitchen can see them; the client
+ * holds proof of the money.
+ *
  * @param {object} receipt  the stored receipt document
  * @param {object} options
  * @param {object} options.business  header details from `config/business`
- * @param {object} [options.client]  live client, only for the next pay day
- * @param {string} [options.nextPay] pre-formatted next collection day
  * @param {boolean} [options.copy]   mark it as a reprint
  * @param {'client'|'store'} [options.forWhom]  which of the two copies this is
  */
 export function receiptSheet(receipt, {
-  business, nextPay, copy = false, forWhom = null,
+  business, copy = false, forWhom = null,
 } = {}) {
   const reversal = Number(receipt.amount) < 0;
   const amount = Math.abs(Number(receipt.amount) || 0);
   const method = paymentMethodMeta(receipt.method).label;
   const stamp = toDate(receipt.at);
-  const covers = receipt.applied || [];
 
   return h('div.rcp',
     /* Header — the store, as its own till prints it. */
@@ -94,20 +96,6 @@ export function receiptSheet(receipt, {
 
     rule(),
 
-    /* What the money went to. A notebook payment settled no fortnight, and
-       says so rather than printing an empty list. */
-    covers.length
-      ? h('div',
-          line(reversal ? 'SE REGRESA' : 'CUBRE'),
-          covers.map((row) => pair(
-            short(appliedTitle(row)),
-            money(Math.abs(Number(row.amount) || 0)))))
-      : line(receipt.fromNotebook
-        ? 'PAGO ANTERIOR AL SISTEMA'
-        : 'SIN PERIODO APLICADO'),
-
-    rule(),
-
     /* The money itself. */
     pair('FORMA', method.toUpperCase()),
     pair(reversal ? 'SE REGRESA' : 'TOTAL', money(amount), '.rcp__pair--total'),
@@ -122,8 +110,6 @@ export function receiptSheet(receipt, {
       : (Number(receipt.balanceAfter) || 0) > 0.005
         ? pair('QUEDA DEBIENDO', money(receipt.balanceAfter), '.rcp__pair--total')
         : h('div.rcp__ok', 'QUEDA AL CORRIENTE'),
-
-    !reversal && nextPay ? line(`PROXIMO PAGO: ${nextPay}`) : null,
 
     rule(),
     mid(business.footer || 'GRACIAS'),
@@ -152,12 +138,6 @@ function clock(date) {
   const p = (n) => String(n).padStart(2, '0');
   return `${p(date.getHours())}:${p(date.getMinutes())}`;
 }
-
-/** Keeps a long fortnight label from wrapping the amount onto its own line. */
-const short = (text) => {
-  const flat = String(text || '').toUpperCase().replace(/[–—]/g, '-');
-  return flat.length > 22 ? `${flat.slice(0, 21)}…` : flat;
-};
 
 /* --- Sending it to the printer ---------------------------------------------- */
 

@@ -987,3 +987,19 @@
 .rbig .input { min-height: 52px; font-size: var(--fs-md); }
 
 .input--big { min-height: 52px; font-size: var(--fs-md); }
+
+/* --- Pago por adelantado ----------------------------------------------------
+   Where a payment that went to a fortnight before it was served is moved to.
+   The old fortnight is struck through, the new one is the one to read. */
+
+.item--wrap .item__meta.truncate { white-space: normal; }
+
+.advrow {
+  padding: var(--s3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  display: grid; gap: 2px;
+}
+.advrow s { text-decoration-thickness: 1.5px; }
+.advrow--stuck { border-color: var(--warn-500); background: var(--warn-50); }

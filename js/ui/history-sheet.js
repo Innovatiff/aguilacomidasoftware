@@ -71,8 +71,8 @@ export function openHistorySheet({ client, author }) {
         mount(cycleLine, setCycle
           ? `Su ${word} queda anclada al ${weekdayName(anchor)} ${formatDay(anchor)}. `
             + `Hoy corre del ${formatDay(period.start)} al ${formatDay(period.end)}, `
-            + `y paga otra vez el ${weekdayName(payDayAfter(period))} `
-            + `${formatDay(payDayAfter(period))}.`
+            + `y se paga el ${weekdayName(payDayAfter(period))} `
+            + `${formatDay(payDayAfter(period))}, cuando termine.`
           : `Sólo se guarda el pago; su ${word} no se mueve.`);
       }
 

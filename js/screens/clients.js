@@ -26,6 +26,7 @@ import {
 import { toastOk, toastBad, confirm, sheet } from '../ui/overlay.js';
 import { openChargeSheet } from '../ui/charge-sheet.js';
 import { openDebtSheet } from '../ui/debt-sheet.js';
+import { openAdvanceSheet, openAdvanceReview } from '../ui/advance-sheet.js';
 import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
 import {
@@ -46,7 +47,9 @@ import { errorText } from '../firebase.js';
 const STATE = {
   overdue:  { label: 'Vencido',     tone: 'bad' },
   due:      { label: 'Por pagar',   tone: 'warn' },
-  covered:  { label: 'Pagado',      tone: 'ok' },
+  // Money on the fortnight still running — left by the old way of taking
+  // payments, and waiting to be put on the fortnight it was really for.
+  advance:  { label: 'Pago adelantado', tone: 'warn' },
   clear:    { label: 'Al corriente', tone: 'ok' },
   paused:   { label: 'En pausa',    tone: 'warn' },
   inactive: { label: 'Inactivo',    tone: 'muted' },
@@ -57,18 +60,14 @@ const FILTERS = [
   { value: 'overdue',  label: 'Vencidos',   match: (row) => row.state === 'overdue' },
   { value: 'debt',     label: 'Deben',      match: (row) => row.owed > 0 },
   /*
-   * "Al corriente" is owing nothing, which is not the same as "Pagados" below —
-   * that one is the narrower "the period in progress is already paid for".
-   * Somebody with no debt whose current period has not been billed yet is up to
-   * date and is not covered, and the kitchen means the first when it asks who
-   * is square. Inicio's tile counts this one and links here; when the two
-   * disagreed, the number on the dashboard opened a list that contradicted it.
+   * "Al corriente" is owing nothing for food already served — the only kind of
+   * paid there is, since nothing is paid ahead. Inicio's tile counts this one
+   * and links here; when the two disagreed, the number on the dashboard opened
+   * a list that contradicted it.
    */
   { value: 'current',  label: 'Al corriente',
     match: (row) => row.serving === 'active' && row.owed <= 0.005 },
-  { value: 'pending',  label: 'Falta este periodo',
-    match: (row) => row.serving === 'active' && !row.covered },
-  { value: 'covered',  label: 'Pagados',    match: (row) => row.covered },
+  { value: 'advance',  label: 'Pago adelantado', match: (row) => row.advance },
   { value: 'active',   label: 'Activos',    match: (row) => row.serving === 'active' },
   { value: 'paused',   label: 'En pausa',   match: (row) => row.client.status === 'paused' },
   { value: 'inactive', label: 'Inactivos',  match: (row) => row.client.status === 'inactive' },
@@ -175,7 +174,10 @@ export function renderClients(context) {
     const owed = rows.reduce((sum, row) => sum + row.owed, 0);
     const overdue = rows.filter((row) => row.state === 'overdue');
 
+    const ahead = rows.filter((row) => row.advance);
+
     return h('div.page__inner.stack.stack-4',
+      ahead.length ? advanceBanner(ahead) : null,
       billingBanner(),
       overdue.length ? remindBanner(overdue) : null,
 
@@ -196,9 +198,11 @@ export function renderClients(context) {
         stat({
           label: 'Al corriente',
           value: number(rows.filter((row) => row.owed <= 0 && row.serving !== 'inactive').length),
-          foot: `${rows.filter((row) => row.covered).length} con su periodo pagado`,
+          foot: rows.some((row) => row.advance)
+            ? `${plural(rows.filter((row) => row.advance).length, 'con pago adelantado', 'con pago adelantado')} por corregir`
+            : 'Sin deber nada de lo ya servido',
           tone: 'ok',
-          onClick: () => { filter = 'covered'; draw(); },
+          onClick: () => { filter = rows.some((row) => row.advance) ? 'advance' : 'current'; draw(); },
         }),
       ], 3),
 
@@ -307,7 +311,7 @@ export function renderClients(context) {
       return row.endsOn ? `Terminó el ${formatDay(row.endsOn)}` : 'Ya no recibe comida';
     }
     if (row.serving === 'paused') return 'Sin entregas por ahora';
-    if (row.covered) return `Pagado hasta ${formatDay(row.paidThrough)}`;
+    if (row.advance) return 'Pago por adelantado · por corregir';
     return `Paga el ${formatDay(row.payDay)}`;
   }
 
@@ -340,6 +344,33 @@ export function renderClients(context) {
       cta: 'Revisar y emitir',
       onClick: reviewPending,
     });
+  }
+
+  /**
+   * Money that went to a fortnight before it was served — what the old way of
+   * taking payments did. First on the page because until it is put right, the
+   * counter cannot take these people's next payment: the fortnight they come
+   * to pay looks paid already.
+   */
+  function advanceBanner(ahead) {
+    return actionBanner({
+      tone: 'warn', icon: 'alert',
+      title: plural(ahead.length, 'cliente con pago por adelantado', 'clientes con pago por adelantado'),
+      text: 'Su pago quedó en una quincena antes de que se sirviera. Va a la quincena anterior, '
+        + 'que es la que pagaron. Revisa y corrige.',
+      cta: 'Revisar',
+      onClick: () => reviewAdvance(ahead),
+    });
+  }
+
+  async function reviewAdvance(ahead) {
+    const fixed = await openAdvanceReview({
+      clients: ahead.map((row) => row.client),
+      author: author(),
+    });
+    // What was covered and what was not has changed; the scan for fortnights
+    // never billed has to look again.
+    if (fixed) forgetPendingBills();
   }
 
   function remindBanner(overdue) {
@@ -457,7 +488,6 @@ export function renderClients(context) {
   async function charge(row) {
     const receipt = await openChargeSheet({
       client: row.client,
-      invoices: invoicesFor(row.client.id),
       pricing: store.pricing,
       author: author(),
     });
@@ -487,9 +517,22 @@ export function renderClients(context) {
         row.owed > 0
           ? alert(`Debe ${money(row.owed)} en ${owedBreakdown(row.billing?.outstanding)}.`,
               row.state === 'overdue' ? 'bad' : 'warn')
-          : row.covered
-            ? alert(`Pagado hasta el ${formatDay(row.paidThrough)}.`, 'ok')
-            : null,
+          : row.advance
+            ? alert('Tiene un pago puesto en una quincena antes de que se sirviera. Aquí no se '
+              + 'paga por adelantado: va a la quincena anterior, que es la que pagó.', 'warn')
+            : alert(`Al corriente. Su quincena en curso se paga el ${formatDay(row.payDay)}, `
+              + 'cuando termine.', 'ok'),
+
+        row.advance
+          ? button('Revisar y corregir', {
+              variant: 'soft', block: true, icon: 'check',
+              onClick: async () => {
+                close();
+                const done = await openAdvanceSheet({ client, author: author() });
+                if (done) forgetPendingBills();
+              },
+            })
+          : null,
 
         button('Cobrar', {
           variant: 'primary', block: true, icon: 'cash',

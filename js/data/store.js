@@ -22,9 +22,12 @@ import { watchRecentReceipts, cancelledIds, RECENT_RECEIPTS } from './receipts.j
 import { watchConversations, totalUnread } from './chat.js';
 import { pendingBilling } from './cycles.js';
 import { forgetPeriods } from './reports.js';
-import { today, formatDay, weekdayName, addDays } from '../lib/dates.js';
-import { summarize, periodOf, payDayAfter, round2 } from '../lib/billing.js';
+import { today, addDays } from '../lib/dates.js';
+import {
+  summarize, periodOf, payDayAfter, isPayable, isCharge, round2,
+} from '../lib/billing.js';
 import { DEFAULT_PRICING, chargeFor, tierFor } from '../lib/pricing.js';
+import { clientsWithAdvance } from '../lib/advance.js';
 
 const state = {
   day: today(),
@@ -187,9 +190,19 @@ export function farmStats(farmId) {
   };
 }
 
-export const moneyStats = () => summarizeInvoices(state.outstanding);
+/**
+ * Unsettled bills for food already served, and hand-written debts: what is
+ * owed today. A bill for the fortnight still running is not money anybody owes
+ * yet — it is paid the day the fortnight ends — so it is left out of every
+ * "por cobrar" the same way it is left out of each person's balance.
+ */
+const owedBills = () => state.outstanding.filter((invoice) => isCharge(invoice)
+  || isPayable({ start: invoice.periodStart, end: invoice.periodEnd },
+    clientById(invoice.clientId), state.day));
 
-export const debtors = () => groupByClient(state.outstanding);
+export const moneyStats = () => summarizeInvoices(owedBills());
+
+export const debtors = () => groupByClient(owedBills());
 
 export const unreadCount = () => totalUnread(state.conversations, 'admin');
 
@@ -212,15 +225,29 @@ export const billingFor = (client) =>
  *   state   what to show and what to filter on, in one word
  *   owed    money outstanding right now
  *   behind  fortnights with an unpaid bill
- *   covered whether the fortnight in progress is already paid for
+ *   advance whether money sits on the fortnight still running — see below
  *   gaps    the things that stop this person being served or billed at all
  */
 export function clientState(client) {
   const billing = billingFor(client);
   const period = periodOf(client);
   const paidThrough = client.paidThrough || null;
-  const covered = !!paidThrough && paidThrough >= period.end;
   const serving = servingStatus(client, state.day);
+  /*
+   * Money sitting on a fortnight before it was served.
+   *
+   * Nobody pays ahead here — every payment is for food already served — so
+   * this is never somebody's choice: it is what the old way of taking money
+   * left behind, when a payment with nothing billed to put it on went to the
+   * fortnight just starting. It is flagged rather than shown as "paid", so it
+   * gets moved to the fortnight it was really for (`fixAdvance`). Two ways to
+   * see it: "paid up to" inside the fortnight still running, or a receipt
+   * taken before the fortnight it went to had ended. Somebody who has stopped
+   * coming can settle their last fortnight early; that is neither.
+   */
+  const advance = (!!paidThrough && paidThrough >= period.start
+    && !isPayable(period, client, state.day))
+    || aheadIds().has(client.id);
 
   // A gap is something that stops this person being served or billed. Not
   // having an email is neither — most workers do not have one the day they are
@@ -236,7 +263,7 @@ export function clientState(client) {
     billing,
     period,
     paidThrough,
-    covered,
+    advance,
     owed: billing?.balance || 0,
     behind: billing?.outstanding?.length || 0,
     overdue: billing?.overdueCount || 0,
@@ -252,9 +279,33 @@ export function clientState(client) {
     serving,
     endsOn: client.endsOn || null,
     daysLeft: daysLeft(client, state.day),
-    state: nameState(client, billing, covered, serving),
+    state: nameState(client, billing, advance, serving),
   };
 }
+
+/**
+ * Clients with a receipt taken before the fortnight it went to had ended.
+ *
+ * Worked out once per change of receipts or clients rather than once per row:
+ * the roster asks it for every person on every paint.
+ */
+let ahead = { receipts: null, clients: null, ids: new Set() };
+function aheadIds() {
+  if (ahead.receipts !== state.receipts || ahead.clients !== state.clients) {
+    ahead = {
+      receipts: state.receipts,
+      clients: state.clients,
+      ids: clientsWithAdvance(state.receipts, {
+        cancelled: cancelledIds(state.receipts),
+        clients: new Map(state.clients.map((client) => [client.id, client])),
+      }),
+    };
+  }
+  return ahead.ids;
+}
+
+/** Everybody with money sitting on a fortnight before it was served. */
+export const withAdvance = () => state.clients.filter((client) => clientState(client).advance);
 
 /**
  * One word for where this client stands, in the order the kitchen cares.
@@ -263,12 +314,12 @@ export function clientState(client) {
  * roster that hides that behind "Inactivo" is how debts get written off by
  * accident.
  */
-function nameState(client, billing, covered, serving) {
+function nameState(client, billing, advance, serving) {
   if ((billing?.overdueCount || 0) > 0) return 'overdue';
   if ((billing?.balance || 0) > 0) return 'due';
   if (serving === 'inactive') return 'inactive';
   if (serving === 'paused') return 'paused';
-  if (covered) return 'covered';
+  if (advance) return 'advance';
   return 'clear';
 }
 
@@ -419,22 +470,16 @@ export function dailyCollections(days = 14, from = today()) {
 }
 
 /**
- * What `printReceipt` needs: the header, and the client's next collection day.
+ * What `printReceipt` needs: the store's header.
  *
- * The next pay day is the only live figure on an otherwise frozen document, so
- * it is looked up here rather than stored — and it is simply absent when the
- * client is no longer in the roster, which is the honest answer.
+ * It used to add the client's next collection day, the one live figure on an
+ * otherwise frozen slip. It is not printed any more — a date on a receipt read
+ * as what the money had paid up to, and nothing here is ever paid ahead — so
+ * the header is all that is left. Kept as a function so every place that
+ * prints keeps asking the same question in the same way.
  */
-export function printContext(receipt) {
-  const client = state.clients.find((row) => row.id === receipt?.clientId) || null;
-  if (!client?.cycleAnchor) return { business: state.business };
-
-  const period = periodOf(client);
-  const day = payDayAfter(period);
-  return {
-    business: state.business,
-    nextPay: `${weekdayName(day).toUpperCase()} ${formatDay(day).toUpperCase()}`,
-  };
+export function printContext() {
+  return { business: state.business };
 }
 
 /** True once the screens have enough to render without skeletons. */

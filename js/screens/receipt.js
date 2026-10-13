@@ -3,8 +3,13 @@
  *
  * The same document the client sees in their app, so a dispute at the counter
  * is settled by both people looking at the same folio. It says what was taken,
- * which fortnights it covered, and what was left owing afterwards — the three
+ * which fortnights it paid for, and what was left owing afterwards — the three
  * things anybody actually asks.
+ *
+ * Which fortnights is read off the bills holding the money, not off the
+ * receipt: a payment that went to a fortnight before it was served is moved to
+ * the one it was for (js/data/advance.js), and the receipt — which nobody may
+ * rewrite — still names the first.
  */
 
 import { h } from '../lib/dom.js';
@@ -15,7 +20,7 @@ import {
 } from '../ui/kit.js';
 import { go } from '../lib/router.js';
 import { watchReceipt, watchReversal } from '../data/receipts.js';
-import { voidReceipt } from '../data/invoices.js';
+import { voidReceipt, watchClientInvoices } from '../data/invoices.js';
 import { printReceipt } from '../ui/print.js';
 import { printContext } from '../data/store.js';
 import { toastOk, toastBad, confirm } from '../ui/overlay.js';
@@ -23,7 +28,7 @@ import { session } from '../data/session.js';
 import { errorText } from '../firebase.js';
 import { money } from '../lib/format.js';
 import { formatStamp, formatDayLong } from '../lib/dates.js';
-import { appliedTitle } from '../lib/billing.js';
+import { appliedTitle, paidFor as paidForBills } from '../lib/billing.js';
 import { paymentMethodMeta } from '../lib/model.js';
 import { toDate } from '../firebase.js';
 
@@ -32,11 +37,16 @@ export function renderReceipt(context) {
   let receipt = null;
   let cancelled = null;      // the negative receipt written against this one
   let missing = false;
+  let bills = null;          // the client's bills, once the receipt says whose
 
   const stops = [
     watchReceipt(id, (row) => {
       receipt = row;
       missing = !row;
+      if (row?.clientId && bills === null) {
+        bills = [];
+        stops.push(watchClientInvoices(row.clientId, (rows) => { bills = rows; draw(); }, () => {}));
+      }
       draw();
     }, () => { missing = true; draw(); }),
 
@@ -101,15 +111,19 @@ export function renderReceipt(context) {
         defRow('Registrado', formatStamp(toDate(receipt.at)) || '—'),
       ].filter(Boolean))),
 
-      h('div.stack.stack-3',
-        sectionLabel('Qué cubre'),
-        list((receipt.applied || []).map((row) => itemRow({
-          lead: h('span.item__ico', icon('receipt')),
-          title: appliedTitle(row),
-          meta: row.kind === 'charge' ? 'Deuda agregada' : 'Periodo de comida',
-          end: h('span.w-700', money(row.amount)),
-          onClick: () => go(`/invoices/${row.invoiceId}`),
-        })), { card: true })),
+      paidFor().length
+        ? h('div.stack.stack-3',
+            sectionLabel('Es por'),
+            list(paidFor().map((row) => itemRow({
+              lead: h('span.item__ico', icon('receipt')),
+              title: appliedTitle(row),
+              meta: row.kind === 'charge'
+                ? 'Deuda agregada'
+                : row.moved ? 'Periodo de comida · se movió aquí, a la quincena que pagó' : 'Periodo de comida',
+              end: h('span.w-700', money(row.amount)),
+              onClick: () => go(`/invoices/${row.invoiceId}`),
+            })), { card: true }))
+        : null,
 
       // Once cancelled this is a historical figure, not the client's balance —
       // saying "al corriente" about somebody who owes the money again would be
@@ -163,12 +177,13 @@ export function renderReceipt(context) {
    * too. None of that is reversible-by-accident, so it asks first.
    */
   async function cancel() {
-    const covered = (receipt.applied || []).map(appliedTitle).join(', ');
+    const rows = paidFor();
+    const covered = rows.map(appliedTitle).join(', ');
 
     const ok = await confirm({
       title: `Cancelar ${receipt.folio}`,
       message: `Se quitan ${money(receipt.amount)} de la cuenta de ${receipt.clientName} y `
-        + `${covered ? `${covered} vuelve${(receipt.applied || []).length > 1 ? 'n' : ''} a quedar pendiente` : 'su saldo vuelve a subir'}. `
+        + `${covered ? `${covered} vuelve${rows.length > 1 ? 'n' : ''} a quedar pendiente` : 'su saldo vuelve a subir'}. `
         + 'El recibo no se borra: queda registrado junto con su cancelación, y el cliente ve las dos cosas en su app.',
       confirmLabel: 'Sí, cancelar el pago',
       cancelLabel: 'No, dejarlo así',
@@ -183,6 +198,11 @@ export function renderReceipt(context) {
     } catch (error) {
       toastBad(errorText(error));
     }
+  }
+
+  /** Where this payment sits now — see `paidFor` in js/lib/billing.js. */
+  function paidFor() {
+    return paidForBills(receipt, bills || []);
   }
 
   return () => stops.forEach((stop) => stop?.());

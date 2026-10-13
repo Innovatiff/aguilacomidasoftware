@@ -8,7 +8,10 @@
  *
  * So it asks for the one thing the notebook actually says: **when did they last
  * pay?** Everything else — which fortnights that leaves open, what each costs —
- * follows from their billing anchor and their plan.
+ * follows from their billing anchor and their plan. A payment is always for
+ * food already served, so the last payment paid for the fortnight that had
+ * ended by then; everything served after it is owed, and the fortnight still
+ * running is not, yet.
  *
  * The list is checkable rather than automatic. A notebook is not a database,
  * and the person holding it knows things this does not: a month somebody was
@@ -98,8 +101,7 @@ export function openOpeningSheet({ client, pricing, author }) {
         return h('label.switch', { style: { padding: '6px 0' } },
           h('div.grow',
             h('div.w-600', formatRange(period.start, period.end)),
-            h('div.t-xs.c-soft',
-              period.closed ? `Cerrada · ${money(period.amount)}` : `En curso · ${money(period.amount)}`)),
+            h('div.t-xs.c-soft', `Ya servida · ${money(period.amount)}`)),
           box,
           h('span.switch__track'));
       }
@@ -112,8 +114,9 @@ export function openOpeningSheet({ client, pricing, author }) {
 
         try {
           const issued = await openBalance(client, found.periods, author);
-          // Their account starts the day after the last payment covered.
-          await setPaidThrough(client.id, lastPaidOn);
+          // The last day that payment paid for — the end of the fortnight it
+          // was for — not the day it was made.
+          if (found.paidThrough) await setPaidThrough(client.id, found.paidThrough);
           toastOk(`${issued} ${issued === 1 ? `${word} registrada` : `${words} registradas`}`);
           close(issued);
         } catch (error) {
@@ -128,7 +131,8 @@ export function openOpeningSheet({ client, pricing, author }) {
       return h('div.stack.stack-4',
         h('p.t-sm.c-soft',
           `Lo que ${client.name} traía debiendo antes de usar el sistema. Dinos cuándo pagó por `
-          + `última vez y el panel calcula las ${words} que quedaron abiertas.`),
+          + `última vez y el panel calcula las ${words} que ya comió y no ha pagado. Cada pago `
+          + 'es por lo que ya se sirvió: la que está en curso se paga cuando termine.'),
 
         field({
           label: '¿Cuándo pagó por última vez?',

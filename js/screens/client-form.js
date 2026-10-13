@@ -107,8 +107,8 @@ export async function renderClientForm(context) {
     const period = periodOf({ ...model, cycleAnchor: day });
     return `Se cobra en ${payDaysInWords()}. Su ${periodWord(model)} corre ahora del `
       + `${formatDay(period.start)} al ${formatDay(period.end)}, `
-      + `y paga otra vez el ${capitalize(WEEKDAYS[weekdayOf(payDayAfter(period))])} `
-      + `${formatDay(payDayAfter(period))}.`;
+      + `y se paga el ${capitalize(WEEKDAYS[weekdayOf(payDayAfter(period))])} `
+      + `${formatDay(payDayAfter(period))}, cuando termine.`;
   }
 
   function validate() {
@@ -146,14 +146,21 @@ export async function renderClientForm(context) {
         // while their file is open and the notebook is in hand — is the only
         // moment the balance realistically gets carried over.
         if (chargeFor(fresh, store.pricing)) {
-          await offerOpeningBalance(fresh, author);
+          const carried = await offerOpeningBalance(fresh, author);
 
-          // And they are usually standing at the counter, so the other
-          // question worth asking once is whether they are paying today.
-          const receipt = await offerPayment(fresh, author);
-          if (receipt) {
-            go(`/receipts/${receipt.id}`, { replace: true });
-            return;
+          // Somebody brought over with fortnights still owed may be paying
+          // them right now, at the counter. Somebody who starts today owes
+          // nothing: nothing is paid ahead here, and their first fortnight is
+          // paid the day it ends — so they are not asked.
+          if (carried > 0) {
+            const receipt = await offerPayment(fresh, author);
+            if (receipt) {
+              go(`/receipts/${receipt.id}`, { replace: true });
+              return;
+            }
+          } else {
+            const first = payDayAfter(periodOf(fresh));
+            toastOk(`Paga su primera ${periodWord(fresh)} el ${formatDay(first)}, cuando termine.`);
           }
         }
 
@@ -190,25 +197,24 @@ export async function renderClientForm(context) {
   }
 
   /**
-   * "They are paying now" — asked once, right after registering.
+   * "They are paying what they brought over" — asked once, right after the
+   * notebook balance is carried in.
    *
    * Answering no is the common case and costs one tap; answering yes skips a
    * search, a screen and a scroll while somebody is standing there with cash.
    */
   async function offerPayment(client, author) {
-    const price = chargeFor(client, store.pricing);
     const wants = await confirm({
       title: '¿Va a pagar ahora?',
-      message: `${client.name} quedó registrado. Su ${periodWord(client)} cuesta `
-        + `${money(price)}. `
-        + 'Si está pagando en este momento, cóbrale aquí mismo y se le manda su recibo.',
+      message: `${client.name} quedó registrado con lo que debía en el cuaderno. `
+        + 'Si lo está pagando en este momento, cóbrale aquí mismo y se le manda su recibo.',
       confirmLabel: 'Cobrar ahora',
       cancelLabel: 'Después',
       icon: 'cash',
     });
     if (!wants) return null;
 
-    return openChargeSheet({ client, invoices: [], pricing: store.pricing, author });
+    return openChargeSheet({ client, pricing: store.pricing, author });
   }
 
   /* --- Form ---------------------------------------------------------------- */

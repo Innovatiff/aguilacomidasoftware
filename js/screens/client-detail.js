@@ -16,9 +16,12 @@ import { openChargeSheet } from '../ui/charge-sheet.js';
 import { openDebtSheet } from '../ui/debt-sheet.js';
 import { openBalanceSheet } from '../ui/balance-sheet.js';
 import { openHistorySheet } from '../ui/history-sheet.js';
+import { openAdvanceSheet } from '../ui/advance-sheet.js';
 import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
-import { store, subscribe, billingFor, farmById, periodPrice } from '../data/store.js';
+import {
+  store, subscribe, billingFor, farmById, periodPrice, clientState, forgetPendingBills,
+} from '../data/store.js';
 import {
   watchClient, updateClient, moveClient, servingSince, setEndsOn, servingStatus, daysLeft,
   cycleIsSet, setDayNote,
@@ -30,7 +33,7 @@ import { ensureConversation } from '../data/chat.js';
 import {
   periodOf, periodOfIndex, projectPeriod, balanceOf, invoiceStatus,
   STATUS_LABEL, STATUS_TONE, invoiceId, isCharge, invoiceTitle, appliedTitle,
-  payDayAfter, periodWord, cadenceWord,
+  payDayAfter, periodWord, cadenceWord, paidThroughOn, paidFor, isPayable,
 } from '../lib/billing.js';
 import { tierFor, periodCharge, mealsOn } from '../lib/pricing.js';
 import {
@@ -203,6 +206,11 @@ export function renderClientDetail(context) {
     const projection = projectPeriod(model, period, store.pricing);
     const priced = !!tierFor(store.pricing, model.mealsPerDay);
     const owes = billing.balance > 0;
+    const { advance } = clientState(model);
+    // The last day of the last fortnight paid for — always one already
+    // served. A date typed in from the notebook can fall mid-fortnight; what
+    // it paid for ended the day before that fortnight began.
+    const paidUpTo = model.paidThrough ? paidThroughOn(model, model.paidThrough) : null;
 
     return h('div.stack.stack-3',
       sectionLabel('Cobro'),
@@ -220,9 +228,17 @@ export function renderClientDetail(context) {
             ? `Venció ${humanDelta(billing.daysToDue)} (${formatDay(billing.dueDate)}).`
             : `Vence ${humanDelta(billing.daysToDue)} (${formatDay(billing.dueDate)}).`) : null,
 
-        !owes && model.paidThrough && model.paidThrough >= today()
-          ? h('div.t-sm.c-soft', `Pagado hasta el ${formatDay(model.paidThrough)}.`)
-          : null,
+        advance
+          ? h('div.stack.stack-2',
+              alert(`Tiene un pago puesto en una ${periodWord(model)} antes de que se sirviera. `
+                + `Aquí no se paga por adelantado: ese pago es por la ${periodWord(model)} `
+                + 'anterior.', 'warn'),
+              button('Revisar y corregir', {
+                variant: 'soft', size: 'sm', icon: 'check', onClick: () => fixAhead(model),
+              }))
+          : !owes && paidUpTo && paidUpTo < period.start
+            ? h('div.t-sm.c-soft', `Pagado hasta el ${formatDay(paidUpTo)}.`)
+            : null,
 
         h('div.divider'),
 
@@ -238,10 +254,11 @@ export function renderClientDetail(context) {
               projection.extraMeals ? `+${projection.extraMeals} extra` : null,
             ].filter(Boolean).join(' · ')),
           // The number the counter actually quotes: not the invoice's due date
-          // with its grace days, but the day this person turns up again.
+          // with its grace days, but the day this person turns up again — the
+          // day after this fortnight ends, to pay for it.
           h('div.t-sm.w-600', { style: { marginTop: '2px' } },
-            `Paga otra vez el ${weekdayName(payDayAfter(period))} `
-            + `${formatDay(payDayAfter(period))}`),
+            `Se paga el ${weekdayName(payDayAfter(period))} `
+            + `${formatDay(payDayAfter(period))}, cuando termine`),
 
           // Whether that date is a day somebody confirmed or a placeholder
           // inherited from the rancho. While the notebook is being migrated
@@ -333,7 +350,7 @@ export function renderClientDetail(context) {
   function receiptRow(receipt, wasCancelled = false) {
     const reversal = Number(receipt.amount) < 0;
     const dead = reversal || wasCancelled;
-    const covers = (receipt.applied || []).map(appliedTitle).join(', ');
+    const covers = paidFor(receipt, invoices).map(appliedTitle).join(', ');
 
     return itemRow({
       lead: h('div.avatar.avatar--sm', {
@@ -604,23 +621,37 @@ export function renderClientDetail(context) {
   async function charge(model) {
     const receipt = await openChargeSheet({
       client: model,
-      invoices,
       pricing: store.pricing,
       author: { uid: session.uid, name: session.displayName },
     });
     if (receipt) go(`/receipts/${receipt.id}`);
   }
 
+  /** Moves a payment made before its fortnight was served to the one it paid. */
+  async function fixAhead(model) {
+    const done = await openAdvanceSheet({
+      client: model,
+      author: { uid: session.uid, name: session.displayName },
+    });
+    if (done) forgetPendingBills();
+  }
+
   async function issueCycle(model) {
     const current = periodOf(model);
+    // The fortnight still being served is billed when it ends — unless their
+    // service ends inside it, in which case it ended with them.
+    const runningOk = isPayable(current, model);
     const choice = await sheet({
       title: 'Cerrar y facturar',
       build: (close) => h('div.stack.stack-3',
         h('p.t-sm.c-soft', `Se emite la factura de la ${periodWord(model)} al precio de su `
-          + 'plan.'),
+          + 'plan. Solo de lo ya servido: la que está en curso se factura cuando termine.'),
         h('div.stack.stack-2',
           periodOption(periodOfIndex(model, current.index - 1), 'Periodo anterior (cerrado)', close),
-          periodOption(current, 'Periodo en curso', close))),
+          periodOption(current, runningOk
+            ? `Periodo en curso · su servicio terminó el ${formatDay(model.endsOn)}`
+            : `Periodo en curso · se factura cuando termine, el ${formatDay(payDayAfter(current))}`,
+          close, !runningOk))),
     });
     if (!choice) return;
 
@@ -641,9 +672,14 @@ export function renderClientDetail(context) {
     }
   }
 
-  const periodOption = (period, label, close) =>
+  const periodOption = (period, label, close, disabled = false) =>
     h('button.item.item--tap-target', {
-      type: 'button', style: { border: '1px solid var(--border)', borderRadius: 'var(--r-md)' },
+      type: 'button',
+      disabled,
+      style: {
+        border: '1px solid var(--border)', borderRadius: 'var(--r-md)',
+        ...(disabled ? { opacity: '.55', cursor: 'not-allowed' } : {}),
+      },
       onclick: () => close(period),
     },
     h('div.item__main',

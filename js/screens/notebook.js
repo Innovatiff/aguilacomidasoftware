@@ -49,7 +49,9 @@ import { formatDayShort, WEEKDAYS_SHORT } from '../lib/dates.js';
 const STANDING = {
   overdue: { label: 'ATRASADO', tone: 'bad' },
   due: { label: 'ATRASADO', tone: 'bad' },
-  covered: { label: 'AL CORRIENTE', tone: 'ok' },
+  // Money sitting on the fortnight still running is something for the panel to
+  // put right, not something to argue about at the gate: they are not behind.
+  advance: { label: 'AL CORRIENTE', tone: 'ok' },
   clear: { label: 'AL CORRIENTE', tone: 'ok' },
 };
 

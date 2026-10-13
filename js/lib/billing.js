@@ -10,9 +10,14 @@
  *
  * A period is sold at a flat price for the plan the person is on — one meal a
  * day, two meals a day — not counted meal by meal. That is what is quoted and
- * what is paid, and it means the bill for a period is known the day the period
- * opens, which is what lets somebody walk into the store and pay for a period
- * that has not happened yet.
+ * what is paid.
+ *
+ * **Nobody here pays in advance.** A period is paid once it has been served:
+ * somebody who starts on Wednesday the 7th pays on Wednesday the 21st for the
+ * 7th to the 20th, and the money handed over on a collection day is always for
+ * the fortnight that just ended. A period can be paid from its last day on
+ * (`isPayable`), never before, and `paidThrough` — the last day somebody has
+ * paid for — is therefore always a day already served.
  *
  * Both lengths are whole weeks, which is what keeps everything below working
  * on either: the serving days in a period are the same every time round, and
@@ -113,12 +118,54 @@ export function payDayOnOrBefore(key) {
 /**
  * The cycle a payment on `key` sets up.
  *
- * Somebody who hands over money on Friday the 28th is paying for the fortnight
- * that begins on the next collection day, not for one starting mid-week — so
- * the anchor snaps forward. Somebody paying *on* a collection day starts that
- * same day.
+ * Money is handed over for the fortnight that just ended, on the collection
+ * day that closes it — so the payment marks the turn of the cycle: the next
+ * fortnight starts on that collection day. Somebody paying a day or two late
+ * is paying for the fortnight that ended at the collection day they missed, so
+ * the anchor snaps *back* to it. It used to snap forward, which read a payment
+ * as the start of a fortnight being paid for ahead of time.
  */
-export const cycleFromPayment = (key) => payDayOnOrAfter(key);
+export const cycleFromPayment = (key) => payDayOnOrBefore(key);
+
+/**
+ * Whether a period can be paid on `day`.
+ *
+ * From its last day on: that is the day its last plate goes out, and the
+ * kitchen collects for what it has served. Never before — nobody pays for food
+ * not yet cooked. The one exception is somebody who has stopped coming: their
+ * last period has no rest to wait for, so it can be settled once their last
+ * day has come.
+ */
+export function isPayable(period, client, day = todayKey()) {
+  if (!period) return false;
+  if (period.end <= day) return true;
+  const last = client?.endsOn;
+  return !!last && last <= day && period.start <= last;
+}
+
+/**
+ * Whether what is written on a client as paid covers a period.
+ *
+ * `paidThrough` is the last day they have paid for, so a period is covered
+ * when it ends on or before it. A period that only *starts* by then is not —
+ * reading it that way is what used to count the fortnight a payment was made
+ * in as paid by that payment.
+ */
+export const isCovered = (period, paidThrough) =>
+  !!paidThrough && !!period && period.end <= paidThrough;
+
+/**
+ * The last day a payment made on `day` can have paid for.
+ *
+ * The end of the last period that had been served by then: the period that
+ * ends on `day` if it ends that day, otherwise the one before the period
+ * `day` falls in. For "¿cuándo pagó por última vez?" in the notebook, where a
+ * payment on the 21st paid up to the 20th.
+ */
+export function paidThroughOn(client, day = todayKey()) {
+  const period = periodOf(client, day);
+  return period.end <= day ? period.end : addDays(period.start, -1);
+}
 
 /**
  * Which cycle a day falls in, counting from the anchor. Can be negative.
@@ -235,6 +282,36 @@ export function invoiceTitle(invoice) {
 export const appliedTitle = (row) =>
   row?.title || formatRange(row?.periodStart, row?.periodEnd);
 
+/**
+ * What a payment is for, as `applied` rows, read off the bills holding it.
+ *
+ * Not off the receipt: a payment that went to a fortnight before it was
+ * served is moved to the one it was for, and the receipt — which nobody may
+ * rewrite — still names the first. What the receipt says is the answer only
+ * when no bill in hand holds the payment: it was cancelled, or its bills are
+ * older than the ones that were read.
+ *
+ * Each row: `{ invoiceId, title, periodStart, periodEnd, kind, amount, moved }`,
+ * oldest first.
+ */
+export function paidFor(receipt, bills = []) {
+  const held = (bills || []).flatMap((bill) => {
+    const mine = (bill.payments || []).filter((payment) => payment.receiptId === receipt?.id);
+    if (!mine.length) return [];
+    return [{
+      invoiceId: bill.id,
+      title: invoiceTitle(bill),
+      periodStart: bill.periodStart,
+      periodEnd: bill.periodEnd,
+      kind: bill.kind || 'period',
+      amount: round2(mine.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0)),
+      moved: mine.some((payment) => !!payment.movedFrom),
+    }];
+  });
+  if (!held.length) return receipt?.applied || [];
+  return held.sort((a, b) => String(a.periodStart).localeCompare(String(b.periodStart)));
+}
+
 /** Deterministic delivery id, so two devices marking the same day converge. */
 export const deliveryId = (clientId, day) => `${clientId}_${day}`;
 
@@ -300,8 +377,13 @@ export const STATUS_TONE = { open: 'info', due: 'warn', overdue: 'bad', paid: 'o
  */
 export function summarize(client, invoices = [], day = todayKey()) {
   const current = periodOf(client, day);
+  // What can be owed today: a hand-written debt, or a period already served.
+  // A bill for a period still running — there are old ones, written when
+  // paying ahead was allowed — is not owed yet, so it is not in the balance.
   const outstanding = invoices
     .filter((inv) => balanceOf(inv) > 0.005)
+    .filter((inv) => isCharge(inv)
+      || isPayable({ start: inv.periodStart, end: inv.periodEnd }, client, day))
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 
   const overdue = outstanding.filter((inv) => invoiceStatus(inv, day) === 'overdue');

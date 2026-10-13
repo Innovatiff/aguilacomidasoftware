@@ -57,8 +57,9 @@ día menos vale lo mismo que un día más.
 | 2 comidas/día + 1 extra los sábados | $140 + 2 × $6.25 | **$152.50** |
 
 Toda quincena tiene exactamente dos de cada día de la semana, así que la cuenta
-da lo mismo en cualquier periodo: se puede cotizar antes de que empiece, que es
-lo que permite pagar por adelantado en la caja.
+da lo mismo en cualquier periodo: se sabe desde el primer día cuánto va a costar
+la quincena — y se paga **cuando termina**, nunca antes (ver *Cobrar en la
+tienda*).
 
 ---
 
@@ -164,15 +165,20 @@ Por eso el panel pregunta lo único que el cuaderno sí dice: **¿cuándo pagó 
 última vez?** De ahí y de su ancla de cobro salen solas las quincenas que
 quedaron abiertas y lo que cada una cuesta.
 
-Aparece la lista de esas quincenas, **cada una con su palomita**. Van marcadas
-las que ya cerraron; la que está en curso se ofrece pero no se asume. Puedes
-desmarcar la que sepas que sí se pagó — un cuaderno no es una base de datos, y
-quien lo tiene en la mano sabe cosas que el sistema no: un mes que alguien no
-estuvo, una quincena que se pagó en efectivo y nunca se anotó.
+Ese último pago fue **por la quincena que acababa de terminar** — aquí nadie paga
+por adelantado. Quien pagó el sábado 10 pagó del 26 al 9; lo servido después,
+del 10 en adelante, es lo que quedó abierto.
+
+Aparece la lista de esas quincenas ya servidas, **cada una con su palomita**. La
+que está en curso no aparece: se paga cuando termine. Puedes desmarcar la que
+sepas que sí se pagó — un cuaderno no es una base de datos, y quien lo tiene en
+la mano sabe cosas que el sistema no: un mes que alguien no estuvo, una quincena
+que se pagó en efectivo y nunca se anotó.
 
 Al confirmar se emite **una factura por quincena**, marcada como traída del
-cuaderno, y el cliente queda «pagado hasta» esa fecha. A partir de ahí se cobra
-como cualquier otro: aparece en la lista con su adeudo y se cobra en la caja.
+cuaderno, y el cliente queda «pagado hasta» el último día de la quincena que
+pagó. A partir de ahí se cobra como cualquier otro: aparece en la lista con su
+adeudo y se cobra en la caja.
 
 Para alguien ya registrado, el mismo botón está en su ficha
 (**Historial de pagos → Traer saldo del cuaderno**), mientras no tenga facturas.
@@ -253,9 +259,9 @@ deba sigue registrado y su historial se conserva.
 > app sin backend, y aun así convierte una tarea que nadie recuerda en una que
 > nadie puede pasar por alto.
 
-**«Pagado hasta».** Cuando alguien paga, el panel le marca hasta qué quincena
-quedó cubierto. Por eso la lista puede distinguir entre *«todavía no se le
-factura»* y *«ya pagó por adelantado»*, que se ven igual si sólo miras el saldo.
+**«Pagado hasta».** Cuando alguien paga, el panel le marca el último día de la
+quincena que pagó — siempre un día ya servido, nunca uno por venir. Con eso
+cada pantalla sabe qué quincenas ya pasaron por la caja sin leer facturas.
 
 ### Lo que no puede comer
 
@@ -278,7 +284,7 @@ Se ven en tres lugares, sin abrir a nadie:
 ### 8. El historial de pagos
 
 En la ficha de cada cliente, **Historial de pagos**: todo lo que ha pagado, con
-folio, fecha, forma de pago y qué quincenas cubrió cada pago. Arriba, el total y
+folio, fecha, forma de pago y la quincena a la que fue cada pago. Arriba, el total y
 **cuándo pagó por última vez** — que es la pregunta que más se hace y que antes
 sólo se podía contestar abriendo factura por factura.
 
@@ -288,21 +294,64 @@ que se debía, un recibo dice lo que se entregó y cuándo.
 ### 9. Cobrar en la tienda
 
 **Cobros → Cobrar** (o el botón *Cobrar* en Inicio). Escribe el nombre, tócalo,
-confirma el monto. El panel ya trae puesto lo que debe; si está al corriente,
-trae puesta una quincena por adelantado, y hay botones para *saldo*, *una
-quincena* o *saldo + quincena*.
+confirma el monto.
 
-Antes de cobrar, el panel dice en palabras qué va a cubrir el dinero — «Cubre
-18 – 31 jul ($140.00)» — para que no haya sorpresas con la persona enfrente.
+**Cada quien paga lo que ya comió, nunca por adelantado.** Quien empieza el
+miércoles 7 de octubre paga el miércoles 21, por el 7 al 20. El panel ya trae
+puesto lo que debe de lo ya servido —facturas abiertas y quincenas que ya
+terminaron y nadie había facturado— y **no acepta más que eso**. A quien está
+al corriente le dice *«no debe nada todavía»* y el día en que se paga su
+quincena en curso, en vez de ofrecerle una quincena por adelantado. Una
+quincena se puede pagar desde su último día; la de alguien que se va, desde su
+último día de servicio.
 
-Se puede pagar **antes, durante o después** de la quincena. Si paga una quincena
-que todavía no se factura, se emite en ese momento y queda saldada.
+Antes de cobrar, el panel dice en palabras a qué quincena va el dinero, para
+que no haya sorpresas con la persona enfrente.
+
+**El primer pago fija su quincena.** Quien todavía tiene la fecha del rancho
+paga el día que termina su quincena, así que ese pago dice cuál es su día. Si
+empezó unos días después de un día de cobro (tres cuando mucho, lo más que
+puede quedar el miércoles o el sábado de antes), esa primera quincena se cobra
+entera; si apenas lleva una semana, todavía no debe nada.
 
 Al terminar sale el **recibo con folio** (`R-260821-WPUF`), y ese mismo recibo
-aparece en la app de la persona en segundos, junto con un aviso en su chat.
+aparece en la app de la persona en segundos, junto con un aviso en su chat. El
+recibo impreso dice quién pagó, cuánto, cómo y en qué quedó (*queda al
+corriente* o *queda debiendo*). **No dice qué quincena «cubre» ni cuándo es el
+próximo pago**: en papel, las dos cosas se leían como una promesa de comida
+pagada por adelantado. La quincena se ve en el panel y en la app.
 
 En la pantalla de Cobrar, abajo, está lo **cobrado hoy** con todos los recibos
 del día: es lo que se necesita para cerrar la caja en la noche.
+
+### Pagos que quedaron por adelantado
+
+Antes de esta regla, el panel ponía un pago sin factura abierta en la quincena
+que *empezaba*. Quien pagaba el sábado 10 por el 26 al 9 quedaba como «pagado
+hasta el 23», y el 24 —cuando venía a pagar del 10 al 23— parecía que no debía
+nada.
+
+El panel los encuentra solo y los avisa arriba en **Clientes**: *«N clientes
+con pago por adelantado»*. **Revisar** muestra a cada uno con lo que cambia, y
+**Corregir** lo hace. También sale en la ficha de la persona y, si viene a
+pagar sin que se haya corregido, **antes de cobrarle**.
+
+Corregir mueve cada uno de esos pagos a **la quincena anterior**, que es la que
+pagaron. Si esa quincena no tenía factura se emite, pagada; la quincena en curso
+queda sin factura —todavía no se debe— y una ya servida que se queda sin pago
+vuelve a deberse. «Pagado hasta» baja al último día ya servido. Los pagos se
+mueven del más viejo al más nuevo, así que una cadena entera —meses de pagos
+una quincena corridos— regresa junta.
+
+No adivina. Se queda donde está, con su razón a la vista, el pago hecho dos
+quincenas antes, el de alguien que todavía no empezaba (si sí comía antes,
+corrige *¿Desde cuándo come aquí?* y vuelve a revisar), y el que iría a una
+quincena que ya pagó otro pago. Al revisarlo deja de avisar.
+
+**Los recibos no se tocan**: siguen diciendo cuánto pagó y cuándo. Lo que cambia
+es a qué quincena va cada pago, y eso se lee de las facturas — por eso el recibo
+en pantalla dice *«Es por 26 sep – 9 oct · se movió aquí»*. Cancelar un pago
+movido lo quita de donde está ahora.
 
 ### Cancelar un pago hecho por error
 
@@ -756,14 +805,16 @@ registradas; sin ruta esa compuerta no existe, y la pausa la sustituye.
 el periodo *i* va de `ancla + 14i` a `ancla + 14i + 13`. Cualquier fecha cae en
 exactamente un periodo sin tabla de horarios ni tarea programada.
 
-**La quincena tiene precio antes de existir.** Como el precio es plano por plan,
-lo que cuesta un periodo se sabe el día que abre. Eso es lo que permite cobrar
-por adelantado: la factura se emite en el momento del pago y queda saldada.
+**Se cobra lo servido, nunca lo que viene.** Una quincena se puede pagar desde
+su último día (`isPayable`), y no antes. La factura de la quincena que se acaba
+de servir casi siempre se emite en el momento del pago y queda saldada; la de
+la quincena en curso no existe todavía, y si existe no cuenta en el saldo.
 
-**Un pago puede cubrir varias quincenas.** El dinero se aplica hacia adelante en
-el tiempo — primero lo vencido, luego lo que sigue — y todo eso queda en un solo
-recibo que dice qué cubrió. Ocurre dentro de una transacción, porque el efectivo
-ya está en el cajón cuando el código corre: o se aplica completo o no se aplica.
+**Un pago puede saldar varias quincenas ya servidas.** El dinero se aplica de la
+más vieja a la más nueva y todo queda en un solo recibo. Nunca más de lo que se
+debe: lo que sobraría iría a una quincena que no se ha servido. Ocurre dentro de
+una transacción, porque el efectivo ya está en el cajón cuando el código corre:
+o se aplica completo o no se aplica.
 
 **Los pagos se registran en transacción.** Dos personas cobrando al mismo cliente
 desde dos aparatos leerían ambas `paid: 0`; la transacción impide que el segundo
@@ -787,10 +838,11 @@ comida usado. Cambiar la lista de precios no puede reescribir nada de eso, y
 dentro de un año la factura sigue pudiendo contestar «¿por qué este número?»
 sin la lista con la que se emitió.
 
-**`paidThrough` se guarda porque el saldo no alcanza.** Un saldo en cero
-significa dos cosas distintas: «todavía no se le factura la quincena» y «ya la
-pagó por adelantado». Distinguirlas leyendo el historial de facturas costaría
-una consulta por cliente; un campo lo resuelve en cero.
+**`paidThrough` se guarda porque el saldo no alcanza.** Un saldo en cero no dice
+si la quincena que acaba de terminar ya pasó por la caja o todavía no se le
+factura. Saberlo leyendo el historial de facturas costaría una consulta por
+cliente; un campo lo resuelve en cero. Es siempre el último día de una quincena
+ya servida (`isCovered` compara contra el final de la quincena).
 
 **El estado de la factura se calcula al leer.** «Vencido» depende de la fecha de
 hoy, así que se deriva en cada render. Lo único que se guarda es `settled`, un
@@ -849,7 +901,8 @@ clients/{clientId}               -- una persona que come
   deliveryDays [0-6]             -- SU semana; el rancho sólo da el valor inicial
   extras      { '6': 1 }         -- comidas extra por día de la semana
   status       'active' | 'paused' | 'inactive'
-  paidThrough  'YYYY-MM-DD'      -- última quincena que dejó saldada
+  paidThrough  'YYYY-MM-DD'      -- último día de la última quincena pagada; nunca uno por venir
+  advanceFixedOn 'YYYY-MM-DD'    -- cuándo se revisó un pago que quedó por adelantado
   deliveryWindow, cycleAnchor, graceDays
                                  -- copiados del rancho, y se siguen heredando
 
@@ -863,8 +916,10 @@ invoices/{clientId_YYYY-MM-DD}
   extras, extraMeals, mealPrice  -- las comidas extra y a qué precio
   meals                          -- comidas que cubre la quincena
   fromNotebook                   -- true si viene del cuaderno, no de una ruta
+  fromAdvanceFix                 -- true si la emitió la corrección de un pago adelantado
   paid, settled
-  payments [{ amount, method, date, reference, note, byName, receiptId, at }]
+  payments [{ amount, method, date, reference, note, byName, receiptId, at,
+              movedFrom, movedOn }] -- movedFrom: la factura donde quedó por adelantado
 
 receipts/{receiptId}             -- se escribe una vez y nunca se toca
   folio        'R-260821-WPUF'
@@ -966,7 +1021,7 @@ npm install      # sólo la primera vez
 npm test
 ```
 
-81 pruebas cubren lo que cada quien puede y no puede hacer: que un cliente no
+94 pruebas cubren lo que cada quien puede y no puede hacer: que un cliente no
 alcance a otro —ni siquiera al de su misma ubicación—, que no pueda tocar sus
 facturas, la lista de precios ni las condiciones de su rancho, que nadie se
 agregue solo a `staff` ni reapunte su correo, que un recibo no se pueda editar
@@ -983,8 +1038,8 @@ ni borrar, y que la primera cuenta se pueda reclamar exactamente una vez. Ver
    directamente desde el renglón de la persona. El recibo le llega en su app.
 3. **Emitir lo que cerró** — el aviso en Clientes te lo dice solo. Emite **una
    factura por cliente activo** al precio de su plan, con vista previa antes de
-   escribir nada. Lo ya cobrado por adelantado no se vuelve a facturar: esa
-   quincena ya tiene su factura saldada.
+   escribir nada. Lo que ya se pagó no se vuelve a facturar: esa quincena ya
+   tiene su factura saldada, o «pagado hasta» ya pasó de ella.
 4. **Cerrar la caja** — al final del día, en Cobrar: lo cobrado hoy y todos sus
    recibos.
 

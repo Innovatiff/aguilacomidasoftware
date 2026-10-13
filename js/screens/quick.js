@@ -24,16 +24,20 @@ import { emptyState, button } from '../ui/kit.js';
 import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
 import { runFlow } from '../ui/flow.js';
+import { toastBad } from '../ui/overlay.js';
+import { errorText } from '../firebase.js';
 import {
   posTile, posPick, posFind, posMoney, posDays, posSummary, posNote, posField, posText,
 } from '../ui/pos-kit.js';
 import {
-  store, subscribe, billingFor, farmById, periodPrice, printContext, activeClients,
+  store, subscribe, billingFor, farmById, printContext, activeClients,
 } from '../data/store.js';
 import {
-  createClient, updateClient, setClientStatus, setEndsOn, cycleIsSet, emptyClient,
+  createClient, updateClient, setClientStatus, setEndsOn, cycleIsSet, emptyClient, servingSince,
 } from '../data/clients.js';
-import { takePayment, addCharge, adjustBalance } from '../data/invoices.js';
+import {
+  takePayment, addCharge, adjustBalance, billsOf, payableRows, nothingOwedYet,
+} from '../data/invoices.js';
 import { watchReceiptsOn, totalOf, cancelledIds } from '../data/receipts.js';
 import { printReceipt } from '../ui/print.js';
 import {
@@ -47,6 +51,8 @@ import { seatedPacker, sitDown, watchPackers } from '../data/packing.js';
 import { abilitiesOf } from '../lib/packing.js';
 import { createFarm, newLocationId } from '../data/farms.js';
 import { openDayBoard } from '../ui/day-board.js';
+import { openAdvanceSheet } from '../ui/advance-sheet.js';
+import { planAdvanceFix } from '../lib/advance.js';
 import { paymentMethodMeta } from '../lib/model.js';
 import {
   today, addDays, formatDay, formatDayLong, weekdayName, capitalize, WEEKDAYS_SHORT,
@@ -527,34 +533,70 @@ export function renderQuick() {
     start({
       title: 'Cobrar',
       subject: subjectOf,
-      state: { amount: 0, method: null, setCycle: false },
+      state: { amount: 0, method: null, setCycle: false, owing: null },
       steps: (s) => {
-        const owed = s.client ? owedBy(s.client) : 0;
-        const fortnight = s.client ? periodPrice(s.client) : 0;
+        // What this person can pay today — read from their own bills once they
+        // are picked, the same way the payment itself will. Until it arrives
+        // nothing can be charged; it is a moment, and a guess here is how
+        // somebody gets charged for a fortnight they have not eaten yet.
+        const owing = s.client && s.owing?.clientId === s.client.id ? s.owing : null;
+        const total = owing ? owing.total : 0;
         return [
           whoStep('Sin escribir nada sale primero el que más debe. Escribe su nombre '
             + 'para buscarlo.'),
           {
             id: 'amount',
             title: `¿Cuánto te dio ${firstName(s.client)}?`,
-            hint: owed > 0
-              ? `Debe ${money(owed)}.`
-              : `No debe nada: esto le paga ${periodWordPlural(s.client)} por adelantado.`,
-            ready: (st) => st.amount > 0,
+            hint: !owing
+              ? 'Viendo lo que debe…'
+              : total > 0.005
+                ? `Debe ${money(total)}: ${owing.rows.map((row) => row.title).join(', ')}.`
+                : 'Está al corriente.',
+            ready: (st) => !!owing && st.amount > 0 && st.amount <= total + 0.005,
             next: 'Siguiente',
-            build: (st, api) => posMoney({
-              value: st.amount || '',
-              onChange: (v) => { st.amount = v; api.revalidate(); },
-              quick: [
-                owed > 0.005 ? { label: `Debe ${money(owed)}`, value: owed } : null,
-                fortnight
-                  ? { label: `1 ${periodWord(s.client)} ${money(fortnight)}`, value: fortnight }
-                  : null,
-                owed > 0.005 && fortnight
-                  ? { label: `Las dos ${money(round2(owed + fortnight))}`, value: round2(owed + fortnight) }
-                  : null,
-              ].filter(Boolean),
-            }),
+            build: (st, api) => {
+              if (!owing) {
+                loadOwing(st, api);
+                return posNote('Viendo lo que debe…', 'info');
+              }
+              // Money the old way of taking payments put on a fortnight before
+              // it was served makes the one they came to pay look paid. Put
+              // right here, in front of them, before anything is charged.
+              const ahead = owing.ahead
+                ? h('div',
+                    posNote(`${firstName(st.client)} tiene un pago puesto en una quincena antes de `
+                      + 'que se sirviera, y por eso lo que debe sale mal. Corrígelo primero: el pago '
+                      + 'va a la quincena anterior, que es la que pagó.', 'bad'),
+                    h('button.posbtn.posbtn--go', {
+                      type: 'button', onclick: () => fixAhead(st, api),
+                    }, icon('check'), h('span', 'Revisar y corregir')))
+                : null;
+              if (total <= 0.005) {
+                return h('div', ahead, posNote(nothingOwedYet(owing.payer, today()), 'ok'));
+              }
+
+              // Said while the number is being typed, not after: more than
+              // they owe is refused, and the person across the counter should
+              // hear why before the money changes hands.
+              const warn = h('div');
+              const paint = () => mount(warn, st.amount > total + 0.005
+                ? posNote(`Debe ${money(total)}. Aquí no se cobra por adelantado: baja el monto.`, 'bad')
+                : null);
+              paint();
+              return h('div',
+                ahead,
+                posMoney({
+                  value: st.amount || '',
+                  onChange: (v) => { st.amount = v; paint(); api.revalidate(); },
+                  quick: [
+                    { label: `Todo lo que debe ${money(total)}`, value: total },
+                    owing.rows.length > 1
+                      ? { label: `Solo ${owing.rows[0].title} ${money(owing.rows[0].owed)}`, value: owing.rows[0].owed }
+                      : null,
+                  ].filter(Boolean),
+                }),
+                warn);
+            },
           },
           {
             id: 'method',
@@ -581,13 +623,13 @@ export function renderQuick() {
             build: (st) => h('div',
               posSummary([
                 ...whoRows(st.client),
-                ['Debía', owed > 0.005 ? money(owed) : 'Nada'],
+                ['Debía', total > 0.005 ? money(total) : 'Nada'],
+                ['Es por', paidFor(owing, st.amount)],
                 ['Cómo pagó', paymentMethodMeta(st.method).label],
                 ['Recibes', money(st.amount)],
                 // The question asked back across the counter, answered before
                 // the money is taken rather than after.
-                [owed - st.amount > 0.005 ? 'Queda debiendo' : 'Le queda a favor',
-                  money(Math.abs(round2(owed - st.amount))), { total: true }],
+                ['Queda debiendo', money(Math.max(0, round2(total - st.amount))), { total: true }],
               ]),
               cycleChoice(st)),
           },
@@ -621,6 +663,67 @@ export function renderQuick() {
   }
 
   /**
+   * Reads one client's bills and works out what they can pay today.
+   *
+   * Once per person: going back and picking somebody else reads theirs. The
+   * first payment the system sees from somebody also sets their fortnight, so
+   * that is counted the way the payment will count it.
+   */
+  function loadOwing(st, api) {
+    const client = st.client;
+    if (!client || st.loadingFor === client.id) return;
+    st.loadingFor = client.id;
+    const setCycle = !cycleIsSet(client);
+    billsOf(client.id)
+      .then((bills) => {
+        if (st.client?.id !== client.id) return;
+        const anchor = setCycle
+          ? cycleFromPayment(today())
+          : (client.cycleAnchor || cycleFromPayment(today()));
+        const payer = { ...client, cycleAnchor: anchor };
+        const plan = planAdvanceFix({ client, bills, since: servingSince(client), day: today() });
+        st.owing = {
+          clientId: client.id,
+          payer,
+          anchor,
+          ahead: plan.moves.length ? plan : null,
+          ...payableRows(payer, bills, store.pricing, { day: today(), setCycle }),
+        };
+        st.amount = st.owing.total;
+        api.refresh();
+      })
+      .catch((error) => {
+        st.loadingFor = null;
+        toastBad(errorText(error));
+      });
+  }
+
+  /** Shows what moves, moves it, and reads what they owe again. */
+  async function fixAhead(st, api) {
+    const client = st.client;
+    const done = await openAdvanceSheet({ client, author: author(), plan: st.owing?.ahead || null });
+    if (!done || st.client?.id !== client.id) return;
+    st.client = { ...client, paidThrough: done.paidThrough, advanceFixedOn: today() };
+    st.owing = null;
+    st.loadingFor = null;
+    api.refresh();
+  }
+
+  /** "26 sep – 9 oct" — what an amount pays, oldest first, the way the payment applies it. */
+  function paidFor(owing, amount) {
+    if (!owing) return '—';
+    const parts = [];
+    let left = Number(amount) || 0;
+    for (const row of owing.rows) {
+      if (left <= 0.005) break;
+      const take = Math.min(left, row.owed);
+      left = round2(left - take);
+      parts.push(take < row.owed - 0.005 ? `${row.title} (una parte)` : row.title);
+    }
+    return parts.join(', ') || '—';
+  }
+
+  /**
    * The one decision on the confirmation slide, and only when it matters.
    *
    * Most people at this counter already have a fortnight; asking them all
@@ -633,7 +736,8 @@ export function renderQuick() {
     const anchor = cycleFromPayment(today());
     return posNote(
       `Es su primer pago aquí, así que su ${periodWord(st.client)} queda en `
-      + `${weekdayName(anchor)}: empieza el ${formatDay(anchor)}.`, 'ok');
+      + `${weekdayName(anchor)}: este pago es por la que terminó el `
+      + `${formatDay(addDays(anchor, -1))}.`, 'ok');
   }
 
   /* --- Comidas al día ----------------------------------------------------- */
@@ -803,7 +907,7 @@ export function renderQuick() {
                 ['Ahora', `${capitalize(cadenceWord(after))} · ${priceLabel(after)}`],
                 [`${capitalize(word)} en curso`,
                   `${formatDay(period.start)} - ${formatDay(period.end)}`],
-                ['Paga otra vez',
+                ['Se paga el',
                   `${weekdayName(payDayAfter(period))} ${formatDay(payDayAfter(period))}`,
                   { total: true }],
               ]),
@@ -1327,8 +1431,8 @@ const dayWords = (days) => {
  * The collection days worth offering: a couple behind and a few ahead.
  *
  * Behind, because the day somebody paid is usually already past by the time it
- * is being typed in; ahead, because somebody paying early is starting the
- * fortnight that has not opened yet.
+ * is being typed in; ahead, because somebody starting this week starts on the
+ * next collection day, and their first fortnight is paid the day it ends.
  */
 function nearbyPayDays() {
   const from = addDays(payDayOnOrBefore(today()), -7);
