@@ -321,6 +321,18 @@ corriente* o *queda debiendo*). **No dice qué quincena «cubre» ni cuándo es 
 próximo pago**: en papel, las dos cosas se leían como una promesa de comida
 pagada por adelantado. La quincena se ve en el panel y en la app.
 
+**Salen dos recibos separados**: primero el **del cliente**, que se le entrega,
+y un momento después el **de la tienda**, que se queda. Cada uno se manda a la
+impresora como un trabajo aparte, porque la impresora corta cuando termina un
+trabajo — dos páginas de un mismo trabajo le salían pegadas en una sola tira.
+Tocar *Imprimir recibo* dos veces seguidas no saca cuatro.
+
+En la computadora de la tienda conviene abrir Chrome con `--kiosk-printing`,
+igual que en la cocina (ver *Que la etiqueta salga sin preguntar nada*): así
+los dos salen solos. Sin esa bandera, cada uno abre el cuadro de imprimir y hay
+que confirmar dos veces. Si la impresora tiene cortador, en su configuración de
+Windows debe estar en *cortar al final del documento* (así viene casi siempre).
+
 En la pantalla de Cobrar, abajo, está lo **cobrado hoy** con todos los recibos
 del día: es lo que se necesita para cerrar la caja en la noche.
 

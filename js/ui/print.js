@@ -203,44 +203,102 @@ export function printSheet(node, { paper: kind = 'report' } = {}) {
   requestAnimationFrame(() => window.print());
 }
 
+/** Receipts on their way to the printer, so a double tap is one receipt. */
+const printing = new Map();
+
+/** How long the store's slip waits after the client's has left the browser. */
+const BETWEEN_SLIPS = 1200;
+
+/** How long to wait for a browser that never says its print dialog closed. */
+const GIVE_UP = 4000;
+
 /**
- * Prints a payment: two copies by default, one after the other.
+ * Prints a payment: two receipts, one after the other — the client's, then the
+ * store's — each one **its own print job**.
  *
- * One for the person who paid and one the store keeps, and they come out as two
- * separate receipts — not one long strip with a tear line drawn on it. That is
- * a **page break** between them rather than two print jobs, which is what makes
- * them separate on the paper while keeping them a single confirmation at the
- * counter.
+ * Its own job, not a page of one job, because a page is not where the till's
+ * printer cuts. Its driver cuts when a document ends, and skips the blank paper
+ * at the bottom of a page, so the two copies sent as two pages came out as one
+ * long strip: the store's header straight under the client's "gracias". Two
+ * documents are two cuts.
  *
- * Two jobs would be worse in two ways that both bite at a till: the browser's
- * print dialog is a modal somebody has to confirm, so two jobs is two
- * confirmations for one payment; and the second can be sent while the first is
- * still spooling, which is how a printer ends up producing them out of order or
- * not at all. One job, two pages, gets separate paper without either problem.
+ * The client's comes first: it is the one being handed over, so it is in hand
+ * while the store's is still printing. The store's is sent a moment after the
+ * first has left the browser (`BETWEEN_SLIPS`) — Chrome with `--kiosk-printing`
+ * prints without asking, and asked for a second job while it is still handing
+ * over the first, it can drop it. On a machine without that flag each slip
+ * opens the print dialog, one after the other: two confirmations for one
+ * payment, which is the price of separate paper there.
  *
  * Each carries the whole header — a store copy that only makes sense next to the
  * client's is not a record of anything.
  *
- * Chrome started with `--kiosk-printing` skips the dialog and prints straight to
- * the default printer; that is a shortcut on the store's machine, not something
- * this code can decide.
- *
  * @param {number} [options.copies]  2 for a payment, 1 for a printer test
+ * @returns {Promise<void>} once the last slip has been sent
  */
 export function printReceipt(receipt, options = {}) {
   const { copies = 2, ...sheet } = options;
   const wanted = Math.max(1, Math.min(3, Number(copies) || 1));
-
-  // The client's first: it is the one being handed over, so it is the one that
-  // comes out first and is already in hand while the store's is still printing.
   const order = wanted === 1 ? [null] : ['client', 'store'];
 
-  paper('receipt');
-  mount(printRoot(), order.map((forWhom) => h('div.rcp__copy',
-    receiptSheet(receipt, { ...sheet, forWhom }))));
+  // A second tap while it is still coming out does not print it all again.
+  const key = `${receipt.id || receipt.folio || ''}|${order.length}`;
+  if (printing.has(key)) return printing.get(key);
 
-  // A frame, so the layout is done before the dialog freezes the page.
-  requestAnimationFrame(() => window.print());
+  const job = slipBySlip(order.map((forWhom) => () => {
+    paper('receipt');
+    mount(printRoot(), h('div.rcp__copy', receiptSheet(receipt, { ...sheet, forWhom })));
+  })).finally(() => printing.delete(key));
+  printing.set(key, job);
+  return job;
+}
+
+/**
+ * Receipt jobs, one at a time, in order.
+ *
+ * They all print from the same corner of the page, so a payment printed while
+ * the one before is between its two slips would put its own receipt there
+ * before the other's store copy went out. Each waits for the last.
+ */
+let slips = Promise.resolve();
+
+function slipBySlip(steps) {
+  const run = slips.then(async () => {
+    for (let i = 0; i < steps.length; i += 1) {
+      if (i) await new Promise((resolve) => { setTimeout(resolve, BETWEEN_SLIPS); });
+      steps[i]();
+      // A frame, so the layout is done before the dialog freezes the page.
+      await new Promise((resolve) => { requestAnimationFrame(resolve); });
+      await printOne();
+    }
+  });
+  slips = run.catch(() => {});
+  return run;
+}
+
+/**
+ * Sends what is in the print corner, and resolves once the browser is done
+ * with it.
+ *
+ * Chrome does not come back from `print()` until the job has left its hands —
+ * the dialog closed, or with `--kiosk-printing` the pages sent — and fires
+ * `afterprint` on the way. A browser that comes back at once says so with
+ * `afterprint` when its dialog closes. One that does neither is let go after a
+ * few seconds, rather than holding the store's copy forever.
+ */
+function printOne() {
+  return new Promise((resolve) => {
+    let waiting = true;
+    const done = () => {
+      if (!waiting) return;
+      waiting = false;
+      window.removeEventListener('afterprint', done);
+      resolve();
+    };
+    window.addEventListener('afterprint', done);
+    window.print();
+    setTimeout(done, GIVE_UP);
+  });
 }
 
 /**

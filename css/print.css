@@ -171,29 +171,17 @@
 }
 
 /*
- * Each copy is its own page.
- *
- * With `@page { size: 80mm auto }` a page break is where a thermal printer
- * ends one receipt and starts the next — it feeds the paper through, and a unit
- * with a cutter cuts there. Which is the difference between two receipts and
- * one long strip with a dotted line printed across it.
- *
- * `break-after` on the last copy would feed a whole blank receipt's worth of
- * paper after the job, so only the ones with something following them break.
+ * The two copies of a payment are two print jobs, not two pages of one: the
+ * till's printer cuts where a document ends and never where a page does (see
+ * `printReceipt` in js/ui/print.js). So nothing here breaks pages.
  */
-.rcp__copy { break-after: page; page-break-after: always; }
-.rcp__copy:last-child { break-after: auto; page-break-after: auto; }
 
-/* Blank paper past the last line, so the tear-off edge does not cut the text
-   and the next receipt starts clean. */
+/* Blank paper past the last line, so the tear — or the cutter — stays off the
+   last line of print. */
 .rcp__tail {
   height: 14mm;
   white-space: pre;
 }
-
-/* Every copy now ends a page of its own, so every copy gets the full tail:
-   the blank strip is what keeps the tear — or the cutter — off the last line
-   of print. */
 
 
 /* ==========================================================================
