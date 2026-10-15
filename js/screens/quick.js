@@ -27,13 +27,14 @@ import { runFlow } from '../ui/flow.js';
 import { toastBad } from '../ui/overlay.js';
 import { errorText } from '../firebase.js';
 import {
-  posTile, posPick, posFind, posMoney, posDays, posSummary, posNote, posField, posText,
+  posTile, posPick, posFind, posMoney, posDays, posSummary, posNote, posField, posText, posLabel,
 } from '../ui/pos-kit.js';
 import {
   store, subscribe, billingFor, farmById, printContext, activeClients,
 } from '../data/store.js';
 import {
   createClient, updateClient, setClientStatus, setEndsOn, cycleIsSet, emptyClient, servingSince,
+  tagsInUse,
 } from '../data/clients.js';
 import {
   takePayment, addCharge, adjustBalance, billsOf, payableRows, nothingOwedYet,
@@ -53,6 +54,9 @@ import { createFarm, newLocationId } from '../data/farms.js';
 import { openDayBoard } from '../ui/day-board.js';
 import { openAdvanceSheet } from '../ui/advance-sheet.js';
 import { planAdvanceFix } from '../lib/advance.js';
+import {
+  dietKey, sameDiet, kitchenSpelling, dietChanges,
+} from '../lib/diet.js';
 import { paymentMethodMeta } from '../lib/model.js';
 import {
   today, addDays, formatDay, formatDayLong, weekdayName, capitalize, WEEKDAYS_SHORT,
@@ -325,9 +329,10 @@ export function renderQuick() {
    * buttons, and in the kitchen's own words: pedidos, farmas.
    *
    * Laid out as two columns under Empacar, each a thing you can find without
-   * reading: the farm and the schedule on the left — with Cantidad de pedidos
-   * right under Calendario semanal, because they are the same question asked
-   * two ways — and the people on the right.
+   * reading: the farm and what goes in each order on the left — Cantidad de
+   * pedidos right under Calendario semanal, because they are the same question
+   * asked two ways, and No puede comer under that — and the people on the
+   * right.
    *
    * **Each person sees only what they are allowed.** A button somebody may not
    * use is not shown greyed out; it is not shown. A menu full of things you
@@ -357,6 +362,11 @@ export function renderQuick() {
         sub: '1 ó 2 al día',
         onClick: () => ready && flowMeals(),
       }),
+      diet: () => posTile({
+        icon: 'noEat', title: 'No puede comer', family: 'plan',
+        sub: 'No pollo, no puerco…',
+        onClick: () => ready && flowDiet(),
+      }),
       newClient: () => posTile({
         icon: 'userPlus', title: 'Nuevo cliente', family: 'who',
         sub: 'Dar de alta',
@@ -379,7 +389,7 @@ export function renderQuick() {
     if (!allowed) return [h('h2.pos__q', 'Un momento…'), h('p.pos__hint', 'Cargando tu menú.')];
 
     const ok = (key) => allowed[key] === true;
-    const left = ['newFarm', 'week', 'meals'].filter(ok);
+    const left = ['newFarm', 'week', 'meals', 'diet'].filter(ok);
     const right = ['newClient', 'status', 'lastDay'].filter(ok);
 
     // Counted over the same people as the number beside it: a farm whose
@@ -1398,6 +1408,164 @@ export function renderQuick() {
     });
   }
 
+  /* --- No puede comer ---------------------------------------------------- */
+
+  /**
+   * "No puede comer" — the same list as on the client's file in the panel.
+   *
+   * Changed here, it is changed there the moment it is saved, and on the
+   * packing screen and the day's board the next time they are drawn. It is
+   * never printed on a sticker: what somebody cannot eat is for whoever fills
+   * the container, not for a label in the back of a van.
+   *
+   * Typed the way the kitchen says it — «No puerco», «No pollo» — and if the
+   * kitchen already writes the same thing another way, that spelling is the
+   * one kept (`kitchenSpelling`), so the board counts one line, not two.
+   */
+  function flowDiet() {
+    start({
+      title: 'No puede comer',
+      subject: subjectOf,
+      steps: (s) => [
+        whoStep(),
+        {
+          id: 'diet',
+          title: s.client ? `¿Qué no puede comer ${firstName(s.client)}?` : '¿Qué no puede comer?',
+          hint: 'Escríbelo y toca Agregar — «No puerco», «No pollo». Para quitar uno, tócalo.',
+          ready: (st) => !!st.client && dietChanged(st),
+          build: (st, api) => dietEditor(st, api),
+        },
+        {
+          id: 'confirm',
+          title: 'Revisa el cambio',
+          last: true,
+          build: (st) => {
+            const { added, removed } = dietChanges(st.client.tags || [], dietOf(st));
+            return h('div',
+              posSummary([
+                ...whoRows(st.client),
+                added.length ? ['Se agrega', added.join(' · ')] : null,
+                removed.length ? ['Se quita', removed.join(' · ')] : null,
+                ['No puede comer', dietWords(dietOf(st)), { total: true }],
+              ]),
+              posNote('Se ve en su ficha y en la pantalla de empaque. No sale en la etiqueta.', 'ok'));
+          },
+        },
+      ],
+      commit: (s) => updateClient(s.client.id, { tags: dietOf(s) }),
+      done: (s) => ({
+        what: dietOf(s).length ? 'Lista guardada' : 'Come de todo',
+        who: `${s.client.name} · ${dietWords(dietOf(s))}`,
+      }),
+    });
+  }
+
+  /**
+   * The list being edited: started from the person picked, and started again
+   * if somebody goes back and picks somebody else.
+   */
+  function dietOf(st) {
+    if (st.dietFor !== st.client?.id) {
+      st.diet = [...(st.client?.tags || [])];
+      st.dietFor = st.client?.id;
+    }
+    return st.diet;
+  }
+
+  function dietChanged(st) {
+    const { added, removed } = dietChanges(st.client?.tags || [], dietOf(st));
+    return added.length + removed.length > 0;
+  }
+
+  /**
+   * What they cannot eat, each one a button that takes it off; a box to type
+   * another; and the ones the kitchen already uses, a tap away — narrowed to
+   * the ones that look like what is being typed.
+   */
+  function dietEditor(st, api) {
+    const list = dietOf(st);
+    const now = h('div');
+    const warning = h('div');
+    const picks = h('div');
+    const inUse = () => tagsInUse(store.clients, 'tags');
+
+    const box = posText({
+      value: '',
+      placeholder: 'Ej. No puerco',
+      onChange: () => { mount(warning); paintPicks(); },
+      onkeydown: (event) => {
+        if (event.key !== 'Enter') return;
+        // Enter adds it. It must not also move the flow to the next step.
+        event.preventDefault();
+        add(box.value);
+      },
+    });
+
+    function add(text) {
+      const tag = kitchenSpelling(text, inUse());
+      if (!tag) return;
+      const there = list.find((one) => sameDiet(one, tag));
+      if (there) {
+        mount(warning, posNote(`«${there}» ya está en su lista.`, 'bad'));
+        return;
+      }
+      list.push(tag);
+      box.value = '';
+      box.focus();
+      paint();
+      api.revalidate();
+    }
+
+    function remove(tag) {
+      list.splice(list.indexOf(tag), 1);
+      paint();
+      api.revalidate();
+    }
+
+    function paintNow() {
+      mount(now, list.length
+        ? h('div.posdiet', list.map((tag) => h('button.posdiet__tag', {
+            type: 'button',
+            'aria-label': `Quitar ${tag}`,
+            onclick: () => remove(tag),
+          }, icon('noEat'), h('span', tag), icon('x'))))
+        : posNote('Come de todo: no tiene nada en la lista.', 'ok'));
+    }
+
+    function paintPicks() {
+      const typed = dietKey(box.value);
+      const options = inUse()
+        .filter((entry) => !list.some((one) => sameDiet(one, entry.tag)))
+        .filter((entry) => !typed || dietKey(entry.tag).includes(typed))
+        .slice(0, 12);
+      mount(picks, options.length
+        ? h('div.posdiet__more',
+            posLabel(typed ? 'Las que se parecen' : 'Las que ya se usan en la cocina'),
+            h('div.poschips', options.map((entry) => h('button.poschip', {
+              type: 'button',
+              onclick: () => add(entry.tag),
+            }, `+ ${entry.tag}`))))
+        : null);
+    }
+
+    function paint() {
+      mount(warning);
+      paintNow();
+      paintPicks();
+    }
+    paint();
+
+    return h('div',
+      posLabel('No puede comer'),
+      now,
+      h('div.posadd.posdiet__add',
+        h('div.grow', posField('Agregar', box)),
+        h('button.posbtn.posbtn--add', { type: 'button', onclick: () => add(box.value) },
+          icon('plus'), 'Agregar')),
+      warning,
+      picks);
+  }
+
   return () => {
     window.removeEventListener('resize', onResize);
     clearTimeout(resizeTimer);
@@ -1411,6 +1579,9 @@ export function renderQuick() {
 /* --- Small helpers ---------------------------------------------------------- */
 
 const firstName = (client) => String(client?.name || '').trim().split(/\s+/)[0] || 'el cliente';
+
+/** "No pollo · No puerco", or that there is nothing on the list. */
+const dietWords = (tags) => (tags.length ? tags.join(' · ') : 'Nada, come de todo');
 
 const statusWord = (status) => (
   status === 'paused' ? 'en pausa' : status === 'inactive' ? 'ya no come aquí' : 'activo');

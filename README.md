@@ -503,6 +503,7 @@ Cada persona que trabaja en la cocina tiene su usuario: su **nombre**, su
 | Nueva farma | Dar de alta una farma con sus ubicaciones |
 | Calendario semanal | Cambiar qué días tiene pedido una persona |
 | Cantidad de pedidos | Cambiar cuántos pedidos lleva al día (1 ó 2) |
+| No puede comer | Cambiar lo que una persona no puede comer: no pollo, no puerco… |
 | Nuevo cliente | Dar de alta a una persona en una farma |
 | Pausar o reactivar | Poner a alguien en pausa, o volverlo a activar |
 | Último día de pedido | Poner hasta qué día recibe pedido una persona |
@@ -515,12 +516,15 @@ Los cambios llegan solos. Si el encargado le apaga un permiso a alguien que
 está trabajando, el botón desaparece de su pantalla en ese momento; si lo
 desactiva, la pantalla regresa al teclado y su PIN deja de servir. La lista del
 panel nunca enseña los PIN: dice cuánto puede hacer cada quien —«Puede hacer
-todo», «Solo empacar», «5 de 7 permisos»— y nada más.
+todo», «Solo empacar», «5 de 8 permisos»— y nada más.
 
 **Quien ya existía puede hacer todo.** Los usuarios dados de alta antes de los
-permisos no tienen ninguno guardado y siguen viendo los siete botones, como
-hasta hoy. La primera vez que alguien los edite y guarde, quedan escritos uno
-por uno.
+permisos no tienen ninguno guardado y ven todos los botones, como hasta hoy.
+La primera vez que alguien los edite y guarde, quedan escritos uno por uno.
+
+**Un botón nuevo** —como *No puede comer*— le aparece solo a quien podía hacer
+todo. A quien el encargado le había recortado el menú no se le agrega: se lo
+tiene que prender en su usuario.
 
 Lo que se hace desde el menú de la cocina queda **firmado con el nombre de
 quien lo hizo**, no con el de la cuenta de la cocina.
@@ -638,8 +642,20 @@ propio nombre y nada del panel adentro: abre directo en «¿Quién eres?» y, co
 el PIN, en el menú de esa persona —sólo con lo que tiene permitido—:
 
 - **Empacar**, arriba y de lado a lado: es lo que se hace todas las mañanas.
-- Debajo, dos columnas: *Nueva farma*, *Calendario semanal* y *Cantidad de
-  pedidos*; *Nuevo cliente*, *Pausar o reactivar* y *Último día de pedido*.
+- Debajo, dos columnas: *Nueva farma*, *Calendario semanal*, *Cantidad de
+  pedidos* y *No puede comer*; *Nuevo cliente*, *Pausar o reactivar* y *Último
+  día de pedido*.
+
+**No puede comer** — escoges a la persona y ves lo que ya tiene, en rojo. Tocar
+uno lo quita; para agregar, se escribe como se dice en la cocina —*No puerco*,
+*No pollo*— y *Agregar* (o Enter). Abajo están las que ya se usan, para
+agregarlas de un toque, y al escribir se quedan sólo las que se parecen. Si la
+cocina ya escribe lo mismo de otra forma —*sin pollo*—, se guarda como ya se
+escribe, para que el tablero cuente una sola línea; algo nuevo escrito sin
+«no» se guarda con él: *res* queda *No res*. Antes de guardar se ve qué se
+agrega y qué se quita. Es la misma lista que **No puede comer** en la ficha
+del panel, la pantalla de empaque y el tablero de hoy — y, como siempre,
+**nunca sale en la etiqueta**.
 
 Cobrar, la caja y lo cobrado hoy no están: son del mostrador, y la *Acción
 rápida* del panel sigue igual que siempre.
@@ -958,9 +974,12 @@ config/packing                   -- cómo se reparte el empaque
 
 packers/{packerId}               -- cada persona que trabaja en la cocina
   name, pin, active              -- el PIN es una etiqueta, no una contraseña
-  can { pack, newFarm, week,     -- qué botones ve en la cocina. Una llave
-        meals, newClient,           que falta vale sí: así quien ya existía
-        status, lastDay }           sigue pudiendo todo. Se guardan las siete
+  can { pack, newFarm, week,     -- qué botones ve en la cocina. Sin nada
+        meals, diet, newClient,     guardado, todo vale sí: así quien ya
+        status, lastDay }           existía sigue pudiendo todo. Se guardan
+                                    las ocho; una que falta vale lo mismo
+                                    que las demás si todas son sí, y no si
+                                    alguna es no
   createdAt, updatedAt, updatedByName
 
 packRuns/{YYYY-MM-DD_lineId}     -- una libreta, una mañana; nunca se borra

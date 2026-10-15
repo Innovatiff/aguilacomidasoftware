@@ -442,6 +442,8 @@ export const ABILITIES = [
     hint: 'Cambiar qué días tiene pedido una persona.' },
   { key: 'meals', title: 'Cantidad de pedidos',
     hint: 'Cambiar cuántos pedidos lleva al día.' },
+  { key: 'diet', title: 'No puede comer',
+    hint: 'Cambiar lo que una persona no puede comer: no pollo, no puerco…' },
   { key: 'newClient', title: 'Nuevo cliente',
     hint: 'Dar de alta a una persona en una farma.' },
   { key: 'status', title: 'Pausar o reactivar',
@@ -458,11 +460,20 @@ export const ABILITIES = [
  * as they did — their records have no permissions on them at all. The first
  * time the manager opens and saves one, every permission is written out, so
  * after that nothing about that person rests on a default.
+ *
+ * Except a button that arrived after they were saved. Somebody the manager
+ * left able to do everything gets it too — "Puede hacer todo" stays all of
+ * it. Somebody whose menu was cut down does not: a new power is not handed to
+ * the person the manager had deliberately given less, until the manager says
+ * so.
  */
 export function abilitiesOf(packer) {
   const stored = packer?.can && typeof packer.can === 'object' ? packer.can : {};
+  const fallback = Object.values(stored).every((value) => value !== false);
   const out = {};
-  for (const { key } of ABILITIES) out[key] = stored[key] !== false;
+  for (const { key } of ABILITIES) {
+    out[key] = key in stored ? stored[key] !== false : fallback;
+  }
   return out;
 }
 

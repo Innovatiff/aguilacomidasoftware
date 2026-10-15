@@ -1545,3 +1545,42 @@
 }
 .posplace__x:hover { background: rgba(0, 0, 0, .06); }
 .posplace__x svg { width: 24px; height: 24px; }
+
+/* --- The kitchen's menu, lying down ------------------------------------------
+   Under Empacar, each button lies on its side: the icon, then what it is and
+   what it does, read left to right. Standing up, three of them filled a
+   768px screen; lying down, four fit in less room than three did — which is
+   what left space for No puede comer without the menu having to scroll. */
+
+.poscol .postile {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-content: center;
+  column-gap: 16px;
+  row-gap: 2px;
+  min-height: 88px;
+  padding: 14px 18px;
+}
+.poscol .postile__ico { grid-row: 1 / span 2; align-self: center; }
+.poscol .postile__name { align-self: end; }
+.poscol .postile__sub { align-self: start; }
+
+/* --- No puede comer: the list being edited ---------------------------------- */
+
+/* Each thing they cannot eat is a button that takes it off. Red, because a
+   mistake on this list ends up in somebody's mouth. */
+.posdiet { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
+.posdiet__tag {
+  display: inline-flex; align-items: center; gap: 10px;
+  min-height: 56px; padding: 0 12px 0 16px;
+  font: inherit; font-size: 21px; font-weight: 800;
+  background: #fdecec; color: var(--pos-bad);
+  border: 3px solid var(--pos-bad); border-radius: var(--pos-r);
+  cursor: pointer;
+}
+.posdiet__tag svg { width: 22px; height: 22px; flex: none; }
+.posdiet__tag:hover { background: #fbdcdc; }
+.posdiet__tag:focus-visible { outline: 4px solid var(--pos-brand); outline-offset: 3px; }
+.posdiet__add { margin-top: 18px; }
+.posdiet__more { margin-top: 16px; }

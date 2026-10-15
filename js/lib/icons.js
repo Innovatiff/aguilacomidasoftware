@@ -44,6 +44,7 @@ export const PATHS = {
   calendar:  '<rect x="3" y="4.5" width="18" height="16.5" rx="2"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/>',
   box:       '<path d="m21 8-9-5-9 5v8l9 5 9-5z"/><path d="m3 8 9 5 9-5M12 13v8"/>',
   utensils:  '<path d="M4 2.5v6a3 3 0 0 0 6 0v-6M7 8.5V21"/><path d="M17.5 2.5c-1.7 1.4-2.5 3.4-2.5 5.8 0 1.9.6 3.2 2.5 3.7V21"/>',
+  noEat:     '<path d="M4 2.5v6a3 3 0 0 0 6 0v-6M7 8.5V21"/><path d="M17.5 2.5c-1.7 1.4-2.5 3.4-2.5 5.8 0 1.9.6 3.2 2.5 3.7V21"/><path d="m2.5 3.5 19 17"/>',
   wallet:    '<path d="M20 8V6.5a2 2 0 0 0-2-2H5.5A2.5 2.5 0 0 0 3 7v10a2.5 2.5 0 0 0 2.5 2.5H18a2 2 0 0 0 2-2V16"/><path d="M21 8.5h-4.5a3.5 3.5 0 0 0 0 7H21z"/>',
   card:      '<rect x="2" y="5" width="20" height="14" rx="2.5"/><path d="M2 10h20"/>',
   cash:      '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>',
