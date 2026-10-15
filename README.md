@@ -681,9 +681,12 @@ rápida* del panel sigue igual que siempre.
 pizarrones de la pared, MEDIAS y COMPLETAS, pero contado por la computadora,
 cliente por cliente, cada vez que se abre:
 
-- Arriba, cuántas **medias** (quien lleva una comida hoy), cuántas
-  **completas** (quien lleva dos o más) y cuántas **comidas** en total, cada
-  número con el nombre de su libreta al lado: «Libreta 1: 2».
+- Arriba, cuántas **medias**, cuántas **completas** y cuántas **comidas** en
+  total, cada número con el nombre de su libreta al lado: «Libreta 1: 2».
+  Se cuentan como en la cocina: **medias son todos** los que se empacan hoy
+  —los de una comida y los de dos—, y **completas solo los de dos comidas** (o
+  más). Quien lleva dos sale en los dos tableros, así que siempre hay más
+  medias que completas.
 - Debajo, el tablero de medias y el de completas, uno debajo del otro. Cada
   línea se lee sola, como en el pizarrón: **«Sin pollo · Libreta 1: 1 ·
   Libreta 2: 0 · Total 1»**. Ningún número aparece sin el nombre de su

@@ -120,12 +120,12 @@ export function openDayBoard() {
 
       h('div.dboard__stats',
         stat({
-          title: 'Medias', note: 'llevan 1 comida',
+          title: 'Medias', note: 'todos: 1 o 2 comidas',
           big: plural(medias.people.total, 'persona', 'personas'),
           tally: medias.people, lines: board.lines,
         }),
         stat({
-          title: 'Completas', note: 'llevan 2 comidas',
+          title: 'Completas', note: 'solo los de 2 comidas',
           big: plural(completas.people.total, 'persona', 'personas'),
           tally: completas.people, lines: board.lines,
           extra: completas.more
@@ -142,9 +142,10 @@ export function openDayBoard() {
       board.kinds.map((kind) => whiteboard(kind, board.lines, opened)),
 
       h('p.dboard__foot',
-        'Cuenta a cada persona que se empaca hoy, en su libreta. Media es quien lleva una '
-        + 'comida hoy; completa, quien lleva dos o más. Lo que no pueden comer sale de su '
-        + 'ficha: «No puede comer», y lo de sus preferencias que dice «sin».'),
+        'Cuenta a cada persona que se empaca hoy, en su libreta. Las medias son todos —los de '
+        + 'una comida y los de dos—; las completas, solo los de dos comidas (o más). Por eso '
+        + 'siempre hay más medias que completas. Lo que no pueden comer sale de su ficha: '
+        + '«No puede comer», y lo de sus preferencias que dice «sin».'),
     ];
   }
 
@@ -185,7 +186,7 @@ function stat({ title, note, big, tally, lines, extra, dark = false }) {
  */
 function whiteboard(kind, lines, opened) {
   const word = kind.title.toLowerCase();
-  const who = kind.id === 'medias' ? 'llevan 1 comida' : 'llevan 2 comidas o más';
+  const who = kind.id === 'medias' ? 'llevan 1 o 2 comidas' : 'llevan 2 comidas o más';
 
   return h(`section.dwb.dwb--${kind.id}`, { 'aria-label': kind.title },
     h('div.dwb__head',

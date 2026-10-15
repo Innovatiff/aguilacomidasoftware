@@ -16,9 +16,12 @@
  *   not packed, so they are not on the board; they are listed apart instead,
  *   because a person nobody packs for is the thing to fix first.
  *
- *   **Media or completa by today's plates.** One comida today is a media; two
- *   or more is a completa. Today's, not the plan's: an extra plate on Saturday
- *   is a plate that has to be made on Saturday.
+ *   **Medias count everybody; completas only two comidas.** Everybody packed
+ *   today takes a media — the people on one comida and the people on two — so
+ *   the MEDIAS board counts all of them. The COMPLETAS board counts only the
+ *   people on two comidas (or more). Somebody on two is on both boards, and
+ *   there are always at least as many medias as completas. By today's plates,
+ *   not the plan's: an extra plate on Saturday is made on Saturday.
  *
  *   **What they cannot eat, from their file.** Everything in "No puede comer",
  *   and whatever in their preferences says *sin* or *no* — "sin picante" is a
@@ -85,10 +88,11 @@ export function restrictionsOf(client) {
  * @returns {object}
  *   lines    `[{ id, name }]` — one column each
  *   people   `{ total, byLine }` and plates the same, for the whole day
- *   kinds    `[{ id, title, note, people, plates, more, rows }]` — medias and
- *            completas; `rows` is `[{ key, label, total, byLine, names }]`,
- *            alphabetical, with `names` the people behind each number by
- *            libreta; `more` is how many completas take three or more
+ *   kinds    `[{ id, title, note, people, plates, more, rows }]` — medias
+ *            (everybody packed today) and completas (two comidas or more);
+ *            `rows` is `[{ key, label, total, byLine, names }]`, alphabetical,
+ *            with `names` the people behind each number by libreta; `more` is
+ *            how many of the group take three or more
  *   outside  who eats today but is in no libreta
  */
 export function dayBoard({ lines = [], farms = [], clients = [], day = todayKey() }) {
@@ -146,9 +150,11 @@ export function dayBoard({ lines = [], farms = [], clients = [], day = todayKey(
   const tally = () => ({ total: 0, byLine: zero() });
   const add = (into, line, n = 1) => { into.total += n; into.byLine[line] += n; };
 
+  // A media for everybody packed today, one comida or two; a completa only for
+  // the ones on two (or more). The kitchen counts it that way on its boards.
   const KINDS = [
-    { id: 'medias', title: 'Medias', note: '1 comida por persona', holds: (n) => n === 1 },
-    { id: 'completas', title: 'Completas', note: '2 comidas por persona', holds: (n) => n >= 2 },
+    { id: 'medias', title: 'Medias', note: 'todos: 1 o 2 comidas', holds: (n) => n >= 1 },
+    { id: 'completas', title: 'Completas', note: 'solo los de 2 comidas', holds: (n) => n >= 2 },
   ];
 
   const kinds = KINDS.map(({ id, title, note, holds }) => {
