@@ -115,13 +115,12 @@ export function renderReceipt(context) {
         ? h('div.stack.stack-3',
             sectionLabel('Es por'),
             list(paidFor().map((row) => itemRow({
-              lead: h('span.item__ico', icon('receipt')),
+              lead: h('span.item__ico', icon(row.kind === 'credit' ? 'wallet' : 'receipt')),
               title: appliedTitle(row),
-              meta: row.kind === 'charge'
-                ? 'Deuda agregada'
-                : row.moved ? 'Periodo de comida · se movió aquí, a la quincena que pagó' : 'Periodo de comida',
+              meta: rowMeta(row),
               end: h('span.w-700', money(row.amount)),
-              onClick: () => go(`/invoices/${row.invoiceId}`),
+              chevron: !!row.invoiceId,
+              onClick: () => row.invoiceId && go(`/invoices/${row.invoiceId}`),
             })), { card: true }))
         : null,
 
@@ -177,7 +176,8 @@ export function renderReceipt(context) {
    * too. None of that is reversible-by-accident, so it asks first.
    */
   async function cancel() {
-    const rows = paidFor();
+    // Money kept "a cuenta" had no fortnight to reopen.
+    const rows = paidFor().filter((row) => row.kind !== 'credit');
     const covered = rows.map(appliedTitle).join(', ');
 
     const ok = await confirm({
@@ -198,6 +198,15 @@ export function renderReceipt(context) {
     } catch (error) {
       toastBad(errorText(error));
     }
+  }
+
+  /** What one line of "Es por" is: a debt, a fortnight, or money kept on account. */
+  function rowMeta(row) {
+    if (row.kind === 'charge') return 'Deuda agregada';
+    if (row.kind === 'credit') return 'Sin quincena todavía: quedó a cuenta';
+    if (row.moved) return 'Periodo de comida · se movió aquí, a la quincena que pagó';
+    if (row.early) return 'Periodo de comida · a cuenta, antes de que terminara';
+    return 'Periodo de comida';
   }
 
   /** Where this payment sits now — see `paidFor` in js/lib/billing.js. */

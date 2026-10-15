@@ -37,7 +37,7 @@ import {
   tagsInUse,
 } from '../data/clients.js';
 import {
-  takePayment, addCharge, adjustBalance, billsOf, payableRows, nothingOwedYet,
+  takePayment, addCharge, adjustBalance, billsOf, payableRows, aheadRows, nothingOwedYet,
 } from '../data/invoices.js';
 import { watchReceiptsOn, totalOf, cancelledIds } from '../data/receipts.js';
 import { printReceipt } from '../ui/print.js';
@@ -545,10 +545,10 @@ export function renderQuick() {
       subject: subjectOf,
       state: { amount: 0, method: null, setCycle: false, owing: null },
       steps: (s) => {
-        // What this person can pay today — read from their own bills once they
-        // are picked, the same way the payment itself will. Until it arrives
-        // nothing can be charged; it is a moment, and a guess here is how
-        // somebody gets charged for a fortnight they have not eaten yet.
+        // What this person owes today — read from their own bills once they
+        // are picked, the same way the payment itself will. It is what the
+        // amount starts at and what the screen explains the money against;
+        // it never stops a payment. Whatever they hand over goes in.
         const owing = s.client && s.owing?.clientId === s.client.id ? s.owing : null;
         const total = owing ? owing.total : 0;
         return [
@@ -562,7 +562,7 @@ export function renderQuick() {
               : total > 0.005
                 ? `Debe ${money(total)}: ${owing.rows.map((row) => row.title).join(', ')}.`
                 : 'Está al corriente.',
-            ready: (st) => !!owing && st.amount > 0 && st.amount <= total + 0.005,
+            ready: (st) => !!owing && st.amount > 0,
             next: 'Siguiente',
             build: (st, api) => {
               if (!owing) {
@@ -570,38 +570,40 @@ export function renderQuick() {
                 return posNote('Viendo lo que debe…', 'info');
               }
               // Money the old way of taking payments put on a fortnight before
-              // it was served makes the one they came to pay look paid. Put
-              // right here, in front of them, before anything is charged.
+              // it was served. Said, with a way to put it right — and the
+              // keypad right under it, because the payment goes in either way.
               const ahead = owing.ahead
                 ? h('div',
-                    posNote(`${firstName(st.client)} tiene un pago puesto en una quincena antes de `
-                      + 'que se sirviera, y por eso lo que debe sale mal. Corrígelo primero: el pago '
-                      + 'va a la quincena anterior, que es la que pagó.', 'bad'),
-                    h('button.posbtn.posbtn--go', {
+                    posNote(`${firstName(st.client)} tiene un pago puesto por adelantado. Se puede `
+                      + 'corregir ahora o después; el cobro entra igual.', 'warn'),
+                    h('button.posbtn', {
                       type: 'button', onclick: () => fixAhead(st, api),
                     }, icon('check'), h('span', 'Revisar y corregir')))
                 : null;
-              if (total <= 0.005) {
-                return h('div', ahead, posNote(nothingOwedYet(owing.payer, today()), 'ok'));
-              }
 
-              // Said while the number is being typed, not after: more than
-              // they owe is refused, and the person across the counter should
-              // hear why before the money changes hands.
+              // Said while the number is being typed, not after: where money
+              // past what they owe goes, so nobody is surprised by the receipt.
+              const fortnight = periodCharge(st.client, store.pricing);
               const warn = h('div');
               const paint = () => mount(warn, st.amount > total + 0.005
-                ? posNote(`Debe ${money(total)}. Aquí no se cobra por adelantado: baja el monto.`, 'bad')
+                ? posNote(total > 0.005
+                  ? `Debe ${money(total)}. Lo que sobra queda a cuenta de su quincena en curso.`
+                  : 'No debe nada de lo ya servido: queda a cuenta de su quincena en curso.', 'info')
                 : null);
               paint();
               return h('div',
                 ahead,
+                total <= 0.005 ? posNote(nothingOwedYet(owing.payer, today()), 'info') : null,
                 posMoney({
                   value: st.amount || '',
                   onChange: (v) => { st.amount = v; paint(); api.revalidate(); },
                   quick: [
-                    { label: `Todo lo que debe ${money(total)}`, value: total },
+                    total > 0.005 ? { label: `Todo lo que debe ${money(total)}`, value: total } : null,
                     owing.rows.length > 1
                       ? { label: `Solo ${owing.rows[0].title} ${money(owing.rows[0].owed)}`, value: owing.rows[0].owed }
+                      : null,
+                    total <= 0.005 && fortnight.priced && fortnight.amount > 0
+                      ? { label: `Una ${periodWord(st.client)} ${money(fortnight.amount)}`, value: fortnight.amount }
                       : null,
                   ].filter(Boolean),
                 }),
@@ -696,6 +698,7 @@ export function renderQuick() {
           clientId: client.id,
           payer,
           anchor,
+          bills,
           ahead: plan.moves.length ? plan : null,
           ...payableRows(payer, bills, store.pricing, { day: today(), setCycle }),
         };
@@ -719,18 +722,34 @@ export function renderQuick() {
     api.refresh();
   }
 
-  /** "26 sep – 9 oct" — what an amount pays, oldest first, the way the payment applies it. */
+  /**
+   * "26 sep – 9 oct" — what an amount pays, oldest first, the way the payment
+   * applies it; and, past what is owed, the fortnight it waits on.
+   */
   function paidFor(owing, amount) {
     if (!owing) return '—';
-    const parts = [];
-    let left = Number(amount) || 0;
-    for (const row of owing.rows) {
-      if (left <= 0.005) break;
-      const take = Math.min(left, row.owed);
-      left = round2(left - take);
-      parts.push(take < row.owed - 0.005 ? `${row.title} (una parte)` : row.title);
-    }
-    return parts.join(', ') || '—';
+    const value = Number(amount) || 0;
+    const spread = (rows, money0) => {
+      const parts = [];
+      let left = money0;
+      for (const row of rows) {
+        if (left <= 0.005) break;
+        const take = Math.min(left, row.owed);
+        left = round2(left - take);
+        parts.push(take < row.owed - 0.005 ? `${row.title} (una parte)` : row.title);
+      }
+      return { parts, left };
+    };
+    const extra = round2(value - owing.total);
+    const served = spread(owing.rows, Math.min(value, owing.total));
+    const waiting = extra > 0.005
+      ? spread(aheadRows(owing.payer, owing.bills || [], store.pricing, { day: today(), amount: extra }), extra)
+      : { parts: [], left: 0 };
+    return [
+      served.parts.join(', '),
+      waiting.parts.length ? `a cuenta de ${waiting.parts.join(', ')}` : '',
+      waiting.left > 0.005 ? `${money(waiting.left)} a cuenta` : '',
+    ].filter(Boolean).join(' · ') || '—';
   }
 
   /**

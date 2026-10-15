@@ -42,9 +42,13 @@ const isSettled = (bill) => (Number(bill.paid) || 0) >= (Number(bill.amount) || 
 /**
  * Paid before the fortnight it sits on could be paid: before its last day,
  * and not on or after the last day of somebody who was leaving.
+ *
+ * Not money the counter kept "a cuenta" on purpose (`entry.ahead`): that was
+ * paid when the system had nothing older for it to go to, and the fortnight
+ * before it was already paid. Moving it there would pay that one twice.
  */
 export const isAhead = (bill, entry, client = null) =>
-  !isCharge(bill) && !!entry?.date
+  !isCharge(bill) && !!entry?.date && !entry.ahead
   && !isPayable(periodOfBill(bill), client, String(entry.date));
 
 /**
@@ -282,7 +286,9 @@ export function clientsWithAdvance(receipts = [], { cancelled = new Set(), clien
     if (!client) continue;
     if (client.advanceFixedOn && String(receipt.date || '') <= client.advanceFixedOn) continue;
     for (const row of receipt.applied || []) {
-      if (row.kind === 'charge' || !row.periodEnd) continue;
+      // A debt by hand, or money kept "a cuenta" on purpose: neither is the
+      // old misplacement.
+      if (row.kind === 'charge' || row.ahead || !row.periodEnd) continue;
       const bill = { periodStart: row.periodStart, periodEnd: row.periodEnd };
       if (isAhead(bill, { date: receipt.date }, client)) ids.add(receipt.clientId);
     }

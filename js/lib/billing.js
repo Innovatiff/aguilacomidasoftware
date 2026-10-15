@@ -291,8 +291,12 @@ export const appliedTitle = (row) =>
  * when no bill in hand holds the payment: it was cancelled, or its bills are
  * older than the ones that were read.
  *
- * Each row: `{ invoiceId, title, periodStart, periodEnd, kind, amount, moved }`,
- * oldest first.
+ * Money a payment kept "a cuenta" — with no fortnight it could wait on — comes
+ * last, as a row of its own with no bill (`kind: 'credit'`).
+ *
+ * Each row: `{ invoiceId, title, periodStart, periodEnd, kind, amount, moved,
+ * early }`, oldest first. `early` is money that went in before the fortnight
+ * it sits on had ended: "a cuenta" of it.
  */
 export function paidFor(receipt, bills = []) {
   const held = (bills || []).flatMap((bill) => {
@@ -306,10 +310,17 @@ export function paidFor(receipt, bills = []) {
       kind: bill.kind || 'period',
       amount: round2(mine.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0)),
       moved: mine.some((payment) => !!payment.movedFrom),
+      early: !isCharge(bill) && mine.every((payment) => !!payment.date
+        && String(payment.date) < String(bill.periodEnd || '')),
     }];
   });
-  if (!held.length) return receipt?.applied || [];
-  return held.sort((a, b) => String(a.periodStart).localeCompare(String(b.periodStart)));
+  const rows = held.length
+    ? held.sort((a, b) => String(a.periodStart).localeCompare(String(b.periodStart)))
+    : (receipt?.applied || []);
+  const loose = round2(receipt?.unapplied || 0);
+  return loose > 0.005
+    ? [...rows, { invoiceId: null, title: 'A cuenta', kind: 'credit', amount: loose }]
+    : rows;
 }
 
 /** Deterministic delivery id, so two devices marking the same day converge. */

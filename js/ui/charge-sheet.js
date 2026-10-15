@@ -6,12 +6,13 @@
  * because that is how it happens — someone walks up and hands over cash, and
  * what it settles is worked out from there.
  *
- * **It only ever takes money for food already served.** The fortnight somebody
- * is eating now is paid the day it ends, so the amount is pre-filled with what
- * they owe — bills still open and fortnights served and not yet billed — and a
- * bigger number is not accepted. Somebody who owes nothing is told so, with the
- * day their running fortnight is paid, instead of being offered a fortnight
- * ahead.
+ * **It charges for food already served, and it never turns money away.** The
+ * amount is pre-filled with what they owe — bills still open and fortnights
+ * served and not yet billed — and it says, before the money is taken, what
+ * that pays. A bigger number, or a payment from somebody who owes nothing,
+ * still goes in: the dates on a client can be wrong, and a payment that
+ * happened has to be in the software. The sheet says where the rest waits —
+ * on the fortnight being served — and the payment goes through.
  */
 
 import { h, mount } from '../lib/dom.js';
@@ -20,7 +21,9 @@ import {
   field, moneyInput, input, select, textarea, defList, defRow, button, alert, switchRow,
 } from './kit.js';
 import { icon } from '../lib/icons.js';
-import { takePayment, billsOf, payableRows, nothingOwedYet } from '../data/invoices.js';
+import {
+  takePayment, billsOf, payableRows, aheadRows, nothingOwedYet,
+} from '../data/invoices.js';
 import { cycleIsSet, servingSince } from '../data/clients.js';
 import { planAdvanceFix } from '../lib/advance.js';
 import { openAdvanceSheet } from './advance-sheet.js';
@@ -59,27 +62,10 @@ export async function openChargeSheet({ client, pricing, author }) {
 
   /*
    * Money the old way of taking payments put on a fortnight before it was
-   * served makes the fortnight they have come to pay look paid already — so
-   * it is put right first, with the cashier seeing what moves. Or knowingly
-   * not, and the sheet says so.
+   * served. Said inside the sheet, with a way to put it right — never in the
+   * way of taking the money.
    */
-  let uncorrected = false;
-  const ahead = planAdvanceFix({ client, bills, since: servingSince(client), day: today() });
-  if (ahead.moves.length) {
-    const done = await openAdvanceSheet({ client, author, plan: ahead, beforeCharge: true });
-    if (done === undefined) return null;
-    if (done) {
-      client = { ...client, paidThrough: done.paidThrough, advanceFixedOn: today() };
-      try {
-        bills = await billsOf(client.id);
-      } catch (error) {
-        toastBad(errorText(error));
-        return null;
-      }
-    } else {
-      uncorrected = true;
-    }
-  }
+  let advance = planAdvanceFix({ client, bills, since: servingSince(client), day: today() });
 
   const fortnight = chargeFor(client, pricing);
   const word = periodWord(client);
@@ -122,6 +108,33 @@ export async function openChargeSheet({ client, pricing, author }) {
       const quickRow = h('div.row.row--wrap', { style: { gap: '6px' } });
       const cycleLine = h('div.t-sm.c-soft');
       const nothing = h('div');
+      const advanceNote = h('div');
+
+      function paintAdvance() {
+        mount(advanceNote, advance.moves.length
+          ? h('div.stack.stack-2',
+              alert('Tiene un pago puesto por adelantado. Se puede corregir ahora o después desde '
+                + 'su ficha; el cobro entra igual.', 'warn'),
+              button('Revisar y corregir', {
+                variant: 'soft', size: 'sm', icon: 'check', onClick: fixAdvance,
+              }))
+          : null);
+      }
+
+      async function fixAdvance() {
+        const done = await openAdvanceSheet({ client, author, plan: advance });
+        if (!done) return;
+        client = { ...client, paidThrough: done.paidThrough, advanceFixedOn: today() };
+        try {
+          bills = await billsOf(client.id);
+        } catch (error) {
+          toastBad(errorText(error));
+          return;
+        }
+        advance = planAdvanceFix({ client, bills, since: servingSince(client), day: today() });
+        paintAdvance();
+        recompute({ resetAmount: true });
+      }
 
       const amountBox = moneyInput({
         value: amount || '',
@@ -147,7 +160,6 @@ export async function openChargeSheet({ client, pricing, author }) {
 
       function repaint() {
         const value = Number(amount) || 0;
-        const tooMuch = value > now.total + 0.005;
 
         mount(owedRow, defList([
           defRow('Debe hoy', now.total > 0.005 ? money(now.total) : 'Nada', { total: true }),
@@ -157,11 +169,17 @@ export async function openChargeSheet({ client, pricing, author }) {
           now.total > 0.005 ? quick(`Todo lo que debe ${money(now.total)}`, () => setAmount(now.total)) : null,
           now.rows.length > 1
             ? quick(`Solo ${now.rows[0].title} ${money(now.rows[0].owed)}`, () => setAmount(now.rows[0].owed))
+            : null,
+          // Somebody who owes nothing is still paying something: usually a
+          // fortnight's worth.
+          now.total <= 0.005 && fortnight
+            ? quick(`Una ${word} ${money(fortnight)}`, () => setAmount(fortnight))
             : null);
 
         mount(submit, icon('cash'), `Cobrar ${money(value)}`);
-        submit.disabled = busy || !(value > 0) || tooMuch || !now.rows.length;
-        mount(covers, explain(value, now));
+        submit.disabled = busy || !(value > 0);
+        mount(covers, explain(value, now,
+          aheadRows(now.payer, bills, pricing, { day: date, amount: Math.max(0, value - now.total) })));
 
         const running = periodOf(now.payer, date);
         const payDay = payDayAfter(running);
@@ -180,7 +198,6 @@ export async function openChargeSheet({ client, pricing, author }) {
 
           const value = Number(amount);
           if (!(value > 0)) { toastBad('El monto debe ser mayor a cero.'); return; }
-          if (!now.rows.length) { toastBad(nothingOwedYet(now.payer, date)); return; }
 
           busy = true;
           submit.disabled = true;
@@ -212,9 +229,7 @@ export async function openChargeSheet({ client, pricing, author }) {
         ]),
         owedRow),
 
-      uncorrected
-        ? alert('Tiene un pago por adelantado sin corregir: lo que debe puede salir menos de lo real.', 'warn')
-        : null,
+      advanceNote,
 
       nothing,
 
@@ -272,6 +287,7 @@ export async function openChargeSheet({ client, pricing, author }) {
       submit);
 
       repaint();
+      paintAdvance();
       return form;
     },
   }).then((receipt) => receipt || null);
@@ -283,41 +299,58 @@ const quick = (label, onClick) => button(label, { variant: 'soft', size: 'sm', o
  * Says in words what the money will settle, before it is taken.
  *
  * The cashier is holding cash and the person is standing there: the moment to
- * catch "that pays two fortnights, not one" — or "that is more than they owe" —
- * is now, not on the receipt.
+ * catch "that pays two fortnights, not one" — or "that is more than they owe,
+ * and the rest waits on the fortnight being served" — is now, not on the
+ * receipt. It explains; it never stops the payment.
+ *
+ * @param {object[]} ahead  where anything past what is owed would wait
  */
-function explain(value, now) {
-  if (!now.rows.length) return '';
+function explain(value, now, ahead = []) {
   if (!(value > 0)) return 'Escribe el monto recibido.';
-  if (value > now.total + 0.005) {
-    return `Debe ${money(now.total)}. No se cobra por adelantado: baja el monto a `
-      + `${money(now.total)} o menos.`;
-  }
 
-  // The same order the payment itself uses: oldest first.
-  const parts = [];
-  let left = value;
-  for (const row of now.rows) {
-    if (left <= 0.005) break;
-    const take = Math.min(left, row.owed);
-    left = round2(left - take);
-    parts.push(`${row.title} (${money(take)})`);
-  }
+  // The same order the payment itself uses: oldest first, then what waits.
+  const spread = (rows, money0) => {
+    const parts = [];
+    let left = money0;
+    for (const row of rows) {
+      if (left <= 0.005) break;
+      const take = Math.min(left, row.owed);
+      left = round2(left - take);
+      parts.push(`${row.title} (${money(take)})`);
+    }
+    return { parts, left };
+  };
 
-  const owedLeft = round2(now.total - value);
-  return `Paga ${parts.join(', ')}.`
-    + (owedLeft > 0.005 ? ` Quedarían ${money(owedLeft)} pendientes.` : ' Queda al corriente.');
+  const paid = spread(now.rows, Math.min(value, now.total));
+  const waiting = spread(ahead, round2(value - now.total));
+  const owedLeft = round2(now.total - Math.min(value, now.total));
+
+  const said = [];
+  if (paid.parts.length) said.push(`Paga ${paid.parts.join(', ')}.`);
+  if (waiting.parts.length) {
+    said.push(`${paid.parts.length ? 'Lo que sobra queda' : 'Queda'} a cuenta de `
+      + `${waiting.parts.join(', ')}.`);
+  }
+  if (waiting.left > 0.005) said.push(`${money(waiting.left)} quedan a cuenta, sin quincena.`);
+  said.push(owedLeft > 0.005 ? `Quedarían ${money(owedLeft)} pendientes.` : 'Queda al corriente.');
+  return said.join(' ');
 }
 
 /** Tells the client, in their own thread, that the payment landed. */
 async function announce(receipt, client) {
   const label = PAYMENT_METHODS[receipt.method]?.label || 'pago';
-  const what = receipt.applied.map(appliedTitle).join(', ');
+  const served = receipt.applied.filter((row) => !row.ahead).map(appliedTitle);
+  const waiting = receipt.applied.filter((row) => row.ahead).map(appliedTitle);
+  const what = [
+    served.length ? `por ${served.join(', ')}` : '',
+    waiting.length ? `a cuenta de ${waiting.join(', ')}` : '',
+    receipt.unapplied ? `${money(receipt.unapplied)} a cuenta` : '',
+  ].filter(Boolean).join(' y ') || 'a su cuenta';
 
   const text = receipt.balanceAfter > 0.005
-    ? `Recibimos su pago de ${moneyFull(receipt.amount)} (${label}), por ${what}. `
+    ? `Recibimos su pago de ${moneyFull(receipt.amount)} (${label}), ${what}. `
       + `Saldo pendiente: ${money(receipt.balanceAfter)}. Su recibo ${receipt.folio} está en su app.`
-    : `Recibimos su pago de ${moneyFull(receipt.amount)} (${label}), por ${what}. Queda al `
+    : `Recibimos su pago de ${moneyFull(receipt.amount)} (${label}), ${what}. Queda al `
       + `corriente. Su recibo ${receipt.folio} está en su app. ¡Gracias!`;
 
   try {

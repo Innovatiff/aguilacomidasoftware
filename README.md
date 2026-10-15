@@ -296,17 +296,32 @@ que se debía, un recibo dice lo que se entregó y cuándo.
 **Cobros → Cobrar** (o el botón *Cobrar* en Inicio). Escribe el nombre, tócalo,
 confirma el monto.
 
-**Cada quien paga lo que ya comió, nunca por adelantado.** Quien empieza el
-miércoles 7 de octubre paga el miércoles 21, por el 7 al 20. El panel ya trae
-puesto lo que debe de lo ya servido —facturas abiertas y quincenas que ya
-terminaron y nadie había facturado— y **no acepta más que eso**. A quien está
-al corriente le dice *«no debe nada todavía»* y el día en que se paga su
-quincena en curso, en vez de ofrecerle una quincena por adelantado. Una
-quincena se puede pagar desde su último día; la de alguien que se va, desde su
-último día de servicio.
+**Cada quien paga lo que ya comió.** Quien empieza el miércoles 7 de octubre
+paga el miércoles 21, por el 7 al 20. El panel ya trae puesto lo que debe de lo
+ya servido —facturas abiertas y quincenas que ya terminaron y nadie había
+facturado— y eso es lo primero que se paga, de lo más viejo a lo más nuevo.
+Una quincena se puede pagar desde su último día; la de alguien que se va,
+desde su último día de servicio.
 
-Antes de cobrar, el panel dice en palabras a qué quincena va el dinero, para
-que no haya sorpresas con la persona enfrente.
+**Todo pago entra. Nunca se rechaza.** Las fechas de un cliente pueden estar
+mal —su quincena corrida unos días, su fecha de inicio, su último día— y un
+pago que pasó tiene que quedar en el sistema. Así que se puede cobrar siempre,
+sea cual sea su estado: al corriente, en pausa, inactivo o sin precio en su
+plan.
+
+- Si no debe nada de lo ya servido, el panel lo dice —y cuándo se paga su
+  quincena en curso— pero deja cobrar: el pago **queda a cuenta** de la
+  quincena en curso.
+- Si da más de lo que debe, se paga lo que debe y **lo que sobra queda a
+  cuenta** de la quincena en curso, y de las siguientes si alcanza.
+- Si no hay quincena donde ponerlo —ya no viene, o su plan no tiene precio—,
+  el pago entra completo y queda **a cuenta** en su recibo.
+
+Antes de cobrar, el panel dice en palabras a qué va el dinero —«Paga 26 sep –
+9 oct. Lo que sobra queda a cuenta de 10 – 23 oct»—, para que no haya
+sorpresas con la persona enfrente. Lo que queda a cuenta no mueve «pagado
+hasta» ni se marca como pago por adelantado: cuando esa quincena termina, ya
+está pagada.
 
 **El primer pago fija su quincena.** Quien todavía tiene la fecha del rancho
 paga el día que termina su quincena, así que ese pago dice cuál es su día. Si
@@ -345,8 +360,10 @@ nada.
 
 El panel los encuentra solo y los avisa arriba en **Clientes**: *«N clientes
 con pago por adelantado»*. **Revisar** muestra a cada uno con lo que cambia, y
-**Corregir** lo hace. También sale en la ficha de la persona y, si viene a
-pagar sin que se haya corregido, **antes de cobrarle**.
+**Corregir** lo hace. También sale en la ficha de la persona y en la pantalla
+de cobrar, con un botón para corregirlo ahí mismo — pero nunca detiene el
+cobro. Lo que el mostrador deja a cuenta a propósito (ver arriba) no es esto y
+no se toca.
 
 Corregir mueve cada uno de esos pagos a **la quincena anterior**, que es la que
 pagaron. Si esa quincena no tenía factura se emite, pagada; la quincena en curso
@@ -954,7 +971,9 @@ receipts/{receiptId}             -- se escribe una vez y nunca se toca
   clientId, clientName, farmId, farmName, locationName
   amount                         -- negativo si es una cancelación
   method, reference, note, date
-  applied [{ invoiceId, periodStart, periodEnd, amount }]
+  applied [{ invoiceId, periodStart, periodEnd, amount,
+             ahead }]            -- ahead: quedó a cuenta de una quincena en curso
+  unapplied                      -- lo que quedó a cuenta sin quincena donde ponerlo
   balanceAfter
   reversalOf                     -- folio que cancela, si aplica
   takenByName, takenByUid, at

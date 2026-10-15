@@ -38,6 +38,14 @@ import { servingSince } from './clients.js';
 const LOOK_BACK = 4;
 
 /**
+ * How far ahead money that is not owed yet can be kept: a year of fortnights.
+ * Past that — or for somebody with no price on their plan, or who has stopped
+ * coming — what is left is recorded on the receipt as "a cuenta", never
+ * turned away.
+ */
+const MAX_AHEAD = 26;
+
+/**
  * How many days into a fortnight somebody can have started and still pay it
  * whole with their first payment: Wednesday and Saturday are never more than
  * three days apart going back, so this is as far as the collection day before
@@ -446,7 +454,7 @@ export async function payableFor(client, pricing, { day = today(), setCycle = fa
   const anchor = setCycle ? cycleFromPayment(day) : (client.cycleAnchor || cycleFromPayment(day));
   const payer = { ...client, cycleAnchor: anchor };
   const bills = await billsOf(client.id);
-  return { payer, anchor, ...payableRows(payer, bills, pricing, { day, setCycle }) };
+  return { payer, anchor, bills, ...payableRows(payer, bills, pricing, { day, setCycle }) };
 }
 
 /**
@@ -531,18 +539,83 @@ export function payableRows(payer, bills, pricing, { day = today(), setCycle = f
 }
 
 /**
- * What to say when somebody wants to pay and owes nothing yet.
+ * Where money goes once everything owed is paid: the fortnight still running,
+ * then the ones after it — as many as the money reaches.
  *
- * Not "error": they are up to date, and the fortnight they are eating now is
- * paid the day it ends. Said with that day in it, because it is the next thing
- * the person across the counter will ask.
+ * Nobody here pays ahead, so this is not something the counter offers. It is
+ * where a payment lands when the system has nothing left for that person to
+ * owe — and that happens: a cycle a few days off the one they really have, a
+ * start date typed wrong, a fortnight the system thinks was paid that was
+ * not. The money changed hands, so it goes into the software; it waits on the
+ * fortnight being served, and the roster flags it for a look
+ * (js/lib/advance.js) instead of the counter turning somebody away.
+ *
+ * Not past their last day, and not for a plan with no price: what does not
+ * fit stays on the receipt as "a cuenta".
+ *
+ * @returns {object[]} rows like `payableRows`, each with `ahead: true`
+ */
+export function aheadRows(payer, bills, pricing, { day = today(), amount = 0 } = {}) {
+  const charge = periodCharge(payer, pricing);
+  const byId = new Map((bills || []).map((bill) => [bill.id, bill]));
+  const first = periodOf(payer, day);
+  const rows = [];
+  let left = round2(amount);
+
+  for (let i = 0; i < MAX_AHEAD && left > 0.005; i += 1) {
+    const period = periodOfIndex(payer, first.index + i);
+    // Already among what is owed: their service ended inside it.
+    if (isPayable(period, payer, day)) continue;
+    if (payer.endsOn && period.start > payer.endsOn) break;
+
+    const id = invoiceId(payer.id, period.start);
+    const bill = byId.get(id);
+    if (bill) {
+      const owed = balanceOf(bill);
+      if (owed <= 0.005) continue;
+      rows.push({
+        id,
+        title: invoiceTitle(bill),
+        periodStart: bill.periodStart,
+        periodEnd: bill.periodEnd,
+        owed,
+        existing: true,
+        kind: bill.kind || 'period',
+        ahead: true,
+      });
+      left = round2(left - owed);
+    } else {
+      if (!(charge.priced && charge.amount > 0)) break;
+      rows.push({
+        id,
+        title: formatRange(period.start, period.end),
+        periodStart: period.start,
+        periodEnd: period.end,
+        owed: round2(charge.amount),
+        existing: false,
+        kind: 'period',
+        period,
+        ahead: true,
+      });
+      left = round2(left - charge.amount);
+    }
+  }
+  return rows;
+}
+
+/**
+ * What to say when somebody owes nothing for food already served.
+ *
+ * Information, not a refusal: they can still pay, and the money waits on the
+ * fortnight they are eating now. Said with the day that fortnight is paid,
+ * because it is the next thing the person across the counter will ask.
  */
 export function nothingOwedYet(client, day = today()) {
   const running = periodOf(client, day);
   const payDay = payDayAfter(running);
-  return `${client?.name || 'Este cliente'} no debe nada todavía. Su ${periodWord(client)} en `
-    + `curso (${formatRange(running.start, running.end)}) se paga el ${weekdayName(payDay)} `
-    + `${formatDay(payDay)}, cuando termine — aquí no se cobra por adelantado.`;
+  return `${client?.name || 'Este cliente'} no debe nada de lo ya servido. Su ${periodWord(client)} `
+    + `en curso (${formatRange(running.start, running.end)}) se paga el ${weekdayName(payDay)} `
+    + `${formatDay(payDay)}. Si paga ahora, queda a cuenta de esa ${periodWord(client)}.`;
 }
 
 /**
@@ -550,10 +623,15 @@ export function nothingOwedYet(client, day = today()) {
  *
  * Somebody walks in with cash for what they have eaten. The money goes to what
  * they owe, oldest first: bills still open, then fortnights already served and
- * not yet billed, each billed as it is paid for. Never to the fortnight still
- * running — the kitchen collects for food served, so a payment bigger than
- * what is owed is refused rather than parked on a fortnight that has not
- * happened. One payment, one receipt, however many fortnights it covered.
+ * not yet billed, each billed as it is paid for.
+ *
+ * **Every payment goes in.** Whatever the system thinks this person owes —
+ * nothing, or less than they are handing over — the money changed hands, and
+ * a payment that is not in the software is a payment nobody can prove. Dates
+ * on a client can be wrong. What is left once the debts are paid waits on the
+ * fortnight being served and the ones after it (`aheadRows`); what does not
+ * fit even there is kept on the receipt as "a cuenta" (`unapplied`). Nothing
+ * here refuses money: only an amount of zero, or a date that has not come.
  *
  * All of it in a single transaction, because the alternative is a payment that
  * half-applied: the cash is already in the drawer by the time this runs, so it
@@ -581,14 +659,13 @@ export async function takePayment(
    */
   // Read outside the transaction: a query cannot run inside one.
   const {
-    payer, anchor, rows, total: owedNow, charge,
+    payer, anchor, bills, rows, total: owedNow, charge,
   } = await payableFor(client, pricing, { day, setCycle });
-
-  if (!rows.length) throw new Error(nothingOwedYet(payer, day));
-  if (total > owedNow + 0.005) {
-    throw new Error(`Debe ${money(owedNow)}, y no se cobra por adelantado. `
-      + `Cobra ${money(owedNow)} o menos.`);
-  }
+  const extra = round2(total - owedNow);
+  const targets = [
+    ...rows,
+    ...(extra > 0.005 ? aheadRows(payer, bills, pricing, { day, amount: extra }) : []),
+  ];
 
   const receiptRef = doc(collection(db, 'receipts'));
   const clientRef = doc(db, 'clients', client.id);
@@ -597,7 +674,7 @@ export async function takePayment(
     // Every read first — Firestore refuses a read after a write in the same
     // transaction.
     const read = [];
-    for (const row of rows) {
+    for (const row of targets) {
       const ref = doc(db, 'invoices', row.id);
       const snap = await tx.get(ref);
       read.push({ ...row, ref, data: snap.exists() ? snap.data() : null });
@@ -621,6 +698,10 @@ export async function takePayment(
       const owed = round2((Number(draft.amount) || 0) - (Number(draft.paid) || 0));
       const take = left > 0.005 ? Math.min(left, Math.max(0, owed)) : 0;
 
+      // A fortnight not served yet that this payment did not reach is left
+      // alone: it is not a debt, and it is not billed.
+      if (row.ahead && take <= 0.005) continue;
+
       if (take > 0.005) {
         left = round2(left - take);
         const paid = round2((Number(draft.paid) || 0) + take);
@@ -635,6 +716,9 @@ export async function takePayment(
           byUid: author?.uid || null,
           receiptId: receiptRef.id,
           at: new Date(),
+          // Kept on a fortnight not served yet because nothing else was owed —
+          // on purpose, not the old misplacement js/lib/advance.js looks for.
+          ...(row.ahead ? { ahead: true } : {}),
         };
 
         const record = {
@@ -658,15 +742,17 @@ export async function takePayment(
           title: invoiceTitle(record),
           kind: record.kind || 'period',
           amount: take,
+          ...(row.ahead ? { ahead: true } : {}),
         });
-        // Only a fortnight of food moves "paid up to". Settling a hand-written
-        // debt says nothing about which fortnights are covered, and letting it
-        // move the marker would report somebody as paid up for food they have
-        // not paid for.
-        if (!isCharge(record) && settled && (!paidThrough || record.periodEnd > paidThrough)) {
+        // Only a fortnight of food already served moves "paid up to". Settling
+        // a hand-written debt says nothing about which fortnights are covered,
+        // and money waiting on a fortnight still running is not one paid for.
+        if (!row.ahead && !isCharge(record) && settled
+          && (!paidThrough || record.periodEnd > paidThrough)) {
           paidThrough = record.periodEnd;
         }
-        balanceAfter = round2(balanceAfter + Math.max(0, round2(record.amount - paid)));
+        // What is left on a fortnight still running is not owed yet.
+        if (!row.ahead) balanceAfter = round2(balanceAfter + Math.max(0, round2(record.amount - paid)));
       } else {
         // Served, owed, and not paid by this payment. A fortnight already
         // served is a debt whether or not anybody pressed a button to bill it,
@@ -687,11 +773,8 @@ export async function takePayment(
       }
     }
 
-    if (left > 0.005) {
-      throw new Error(`Debe ${money(round2(total - left))}, y no se cobra por adelantado. `
-        + `Cobra ${money(round2(total - left))} o menos.`);
-    }
-    if (!applied.length) throw new Error(nothingOwedYet(payer, day));
+    // Whatever found no fortnight to wait on is still money received.
+    const unapplied = round2(left);
 
     const receipt = {
       clientId: client.id,
@@ -705,6 +788,7 @@ export async function takePayment(
       note: note || '',
       date: day,
       applied,
+      ...(unapplied > 0.005 ? { unapplied } : {}),
       balanceAfter,
       ...(setCycle ? { setCycleTo: anchor } : {}),
       takenByName: author?.name || '',
@@ -838,7 +922,9 @@ export async function voidReceipt(receipt, author) {
       farmId: receipt.farmId || '',
       farmName: receipt.farmName || '',
       locationName: receipt.locationName || '',
-      amount: -(removed || round2(receipt.amount)),
+      // What came off the bills, and whatever was kept "a cuenta" with no
+      // bill to come off — the whole of what the receipt took in.
+      amount: -(round2(removed + (Number(receipt.unapplied) || 0)) || round2(receipt.amount)),
       method: receipt.method || 'cash',
       reference: '',
       note: `Cancelación del recibo ${receipt.folio || receipt.id}.`,
