@@ -381,41 +381,39 @@ export const BAG_SIZE = 4;
 
 /**
  * A farm's bags: the people after a farm's slide, in the order they are
- * packed, four to a bag. Ten people are three bags — four, four and two.
+ * packed, four to a bag — and never two houses in one. A bag is left at one
+ * ubicación and its sticker names that one, so a new house starts a new bag
+ * even when the last one still had room: ten people in one house are three
+ * bags, four, four and two; six in Casa Azul and one in Casa Roja are three,
+ * four, two and one.
  *
- * Cut from the slides rather than worked out again, so a bag's sticker can
- * never list somebody the screen did not show, or put them in a different bag
- * from the one the screen says. When a farm is split between the two
- * libretas, each libreta's bags hold its own half, which is exactly what each
- * packer puts in them; a farm the order comes back to later is bagged again
- * from one.
+ * Cut from the slides rather than worked out again, so a bag can never hold
+ * somebody the screen did not show, or put them in a different bag from the
+ * one the screen says. When a farm is split between the two libretas, each
+ * libreta's bags hold its own half, which is exactly what each packer puts in
+ * them; a farm the order comes back to later is bagged again from one.
  *
- * @returns {{ farm, number, of, people: { name, plates }[], plates,
- *   first: number, last: number }[]}  `first` and `last` are the slide
- *   indexes of the bag's first and last person; empty when the slide is not a
- *   farm's
+ * @returns {{ farm, place, number, of, first: number, last: number }[]}
+ *   `place` is the house every person in the bag shares; `first` and `last`
+ *   are the slide indexes of its first and last person. Empty when the slide
+ *   is not a farm's.
  */
 export function bagsOf(slides, index) {
   const head = slides?.[index];
   if (head?.kind !== 'farm') return [];
-  const members = [];
-  for (let at = index + 1; at < slides.length && slides[at].kind === 'client'; at += 1) {
-    members.push(at);
-  }
   const bags = [];
-  for (let i = 0; i < members.length; i += BAG_SIZE) {
-    const chunk = members.slice(i, i + BAG_SIZE);
-    const people = chunk.map((at) => ({ name: slides[at].client.name, plates: slides[at].plates }));
-    bags.push({
-      farm: head.farm,
-      number: bags.length + 1,
-      people,
-      plates: people.reduce((sum, one) => sum + one.plates, 0),
-      first: chunk[0],
-      last: chunk[chunk.length - 1],
-    });
+  let bag = null;
+  for (let at = index + 1; at < slides.length && slides[at].kind === 'client'; at += 1) {
+    const place = slides[at].place || null;
+    const full = bag && bag.last - bag.first + 1 >= BAG_SIZE;
+    if (!bag || full || (bag.place?.id || '') !== (place?.id || '')) {
+      bag = { farm: head.farm, place, number: bags.length + 1, first: at, last: at };
+      bags.push(bag);
+    } else {
+      bag.last = at;
+    }
   }
-  for (const bag of bags) bag.of = bags.length;
+  for (const one of bags) one.of = bags.length;
   return bags;
 }
 

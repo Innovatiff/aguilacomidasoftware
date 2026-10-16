@@ -20,7 +20,7 @@
  */
 
 import { h, mount } from '../lib/dom.js';
-import { labelSheet, fitLabel, mountBag } from './label.js';
+import { labelSheet, fitLabel, placeSheet, fitPlace } from './label.js';
 import { money } from '../lib/format.js';
 import { paymentMethodMeta } from '../lib/model.js';
 import { parseDay } from '../lib/dates.js';
@@ -312,8 +312,8 @@ function printOne() {
  * lids.
  *
  * The extra step over a receipt is the measuring: each sticker is mounted,
- * `fitLabel` shrinks its name until it stops wrapping and `fitBag` lays out
- * the bag's list, and only then is the printer asked for. That order is the
+ * its lines are shrunk until they stop running over (`fitPlace`,
+ * `fitLabel`), and only then is the printer asked for. That order is the
  * whole reason `#print-root` is parked off the screen instead of being
  * `display: none` — a subtree with no layout has no width to compare against.
  *
@@ -324,21 +324,20 @@ function printOne() {
  * being something the kitchen has to live with.
  *
  * @param {object}   stickers
- * @param {object}   [stickers.bag]     a bag's sticker (see `mountBag` in js/ui/label.js)
+ * @param {object}   [stickers.bag]     a bag's sticker: the farm and the house
+ *   (see `placeSheet` in js/ui/label.js)
  * @param {object[]} [stickers.labels]  people's stickers, in order (see `labelSheet`)
  */
 export function printStickers({ bag = null, labels = [] } = {}) {
+  const sheets = [
+    ...(bag ? [[placeSheet(bag), fitPlace]] : []),
+    ...labels.map((spec) => [labelSheet(spec), fitLabel]),
+  ];
+  if (!sheets.length) return;
   paper('label');
-  const root = printRoot();
-  if (bag) mountBag(root, bag);
-  else mount(root);
-  // Siblings of the bag's sheet, so `.lbl + .lbl` puts each on its own page.
-  for (const spec of labels) {
-    const sheet = labelSheet(spec);
-    root.append(sheet);
-    fitLabel(sheet);
-  }
-  if (!root.firstElementChild) return;
+  // Siblings, so `.lbl + .lbl` puts each on its own page.
+  mount(printRoot(), ...sheets.map(([sheet]) => sheet));
+  for (const [sheet, fit] of sheets) fit(sheet);
   requestAnimationFrame(() => window.print());
 }
 

@@ -163,9 +163,11 @@ export function renderPackingSetup() {
         h('div',
           h('div.w-700', 'Imprimir las etiquetas solas'),
           h('div.t-sm.c-soft', on
-            ? 'Al llegar a cada farma sale la etiqueta de su bolsa, con todos los nombres, '
-              + 'y al pasar a cada persona sale la suya, sin tocar nada.'
-            : 'Apagado: nadie imprime nada durante el empaque.')),
+            ? 'Cada cuatro personas de una misma ubicación sale la etiqueta de su bolsa '
+              + '—la farma y la ubicación—, y cada persona saca una por comida, sin tocar '
+              + 'nada. Para pausarla en una sola computadora está el interruptor de arriba '
+              + 'a la derecha, al empacar.'
+            : 'Apagado: nadie imprime nada durante el empaque, en ninguna computadora.')),
         h('button.btn.btn--soft', {
           type: 'button',
           onclick: async () => {

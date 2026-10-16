@@ -572,28 +572,39 @@ todas— y revisar.
 #### Las etiquetas que salen solas
 
 Cada bolsa lleva la comida de **cuatro personas** —de una comida o de dos cada
-una— y se cierra. Por eso salen dos clases de etiqueta, las dos en el mismo
-papel de **100 × 50 mm**:
+una—, todas **de la misma ubicación**, y se cierra. Por eso salen dos clases de
+etiqueta, las dos en el mismo papel de **100 × 50 mm**:
 
-1. **La de la bolsa**, una por cada cuatro personas. Va pegada en la bolsa y
-   dice qué lleva adentro.
+1. **La de la bolsa**: solo **la farma y su ubicación**, grandes, para quien
+   la lleva. Una por bolsa.
 2. **La de cada persona, una por comida**: dos para quien lleva dos, una para
-   quien lleva una. Cada una va encima de su recipiente, dentro de esa bolsa.
+   quien lleva una. Cada una va encima de su recipiente, dentro de la bolsa.
 
-Una farma de diez son tres bolsas: cuatro, cuatro y dos. Así salen, sin que el
-recorrido cambie en nada:
+Una bolsa nueva empieza cada cuatro personas **o cuando cambia la ubicación**,
+aunque a la anterior le quepa gente: una bolsa se deja en una sola casa, y su
+etiqueta dice esa. Una persona sola en su casa también es una bolsa, con su
+etiqueta. Por ejemplo, Georgia con seis en Casa Azul, cuatro en Casa Roja y
+una en Casa Verde, sin que el recorrido cambie en nada:
 
 | En la pantalla | Lo que sale |
 |---|---|
-| La farma | La etiqueta de la bolsa 1, con las primeras cuatro personas |
-| Persona 1 a 4 | Las suyas: dos si lleva dos, una si lleva una |
-| Persona 5 | La etiqueta de la bolsa 2, y luego las suyas |
-| Persona 6 a 8 | Las suyas |
-| Persona 9 | La etiqueta de la bolsa 3, y luego las suyas |
-| Persona 10 | Las suyas |
+| La farma | GEORGIA / CASA AZUL |
+| Persona 1 a 4 (Casa Azul) | Las suyas: dos si lleva dos, una si lleva una |
+| Persona 5 (Casa Azul) | GEORGIA / CASA AZUL, y luego las suyas — ya pasaron cuatro |
+| Persona 6 (Casa Azul) | Las suyas |
+| Persona 7 (Casa Roja) | GEORGIA / CASA ROJA, y luego las suyas — cambió la casa |
+| Persona 8 a 10 (Casa Roja) | Las suyas |
+| Persona 11 (Casa Verde) | GEORGIA / CASA VERDE, y luego las suyas |
 
 Todo lo de una diapositiva sale junto, en un solo envío a la impresora y en el
-orden en que se pega: primero la bolsa, luego las tapas.
+orden en que se pega: primero la bolsa, luego las tapas. Abajo, chico, la
+etiqueta de la bolsa lleva el día y la libreta, como todas. Una farma sin
+ubicaciones lleva en su bolsa solo el nombre de la farma.
+
+En la pantalla, cada persona dice en qué bolsa va —*Bolsa 2 de 4*— y la farma
+dice cuántas bolsas son. Si una farma está repartida entre las dos libretas,
+cada libreta hace sus propias bolsas con su gente. Cuántas personas van por
+bolsa es un solo número (`BAG_SIZE` en `js/lib/packing.js`).
 
 La libreta **siempre empieza desde cero**, en su primera farma, así que al
 abrirla sale la etiqueta de su primera bolsa.
@@ -609,20 +620,20 @@ para no tener que moverse:
   la persona que empieza cada bolsa siguiente (esa bolsa). La primera farma no
   tiene ninguna diapositiva antes a la cual regresar.
 
-**La etiqueta de la bolsa** lleva la farma grande arriba y, si la farma tiene
-más de una bolsa, cuál es: **BOLSA 2/3**. Debajo, las cuatro personas de esa
-bolsa, en el mismo orden en que se empacan, con **×2** junto a quien lleva dos.
-Abajo, el día y la libreta de un lado y del otro lo que lleva esa bolsa:
-«4 personas · 8 comidas», que es contra lo que quien la cierra cuenta los
-recipientes. En la pantalla, cada persona dice en qué bolsa va —*Bolsa 2 de
-3*— y la farma dice cuántas bolsas son. Si una farma está repartida entre las
-dos libretas, cada libreta hace sus propias bolsas con su gente.
+**El interruptor de arriba a la derecha** — *Imprimir etiquetas* — apaga y
+prende la impresión con un clic, sin desconectar la impresora. Apagado se pone
+rojo y dice *Impresión apagada*: se puede ir para atrás y para adelante, o
+avanzar hasta donde se había quedado la libreta, sin que salga ni una
+etiqueta, y desaparecen los botones de imprimir. Al prenderlo no sale nada
+por sí solo; sale desde el siguiente *Siguiente*.
 
-Cuántas personas van por bolsa es un solo número (`BAG_SIZE` en
-`js/lib/packing.js`). La etiqueta de la bolsa acomoda la letra sola —con pocas
-personas grande y en una columna, con muchas más chica y hasta en cuatro
-columnas, sin bajar nunca de 2.3 mm—, así que ese número se puede cambiar sin
-tocar nada más.
+- Es **solo de esa computadora**: no apaga la de la otra libreta.
+- **Se recuerda por ese día**: si se cierra el navegador o se sale de la
+  libreta, sigue apagado al volver. Al día siguiente amanece prendido, para
+  que una pausa olvidada no deje a nadie sin etiquetas.
+- *Empaque → Configurar → Imprimir las etiquetas solas* sigue siendo el
+  interruptor de toda la cocina; con ése apagado, el de la pantalla no
+  aparece.
 
 **La etiqueta de cada persona** lleva, de arriba abajo: el nombre grande en
 mayúsculas, una raya, la farma y la ubicación, las preferencias, la nota, y al
@@ -837,8 +848,8 @@ js/
     icons.js          set de iconos SVG
     mode.js           por cuál de las dos puertas se abrió la app
     packing.js        el orden en que se empaca —ubicación por ubicación—,
-                      las bolsas de cuatro y los permisos de cada quien en
-                      la cocina
+                      las bolsas de cuatro de una misma casa y los permisos
+                      de cada quien en la cocina
     board.js          el tablero de hoy: medias, completas y lo que no
                       pueden comer, contado cliente por cliente
     qr.js             códigos QR, escritos aquí: sin paquetes y sin internet
@@ -851,7 +862,7 @@ js/
   ui/                 shell, kit de componentes, hojas, chat
     print.js          recibos, reportes y etiquetas, por el diálogo del navegador
     label.js          las etiquetas de 100 × 50 mm: la de cada comida de
-                      cada persona y la de cada bolsa de cuatro
+                      cada persona y la de cada bolsa —farma y ubicación—
     day-board.js      el tablero de hoy, en la computadora de la cocina
     sortable.js       ordenar una lista arrastrando, o con el teclado
   screens/            una pantalla por archivo

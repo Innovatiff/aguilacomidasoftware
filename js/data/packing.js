@@ -231,3 +231,30 @@ export function sitDown(packer) {
     else sessionStorage.removeItem(SEAT);
   } catch { /* a locked-down browser simply asks for the number again */ }
 }
+
+/* --- Stickers paused on this computer ------------------------------------------ */
+
+/**
+ * Whether this computer's stickers are paused, today.
+ *
+ * On the machine and not in Firestore: the other computer is packing the
+ * other libreta, and pausing this printer must not silence that one. In
+ * `localStorage` rather than the session, because the moment a pause is wanted
+ * is often right after the browser was closed — a libreta always starts again
+ * at its first farm, and walking back up to person sixty-eight with the
+ * printer on prints sixty-seven people twice. And it holds for the day it was
+ * set, so a pause somebody forgot to undo is over by the next morning instead
+ * of being the reason the stickers "stopped working".
+ */
+const PAUSE = 'aguila.empaque.pausa';
+
+export function printingPaused(day) {
+  try { return localStorage.getItem(PAUSE) === day; } catch { return false; }
+}
+
+export function pausePrinting(day, paused) {
+  try {
+    if (paused) localStorage.setItem(PAUSE, day);
+    else localStorage.removeItem(PAUSE);
+  } catch { /* storage refused: the pause lasts as long as the screen does */ }
+}

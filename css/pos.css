@@ -912,6 +912,46 @@
 .pkbar__track { height: 10px; border-radius: var(--r-full); background: var(--ink-150); overflow: hidden; }
 .pkbar__fill { height: 100%; background: var(--brand-500); border-radius: var(--r-full); transition: width 180ms var(--ease); }
 .pkbar__text { font-size: var(--fs-sm); font-weight: 700; color: var(--text-soft); }
+/* The count on the left; on the right, this computer's printing switch. */
+.pkbar__row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--s3); min-height: 44px;
+}
+
+/* Printing on and off, for this computer. A switch everybody knows from a
+   phone: green with the knob to the right is on. Off turns the whole thing
+   red, so a pause left on is seen from the counter. */
+.pkprint {
+  display: inline-flex; align-items: center; gap: var(--s2);
+  min-height: 44px; padding: 0 var(--s2) 0 var(--s3);
+  font: inherit; font-size: var(--fs-md); font-weight: 700;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-full);
+  cursor: pointer;
+}
+.pkprint svg { flex: none; width: 20px; height: 20px; }
+.pkprint:hover { background: var(--ink-50); }
+.pkprint:focus-visible { outline: 3px solid var(--brand-500); outline-offset: 2px; }
+.pkprint__switch {
+  position: relative; flex: none;
+  width: 46px; height: 28px;
+  border-radius: var(--r-full);
+  background: var(--ok-500);
+  transition: background 160ms var(--ease);
+}
+.pkprint__knob {
+  position: absolute; top: 3px; left: 21px;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .25);
+  transition: left 160ms var(--ease);
+}
+.pkprint.is-off { color: var(--bad-600); background: var(--bad-50); border-color: var(--bad-500); }
+.pkprint.is-off .pkprint__switch { background: var(--ink-300); }
+.pkprint.is-off .pkprint__knob { left: 3px; }
 
 /* One card, and no border on it. A hairline around a white card on a grey page
    is a line that draws itself; the page already says where the card ends. */

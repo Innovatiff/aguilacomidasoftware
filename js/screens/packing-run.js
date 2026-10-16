@@ -27,24 +27,29 @@
  * something to say.
  *
  * **The stickers print as the slides come up.** A farm's plates go out four
- * people to a bag (`BAG_SIZE`), so a farm of ten is three bags: four, four and
- * two. The farm's slide prints its first bag's sticker — the farm, the four
- * people in it, how many plates — and every Siguiente after it that lands on a
- * person sends that person's stickers, one for each of their containers: two
- * for somebody on two comidas, one for somebody on one. Landing on the first
- * person of the next bag sends that bag's sticker first, then theirs. The
- * container is labelled while the food is going into it, and each bag before
- * its first plate goes in, rather than at the end from a pile. The libreta
- * always starts at the beginning, which is its first farm, so opening it
- * prints that farm's first bag.
+ * people to a bag, and a bag never holds two houses (`bagsOf`): ten people in
+ * one house are three bags, four, four and two. A bag's sticker says where it
+ * goes — the farm and the house, nothing else — and a person gets one sticker
+ * per container: two for somebody on two comidas, one for somebody on one.
+ * The farm's slide prints its first bag's sticker, and every Siguiente after
+ * it that lands on a person sends that person's stickers — after their bag's,
+ * when they are the first one in it. The container is labelled while the food
+ * is going into it, and each bag before its first plate goes in, rather than
+ * at the end from a pile. The libreta always starts at the beginning, which
+ * is its first farm, so opening it prints that farm's first bag.
  *
  * Going back never prints: that is how somebody checks a name they already
  * packed, and a sticker for every check is a roll of labels gone by Wednesday.
  * Going forward again does, which is how a jammed sticker is replaced. A
  * person's slide also has a button for one more of their stickers, and a
- * slide where a bag's sticker came out has one for the bag. The whole thing
- * can be switched off in Empaque → Configurar, which is what a machine
- * without a label printer wants — and the morning the printer dies.
+ * slide where a bag's sticker came out has one for the bag.
+ *
+ * Printing has two switches. Empaque → Configurar turns it off for the whole
+ * kitchen, which is what the morning the printer dies wants. The one at the
+ * top right of this screen pauses it on this computer, for today: to walk back
+ * over people already packed and forward again, or up to where a libreta was
+ * left, without a sticker for each — which used to mean pulling the printer's
+ * cable out.
  *
  * The keyboard moves it too: space, enter or the right arrow go forward, the
  * left arrow goes back. On a counter machine with a cheap mouse that is the
@@ -63,6 +68,7 @@ import { go } from '../lib/router.js';
 import { store, subscribe, activeClients, isReady, firstError, startStore } from '../data/store.js';
 import {
   watchPacking, watchPackers, startRun, finishRun, noteProgress, seatedPacker,
+  printingPaused, pausePrinting,
 } from '../data/packing.js';
 import { printStickers } from '../ui/print.js';
 import {
@@ -85,6 +91,11 @@ export function renderPackingRun(context) {
   let runId = null;        // the record this morning is being written to
   let opening = false;
   let bagOnOpen = false;   // the first farm's bag, printed once when it opens
+  let paused = printingPaused(day);   // this computer's switch, top right
+
+  // Stickers come out when the kitchen prints them and this computer is not
+  // paused. Everything that prints, and every button that offers to, asks this.
+  const printing = () => Boolean(setup?.autoPrint) && !paused;
 
   // Nobody at the keyboard: the record would have no name on it, which is the
   // whole reason the number is asked for. Back to the door.
@@ -183,9 +194,10 @@ export function renderPackingRun(context) {
 
   /**
    * The stickers for the slide at `index`, if this machine prints them, in one
-   * job: a farm's slide prints its first bag; a person's prints theirs — one
-   * per comida — after their bag's, when they are the first in a bag after the
-   * first; the last slide is a summary that goes on nothing.
+   * job: a farm's slide prints its first bag's — the farm and the house; a
+   * person's prints theirs — one per comida — after their bag's, when they are
+   * the first in a bag after the first; the last slide is a summary that goes
+   * on nothing.
    *
    * `extra` is the button for one more of a person's stickers; `bagOnly`, the
    * one for their bag's again.
@@ -195,13 +207,14 @@ export function renderPackingRun(context) {
    */
   function printFor(index, { extra = false, bagOnly = false } = {}) {
     const slide = plan?.slides[index];
-    if (!setup?.autoPrint || !slide) return;
+    if (!printing() || !slide) return;
     try {
       const bag = bagAt(plan.slides, index);
       const bagSticker = bag && {
         farmName: bag.farm?.name || '',
-        people: bag.people,
-        bag: { number: bag.number, of: bag.of },
+        // "Sin ubicación" is the screen's word for a house nobody wrote down,
+        // not a place: a bag like that says the farm and stops.
+        placeName: bag.place?.id ? bag.place.name : '',
         day,
         lineName: plan.line?.name || '',
       };
@@ -315,9 +328,37 @@ export function renderPackingRun(context) {
       h('div.pkbar__track', h('div.pkbar__fill', {
         style: { width: `${Math.round((done / people) * 100)}%` },
       })),
-      // How many people are packed, and nothing else. The number of farms was
-      // on this line too; it never changed while anybody was reading it.
-      h('div.pkbar__text', `${number(done)} de ${number(people)}`));
+      h('div.pkbar__row',
+        // How many people are packed, and nothing else. The number of farms
+        // was on this line too; it never changed while anybody was reading it.
+        h('div.pkbar__text', `${number(done)} de ${number(people)}`),
+        setup?.autoPrint ? printSwitch() : null));
+  }
+
+  /**
+   * Printing on and off for this computer, in one click: top right, in the
+   * same place on every slide, and away from the two big buttons a wet thumb
+   * is aiming for. Off is red, so a pause nobody undid is noticed before a bag
+   * goes out with nothing on it. Turning it back on prints nothing by itself;
+   * the next Siguiente does.
+   */
+  function printSwitch() {
+    const on = !paused;
+    return h(`button.pkprint${on ? '' : '.is-off'}`, {
+      type: 'button',
+      role: 'switch',
+      'aria-checked': on ? 'true' : 'false',
+      onclick: () => {
+        paused = on;
+        pausePrinting(day, paused);
+        // Repainting drops the button and the keyboard with it, so the space
+        // bar goes on moving the libreta rather than flipping this again.
+        paint();
+      },
+    },
+    icon('printer'),
+    h('span.pkprint__text', on ? 'Imprimir etiquetas' : 'Impresión apagada'),
+    h('span.pkprint__switch', h('span.pkprint__knob')));
   }
 
   /* --- The three kinds of slide ---------------------------------------------- */
@@ -345,7 +386,7 @@ export function renderPackingRun(context) {
       // The first bag's sticker came out when this slide did. This is for
       // when it jammed — and for the first farm, which has no slide before it
       // to step back to and come forward from.
-      setup?.autoPrint
+      printing()
         ? reprint(bag?.of > 1
           ? 'Volver a imprimir la etiqueta de la bolsa 1'
           : 'Volver a imprimir la etiqueta de la bolsa')
@@ -391,7 +432,7 @@ export function renderPackingRun(context) {
       // Their stickers came out when this slide did — one per comida. One
       // more, for a container that needs it; and this bag's again, on the
       // slide where it came out.
-      setup?.autoPrint
+      printing()
         ? h('div.pkreprints',
             reprint('Imprimir otra etiqueta', { extra: true }),
             bag?.starts && bag.number > 1

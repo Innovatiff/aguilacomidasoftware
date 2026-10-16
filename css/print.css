@@ -490,85 +490,37 @@
 .lbl + .lbl { break-before: page; page-break-before: always; }
 
 /* --- The bag's sticker -------------------------------------------------------
-   The same paper, read another way: no QR, the farm across the top, everybody
-   in the bag in columns, and the totals along the bottom. How large the names
-   are and how many columns they take is decided by fitBag() in
-   js/ui/label.js, by measuring; these are only where it starts. */
+   The same paper, read from the other end of a van: the farm and the house,
+   as large as each fits, and the day small along the bottom. How large is
+   decided by fitPlace() in js/ui/label.js, by measuring; these are only where
+   it starts. */
 
-.lbl--bag {
+.lbl--place {
   flex-direction: column;
   align-items: stretch;
   gap: 0;
 }
-/* The farm, and beside it which of its bags this is when it has more than one
-   — the thing that tells two of a farm's bags apart at a glance. */
-.bag__head {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 3mm;
-}
-.bag__num {
-  flex: none;
-  font-size: 3.6mm;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  border: 0.4mm solid #000;
-  border-radius: 1mm;
-  padding: 0.3mm 1.4mm;
-  white-space: nowrap;
-}
-.bag__farm {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-size: 6mm;
-  font-weight: 800;
-  line-height: 1.05;
-  letter-spacing: -0.01em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.lbl--bag .lbl__rule { flex: none; margin: 1.2mm 0 1.4mm; }
-
-.bag__names {
+.place__body {
   flex: 1 1 auto;
   min-height: 0;
-  display: grid;
-  grid-auto-flow: column;           /* down the first column, then the next */
-  grid-template-columns: minmax(0, 1fr);
-  column-gap: 3mm;
-  align-content: start;
-  overflow: hidden;
-  font-size: 4mm;
-}
-.bag__who {
   display: flex;
-  align-items: baseline;
-  gap: 0.8mm;
-  min-width: 0;
-  line-height: 1.2;
+  flex-direction: column;
+  justify-content: center;
 }
-.bag__name {
-  min-width: 0;
+.place__farm, .place__where {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-weight: 800;
+  line-height: 1.08;
 }
-/* ×2 is what the plates are counted by, so it is the one thing in the list in
-   bold. */
-.bag__x { flex: none; font-weight: 800; }
-
-.bag__foot {
+.place__farm { font-size: 14mm; letter-spacing: -0.02em; }
+.place__where { font-size: 10mm; letter-spacing: -0.01em; }
+.lbl--place .lbl__rule { margin: 2mm 0 2.2mm; border-top-width: 0.6mm; }
+.place__foot {
   flex: none;
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 3mm;
-  margin-top: 1.2mm;
   font-size: 2.6mm;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   white-space: nowrap;
 }
-.bag__foot b { font-size: 3mm; font-weight: 800; letter-spacing: 0.02em; }
