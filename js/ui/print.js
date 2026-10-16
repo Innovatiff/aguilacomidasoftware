@@ -109,9 +109,14 @@ export function receiptSheet(receipt, {
       ? line(receipt.reversalOfFolio
         ? `CANCELA EL RECIBO ${receipt.reversalOfFolio}`
         : 'CANCELACION DE UN PAGO')
-      : (Number(receipt.balanceAfter) || 0) > 0.005
-        ? pair('QUEDA DEBIENDO', money(receipt.balanceAfter), '.rcp__pair--total')
-        : h('div.rcp__ok', 'QUEDA AL CORRIENTE'),
+      // Kept whole when it could not be spread over their bills: the money is
+      // in, and what they owe is worked out afterwards — so it says neither
+      // "al corriente" nor a balance it does not know.
+      : receipt.held
+        ? h('div.rcp__ok', 'PAGO RECIBIDO')
+        : (Number(receipt.balanceAfter) || 0) > 0.005
+          ? pair('QUEDA DEBIENDO', money(receipt.balanceAfter), '.rcp__pair--total')
+          : h('div.rcp__ok', 'QUEDA AL CORRIENTE'),
 
     rule(),
     mid(business.footer || 'GRACIAS'),

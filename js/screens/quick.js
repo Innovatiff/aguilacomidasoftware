@@ -24,8 +24,6 @@ import { emptyState, button } from '../ui/kit.js';
 import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
 import { runFlow } from '../ui/flow.js';
-import { toastBad } from '../ui/overlay.js';
-import { errorText } from '../firebase.js';
 import {
   posTile, posPick, posFind, posMoney, posDays, posSummary, posNote, posField, posText, posLabel,
 } from '../ui/pos-kit.js';
@@ -33,7 +31,7 @@ import {
   store, subscribe, billingFor, farmById, printContext, activeClients,
 } from '../data/store.js';
 import {
-  createClient, updateClient, setClientStatus, setEndsOn, cycleIsSet, emptyClient, servingSince,
+  createClient, updateClient, setClientStatus, setEndsOn, emptyClient, servingSince,
   tagsInUse,
 } from '../data/clients.js';
 import {
@@ -562,7 +560,7 @@ export function renderQuick() {
               : total > 0.005
                 ? `Debe ${money(total)}: ${owing.rows.map((row) => row.title).join(', ')}.`
                 : 'Está al corriente.',
-            ready: (st) => !!owing && st.amount > 0,
+            ready: (st) => st.amount > 0,
             next: 'Siguiente',
             build: (st, api) => {
               if (!owing) {
@@ -585,15 +583,17 @@ export function renderQuick() {
               // past what they owe goes, so nobody is surprised by the receipt.
               const fortnight = periodCharge(st.client, store.pricing);
               const warn = h('div');
-              const paint = () => mount(warn, st.amount > total + 0.005
-                ? posNote(total > 0.005
-                  ? `Debe ${money(total)}. Lo que sobra queda a cuenta de su quincena en curso.`
-                  : 'No debe nada de lo ya servido: queda a cuenta de su quincena en curso.', 'info')
+              const paint = () => mount(warn, st.amount > total + 0.005 && total > 0.005
+                ? posNote(`Debe ${money(total)}. Lo que sobra queda para su quincena en curso.`, 'info')
                 : null);
               paint();
               return h('div',
                 ahead,
-                total <= 0.005 ? posNote(nothingOwedYet(owing.payer, today()), 'info') : null,
+                owing.unread
+                  ? posNote('No se pudo ver lo que debe (sin internet o sin conexión). El pago '
+                    + 'entra igual y queda a cuenta, marcado para revisarlo.', 'warn')
+                  : null,
+                !owing.unread && total <= 0.005 ? posNote(nothingOwedYet(owing.payer, today()), 'info') : null,
                 posMoney({
                   value: st.amount || '',
                   onChange: (v) => { st.amount = v; paint(); api.revalidate(); },
@@ -677,38 +677,45 @@ export function renderQuick() {
   /**
    * Reads one client's bills and works out what they can pay today.
    *
-   * Once per person: going back and picking somebody else reads theirs. The
-   * first payment the system sees from somebody also sets their fortnight, so
-   * that is counted the way the payment will count it.
+   * Once per person: going back and picking somebody else reads theirs. A
+   * payment never moves anybody's fortnight here, so it is counted on the
+   * fortnight they already have.
+   *
+   * Whatever happens reading it — no internet, a record the arithmetic cannot
+   * read — the payment can still be taken: they are shown as owing nothing
+   * known, the box starts at a fortnight, and the payment is kept whole.
    */
   function loadOwing(st, api) {
     const client = st.client;
     if (!client || st.loadingFor === client.id) return;
     st.loadingFor = client.id;
-    const setCycle = !cycleIsSet(client);
+    const anchor = client.cycleAnchor || cycleFromPayment(today());
+    const payer = { ...client, cycleAnchor: anchor };
+    const settle = (owing) => {
+      if (st.client?.id !== client.id) return;
+      st.owing = { clientId: client.id, payer, anchor, bills: [], rows: [], total: 0, ...owing };
+      // What they owe, or — up to date, paying a few days early — the
+      // fortnight they are eating now. Never a zero that looks like "no".
+      const fortnight = periodCharge(client, store.pricing);
+      st.amount = st.owing.total > 0.005
+        ? st.owing.total
+        : (fortnight.priced && fortnight.amount > 0 ? fortnight.amount : 0);
+      api.refresh();
+    };
     billsOf(client.id)
       .then((bills) => {
-        if (st.client?.id !== client.id) return;
-        const anchor = setCycle
-          ? cycleFromPayment(today())
-          : (client.cycleAnchor || cycleFromPayment(today()));
-        const payer = { ...client, cycleAnchor: anchor };
-        const plan = planAdvanceFix({ client, bills, since: servingSince(client), day: today() });
-        st.owing = {
-          clientId: client.id,
-          payer,
-          anchor,
-          bills,
-          ahead: plan.moves.length ? plan : null,
-          ...payableRows(payer, bills, store.pricing, { day: today(), setCycle }),
-        };
-        st.amount = st.owing.total;
-        api.refresh();
+        let ahead = null;
+        try {
+          const plan = planAdvanceFix({ client, bills, since: servingSince(client), day: today() });
+          ahead = plan.moves.length ? plan : null;
+        } catch { /* a note, not the payment */ }
+        try {
+          settle({ bills, ahead, ...payableRows(payer, bills, store.pricing, { day: today() }) });
+        } catch {
+          settle({ bills, ahead, unread: true });
+        }
       })
-      .catch((error) => {
-        st.loadingFor = null;
-        toastBad(errorText(error));
-      });
+      .catch(() => settle({ unread: true }));
   }
 
   /** Shows what moves, moves it, and reads what they owe again. */
@@ -760,13 +767,11 @@ export function renderQuick() {
    * It appears only for somebody whose cycle has never been set.
    */
   function cycleChoice(st) {
-    if (cycleIsSet(st.client)) return null;
-    st.setCycle = true;
-    const anchor = cycleFromPayment(today());
-    return posNote(
-      `Es su primer pago aquí, así que su ${periodWord(st.client)} queda en `
-      + `${weekdayName(anchor)}: este pago es por la que terminó el `
-      + `${formatDay(addDays(anchor, -1))}.`, 'ok');
+    // A payment here never moves anybody's dates: somebody paying a few days
+    // early or late used to have their fortnight dragged to that day. It is
+    // set on purpose, from their file in the panel.
+    st.setCycle = false;
+    return null;
   }
 
   /* --- Comidas al día ----------------------------------------------------- */

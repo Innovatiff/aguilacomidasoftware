@@ -303,15 +303,18 @@ facturado— y eso es lo primero que se paga, de lo más viejo a lo más nuevo.
 Una quincena se puede pagar desde su último día; la de alguien que se va,
 desde su último día de servicio.
 
-**Todo pago entra. Nunca se rechaza.** Las fechas de un cliente pueden estar
-mal —su quincena corrida unos días, su fecha de inicio, su último día— y un
-pago que pasó tiene que quedar en el sistema. Así que se puede cobrar siempre,
-sea cual sea su estado: al corriente, en pausa, inactivo o sin precio en su
-plan.
+**Todo pago entra. Nunca se rechaza.** El encargado lleva la cuenta de cuántos
+pagos entraron, y aquí la gente paga unos días antes o unos días después. Las
+fechas de un cliente pueden estar mal —su quincena corrida unos días, su fecha
+de inicio, su último día— y un pago que pasó tiene que quedar en el sistema.
+Así que se puede cobrar siempre, a cualquiera, sea cual sea su estado: al
+corriente, en pausa, inactivo, que ya se fue o sin precio en su plan. Lo único
+que no se acepta es un monto de cero.
 
-- Si no debe nada de lo ya servido, el panel lo dice —y cuándo se paga su
-  quincena en curso— pero deja cobrar: el pago **queda a cuenta** de la
-  quincena en curso.
+- Si no debe nada de lo ya servido —quien paga unos días antes—, el monto ya
+  viene puesto con **su quincena en curso** y el botón listo; el panel dice
+  «Está al corriente con lo ya servido. Lo que pague hoy queda para su
+  quincena en curso…», y el pago queda en esa quincena.
 - Si da más de lo que debe, se paga lo que debe y **lo que sobra queda a
   cuenta** de la quincena en curso, y de las siguientes si alcanza.
 - Si no hay quincena donde ponerlo —ya no viene, o su plan no tiene precio—,
@@ -323,11 +326,21 @@ sorpresas con la persona enfrente. Lo que queda a cuenta no mueve «pagado
 hasta» ni se marca como pago por adelantado: cuando esa quincena termina, ya
 está pagada.
 
-**El primer pago fija su quincena.** Quien todavía tiene la fecha del rancho
-paga el día que termina su quincena, así que ese pago dice cuál es su día. Si
-empezó unos días después de un día de cobro (tres cuando mucho, lo más que
-puede quedar el miércoles o el sábado de antes), esa primera quincena se cobra
-entera; si apenas lleva una semana, todavía no debe nada.
+**Un pago no mueve ninguna fecha.** Se registra con el día en que se pagó, tal
+cual, y la quincena del cliente se queda donde está —aunque sea su primer
+pago—: antes, el primer pago llevaba su quincena al día de cobro anterior, y a
+quien pagaba unos días antes o después se le corría. En el panel, *Fijar su
+quincena con este pago* sigue ahí, apagado, para quien de verdad empieza ese
+día; en la cocina no existe.
+
+**Si algo falla, el pago entra igual.** Si no se puede leer lo que debe o
+repartir el pago en sus quincenas —sin internet, la base de datos en su límite
+del día, un registro con datos que no se entienden—, el pago se guarda entero
+como su propio recibo, **a cuenta**, con su folio, y marcado **«Por revisar»**
+en el mostrador. Sin internet se queda en esa computadora y se sube solo al
+volver la conexión. El recibo de ese pago dice *PAGO RECIBIDO* (no «al
+corriente» ni un saldo que no se calculó), y en el panel explica por qué quedó
+así para que el encargado lo ponga donde va.
 
 Al terminar sale el **recibo con folio** (`R-260821-WPUF`), y ese mismo recibo
 aparece en la app de la persona en segundos, junto con un aviso en su chat. El

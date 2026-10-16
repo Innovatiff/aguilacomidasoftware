@@ -127,7 +127,14 @@ export function renderReceipt(context) {
       // Once cancelled this is a historical figure, not the client's balance —
       // saying "al corriente" about somebody who owes the money again would be
       // the most misleading line on the page.
-      card(h('div.row.row--between',
+      receipt.held && !isVoid
+        ? alert('Este pago entró entero y quedó a cuenta, sin repartirse en sus quincenas, porque '
+          + 'en ese momento no se pudo calcular lo que debía'
+          + `${heldReason(receipt.heldWhy)}. El dinero está registrado; revisa su ficha para `
+          + 'ponerlo donde va.', 'warn')
+        : null,
+
+      receipt.held ? null : card(h('div.row.row--between',
         h('div.w-650', isVoid ? 'Saldo que quedó en su momento' : 'Saldo después de este pago'),
         h('div.row', { style: { gap: '8px' } },
           h('span.t-lg.w-700', money(receipt.balanceAfter || 0)),
@@ -215,4 +222,12 @@ export function renderReceipt(context) {
   }
 
   return () => stops.forEach((stop) => stop?.());
+}
+
+/** Why a payment was kept whole, in words: " (sin internet)", or nothing. */
+function heldReason(why) {
+  const code = String(why || '');
+  if (/unavailable|offline/i.test(code)) return ' (sin internet)';
+  if (/resource-exhausted|quota/i.test(code)) return ' (la base de datos llegó a su límite del día)';
+  return '';
 }

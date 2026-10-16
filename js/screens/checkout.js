@@ -194,6 +194,8 @@ export function renderCheckout() {
         h(`span.w-700${reversal || wasCancelled ? '.c-bad' : ''}${wasCancelled ? '.is-void' : ''}`,
           money(receipt.amount)),
         reversal ? badge('Cancelación', 'bad') : wasCancelled ? badge('Cancelado', 'bad') : null,
+        // Kept whole, a cuenta, when it could not be spread over their bills.
+        receipt.held && !reversal && !wasCancelled ? badge('Por revisar', 'warn') : null,
       ].filter(Boolean),
       onClick: () => go(`/receipts/${receipt.id}`),
     });

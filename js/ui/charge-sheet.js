@@ -6,13 +6,17 @@
  * because that is how it happens — someone walks up and hands over cash, and
  * what it settles is worked out from there.
  *
- * **It charges for food already served, and it never turns money away.** The
- * amount is pre-filled with what they owe — bills still open and fortnights
- * served and not yet billed — and it says, before the money is taken, what
- * that pays. A bigger number, or a payment from somebody who owes nothing,
- * still goes in: the dates on a client can be wrong, and a payment that
- * happened has to be in the software. The sheet says where the rest waits —
- * on the fortnight being served — and the payment goes through.
+ * **It never turns money away.** The amount is pre-filled with what they owe
+ * — bills still open and fortnights served and not yet billed — or, for
+ * somebody up to date paying a few days early, with the fortnight they are
+ * eating now; and it says, before the money is taken, what that pays. Any
+ * amount from anybody goes in: the dates on a client can be wrong, and the
+ * manager counts every payment that came in. If what they owe cannot even be
+ * read, the sheet still opens and the payment still goes in.
+ *
+ * A payment does not move anybody's dates: it is recorded on the day it was
+ * made, and their fortnight stays where it is unless somebody turns on the
+ * switch that says to move it.
  */
 
 import { h, mount } from '../lib/dom.js';
@@ -52,12 +56,14 @@ export async function openChargeSheet({ client, pricing, author }) {
    * sheet shows after that — the amount, what it pays, what is left — is
    * worked out from these bills, the same way the payment itself will.
    */
-  let bills;
+  let bills = [];
+  let unread = false;
   try {
     bills = await billsOf(client.id);
-  } catch (error) {
-    toastBad(errorText(error));
-    return null;
+  } catch {
+    // No internet, or the day's reading allowance spent: the payment is taken
+    // all the same, and kept whole until it can be put where it goes.
+    unread = true;
   }
 
   /*
@@ -65,7 +71,14 @@ export async function openChargeSheet({ client, pricing, author }) {
    * served. Said inside the sheet, with a way to put it right — never in the
    * way of taking the money.
    */
-  let advance = planAdvanceFix({ client, bills, since: servingSince(client), day: today() });
+  const advanceOf = () => {
+    try {
+      return planAdvanceFix({ client, bills, since: servingSince(client), day: today() });
+    } catch {
+      return { moves: [] };
+    }
+  };
+  let advance = advanceOf();
 
   const fortnight = chargeFor(client, pricing);
   const word = periodWord(client);
@@ -89,18 +102,38 @@ export async function openChargeSheet({ client, pricing, author }) {
       let reference = '';
       let note = '';
       let date = today();
-      let setCycle = !cycleKnown;
+      // Off: a payment a few days early or late must not drag their
+      // fortnight to the day it happened to be made.
+      let setCycle = false;
       let busy = false;
 
-      /** What can be paid on the chosen date, with the cycle as it would be. */
+      /**
+       * What can be paid on the chosen date, with the cycle as it would be —
+       * or nothing, for a record the arithmetic cannot read. Either way the
+       * payment can be taken.
+       */
       const owing = () => {
         const anchor = setCycle ? cycleFromPayment(date) : (client.cycleAnchor || cycleFromPayment(date));
         const payer = { ...client, cycleAnchor: anchor };
-        return { payer, anchor, ...payableRows(payer, bills, pricing, { day: date, setCycle }) };
+        try {
+          return { payer, anchor, ...payableRows(payer, bills, pricing, { day: date, setCycle }) };
+        } catch {
+          return { payer, anchor, rows: [], total: 0 };
+        }
+      };
+      const aheadOf = (value) => {
+        try {
+          return aheadRows(now.payer, bills, pricing, { day: date, amount: Math.max(0, value - now.total) });
+        } catch {
+          return [];
+        }
       };
 
       let now = owing();
-      let amount = now.total;
+      // What the box starts at: what they owe, or — up to date, paying a few
+      // days early — the fortnight they are eating now.
+      const suggested = () => (now.total > 0.005 ? now.total : (fortnight || 0));
+      let amount = suggested();
 
       const submit = h('button.btn.btn--primary.btn--block.btn--lg', { type: 'submit' });
       const covers = h('div.t-sm.c-soft');
@@ -131,7 +164,7 @@ export async function openChargeSheet({ client, pricing, author }) {
           toastBad(errorText(error));
           return;
         }
-        advance = planAdvanceFix({ client, bills, since: servingSince(client), day: today() });
+        advance = advanceOf();
         paintAdvance();
         recompute({ resetAmount: true });
       }
@@ -150,11 +183,11 @@ export async function openChargeSheet({ client, pricing, author }) {
 
       /** Everything that depends on the date or the cycle switch. */
       function recompute({ resetAmount = false } = {}) {
-        const before = now.total;
+        const before = suggested();
         now = owing();
-        // Only touch the amount if it was the old total — a number somebody
-        // typed is theirs.
-        if (resetAmount || Number(amount) === before) setAmount(now.total);
+        // Only touch the amount if it was the old suggestion — a number
+        // somebody typed is theirs.
+        if (resetAmount || Number(amount) === before) setAmount(suggested());
         else repaint();
       }
 
@@ -178,8 +211,7 @@ export async function openChargeSheet({ client, pricing, author }) {
 
         mount(submit, icon('cash'), `Cobrar ${money(value)}`);
         submit.disabled = busy || !(value > 0);
-        mount(covers, explain(value, now,
-          aheadRows(now.payer, bills, pricing, { day: date, amount: Math.max(0, value - now.total) })));
+        mount(covers, explain(value, now, aheadOf(value)));
 
         const running = periodOf(now.payer, date);
         const payDay = payDayAfter(running);
@@ -231,6 +263,11 @@ export async function openChargeSheet({ client, pricing, author }) {
 
       advanceNote,
 
+      unread
+        ? alert('No se pudo leer lo que debe (sin internet o sin conexión con la base de datos). '
+          + 'El pago entra igual y queda a cuenta, marcado para revisarlo.', 'warn')
+        : null,
+
       nothing,
 
       fortnight ? null : alert('Este plan no tiene precio. Agrégalo en Ajustes → Precios '
@@ -260,12 +297,10 @@ export async function openChargeSheet({ client, pricing, author }) {
       }),
 
       switchRow(cycleKnown ? `Reajustar su ${word} con este pago` : `Fijar su ${word} con este pago`, {
-        checked: !cycleKnown,
-        hint: cycleKnown
-          ? `Su ${word} ya está fijada. Actívalo sólo si de verdad vuelve a empezar — `
-            + 'pagar tarde no le mueve el día.'
-          : `Primera vez que el sistema le registra un pago. Se cobra en ${payDaysInWords()}, el `
-            + `día que termina su ${word}: si pagó otro día, cuenta desde el día de cobro anterior.`,
+        checked: false,
+        hint: `Apagado, el pago no le mueve ninguna fecha. Actívalo solo si hoy de verdad empieza `
+          + `su ${word} — se cobra en ${payDaysInWords()} —; pagar unos días antes o después no `
+          + 'es razón para moverla.',
         onChange: (value) => { setCycle = value; recompute(); },
       }),
       cycleLine,
@@ -347,11 +382,14 @@ async function announce(receipt, client) {
     receipt.unapplied ? `${money(receipt.unapplied)} a cuenta` : '',
   ].filter(Boolean).join(' y ') || 'a su cuenta';
 
-  const text = receipt.balanceAfter > 0.005
-    ? `Recibimos su pago de ${moneyFull(receipt.amount)} (${label}), ${what}. `
-      + `Saldo pendiente: ${money(receipt.balanceAfter)}. Su recibo ${receipt.folio} está en su app.`
-    : `Recibimos su pago de ${moneyFull(receipt.amount)} (${label}), ${what}. Queda al `
-      + `corriente. Su recibo ${receipt.folio} está en su app. ¡Gracias!`;
+  const text = receipt.held
+    ? `Recibimos su pago de ${moneyFull(receipt.amount)} (${label}). Su recibo ${receipt.folio} `
+      + 'está en su app. ¡Gracias!'
+    : receipt.balanceAfter > 0.005
+      ? `Recibimos su pago de ${moneyFull(receipt.amount)} (${label}), ${what}. `
+        + `Saldo pendiente: ${money(receipt.balanceAfter)}. Su recibo ${receipt.folio} está en su app.`
+      : `Recibimos su pago de ${moneyFull(receipt.amount)} (${label}), ${what}. Queda al `
+        + `corriente. Su recibo ${receipt.folio} está en su app. ¡Gracias!`;
 
   try {
     await postSystemMessage(client.id, text, {

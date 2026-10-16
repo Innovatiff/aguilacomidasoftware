@@ -604,18 +604,20 @@ export function aheadRows(payer, bills, pricing, { day = today(), amount = 0 } =
 }
 
 /**
- * What to say when somebody owes nothing for food already served.
+ * What to say when somebody owes nothing for food already served — which is
+ * everybody who pays a few days early.
  *
- * Information, not a refusal: they can still pay, and the money waits on the
- * fortnight they are eating now. Said with the day that fortnight is paid,
- * because it is the next thing the person across the counter will ask.
+ * Information, never a refusal, and worded so it cannot be read as one: the
+ * counter used to say "no debe nada", and a cashier reading that with the
+ * button greyed out sent people home with their money. The payment goes to
+ * the fortnight they are eating now.
  */
 export function nothingOwedYet(client, day = today()) {
   const running = periodOf(client, day);
   const payDay = payDayAfter(running);
-  return `${client?.name || 'Este cliente'} no debe nada de lo ya servido. Su ${periodWord(client)} `
-    + `en curso (${formatRange(running.start, running.end)}) se paga el ${weekdayName(payDay)} `
-    + `${formatDay(payDay)}. Si paga ahora, queda a cuenta de esa ${periodWord(client)}.`;
+  return `Está al corriente con lo ya servido. Lo que pague hoy queda para su ${periodWord(client)} `
+    + `en curso (${formatRange(running.start, running.end)}), la que se paga el `
+    + `${weekdayName(payDay)} ${formatDay(payDay)}.`;
 }
 
 /**
@@ -625,25 +627,39 @@ export function nothingOwedYet(client, day = today()) {
  * they owe, oldest first: bills still open, then fortnights already served and
  * not yet billed, each billed as it is paid for.
  *
- * **Every payment goes in.** Whatever the system thinks this person owes —
- * nothing, or less than they are handing over — the money changed hands, and
- * a payment that is not in the software is a payment nobody can prove. Dates
- * on a client can be wrong. What is left once the debts are paid waits on the
- * fortnight being served and the ones after it (`aheadRows`); what does not
- * fit even there is kept on the receipt as "a cuenta" (`unapplied`). Nothing
- * here refuses money: only an amount of zero, or a date that has not come.
+ * **Every payment goes in, always.** Whatever the system thinks this person
+ * owes — nothing, or less than they are handing over, a few days early or a
+ * few days late, active, paused or gone — the money changed hands, and the
+ * manager counts what came in. Dates on a client can be wrong. What is left
+ * once the debts are paid waits on the fortnight being served and the ones
+ * after it (`aheadRows`); what does not fit even there is kept on the receipt
+ * as "a cuenta" (`unapplied`). The day is the day it was paid, as given.
  *
- * All of it in a single transaction, because the alternative is a payment that
- * half-applied: the cash is already in the drawer by the time this runs, so it
- * either lands completely or not at all.
+ * Applied in a single transaction, because the alternative is a payment that
+ * half-applied. And if applying it fails — a client whose record the
+ * arithmetic cannot read, no internet at the counter, the database's daily
+ * allowance spent — the payment is kept anyway, whole, as its own receipt
+ * (`keepPayment`), and marked for somebody to look at. The only thing refused
+ * is an amount of zero, which is not a payment.
  */
-export async function takePayment(
-  { client, pricing, amount, method, reference, note, date, setCycle = false }, author,
-) {
-  const total = round2(amount);
+export async function takePayment(params, author) {
+  const total = round2(params.amount);
   if (!(total > 0)) throw new Error('El monto debe ser mayor a cero.');
-  const day = date || today();
-  if (day > today()) throw new Error('Esa fecha todavía no llega.');
+  const day = params.date || today();
+  // Made here so the receipt keeps one id and one folio whichever way it is
+  // saved — and so a retry can tell it was saved already.
+  const receiptRef = doc(collection(db, 'receipts'));
+  try {
+    return await applyPayment({ ...params, total, day, receiptRef }, author);
+  } catch (error) {
+    return keepPayment({ ...params, total, day, receiptRef }, author, error);
+  }
+}
+
+/** The payment, spread over what they owe and what they are eating now. */
+async function applyPayment({
+  client, pricing, total, day, receiptRef, method, reference, note, setCycle = false,
+}, author) {
 
   /*
    * When this payment sets the cycle, it has to set it *before* anything else
@@ -667,7 +683,6 @@ export async function takePayment(
     ...(extra > 0.005 ? aheadRows(payer, bills, pricing, { day, amount: extra }) : []),
   ];
 
-  const receiptRef = doc(collection(db, 'receipts'));
   const clientRef = doc(db, 'clients', client.id);
 
   return runTransaction(db, async (tx) => {
@@ -815,6 +830,58 @@ export async function takePayment(
     return { id: receiptRef.id, ...receipt, at: new Date() };
   });
 }
+
+/**
+ * Keeps a payment that could not be applied — the money in, on its own.
+ *
+ * The receipt says who, how much, how and when, exactly as it was paid, and
+ * holds all of it "a cuenta" (`unapplied`): nothing is moved on their bills,
+ * so nothing can be moved wrongly. `held` marks it for the manager — the
+ * counter's list and the receipt itself say so — with the reason, so it can
+ * be looked at and put where it goes.
+ *
+ * One plain write, no reads, so it goes through where the transaction could
+ * not: Firestore keeps it on this computer when there is no internet and
+ * sends it when there is, and it needs none of the daily reading allowance.
+ * Not waited on past a few seconds for the same reason — the person at the
+ * counter is not kept standing while a write waits for the internet.
+ */
+async function keepPayment({
+  client, total, day, receiptRef, method, reference, note,
+}, author, error) {
+  // A transaction that reached the server before the connection dropped may
+  // have saved it already; one receipt per payment, never two.
+  try {
+    const already = await Promise.race([getDoc(receiptRef), wait(3000)]);
+    if (already?.exists?.()) return { id: receiptRef.id, ...already.data() };
+  } catch { /* not readable: write it */ }
+
+  const receipt = {
+    clientId: client?.id || '',
+    clientName: client?.name || '',
+    farmId: client?.farmId || '',
+    farmName: client?.farmName || '',
+    locationName: client?.locationName || '',
+    amount: total,
+    method: method || 'cash',
+    reference: reference || '',
+    note: note || '',
+    date: day,
+    applied: [],
+    unapplied: total,
+    balanceAfter: null,
+    held: true,
+    heldWhy: String(error?.code || error?.message || error || '').slice(0, 300),
+    takenByName: author?.name || '',
+    takenByUid: author?.uid || null,
+    folio: folioFor(receiptRef.id, day),
+    at: serverTimestamp(),
+  };
+  await Promise.race([setDoc(receiptRef, receipt), wait(4000)]);
+  return { id: receiptRef.id, ...receipt, at: new Date() };
+}
+
+const wait = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 
 /**
  * Cancels a whole payment — every fortnight it touched, in one go.
