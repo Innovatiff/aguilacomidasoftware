@@ -435,6 +435,50 @@ export function bagAt(slides, index) {
   return bag ? { ...bag, starts: bag.first === index } : null;
 }
 
+/**
+ * Who or what a slide is, in a way that survives the list changing under it:
+ * a person by their id; a farm by its id and which time it comes up this
+ * morning, because a farm the order comes back to has two slides; and the
+ * summary at the end as itself.
+ */
+export function slideKey(slides, index) {
+  const slide = slides?.[index];
+  if (!slide) return null;
+  if (slide.kind === 'client') return `c:${slide.client.id}`;
+  if (slide.kind === 'farm') {
+    let time = 0;
+    for (let i = 0; i < index; i += 1) {
+      if (slides[i].kind === 'farm' && slides[i].farm.id === slide.farm.id) time += 1;
+    }
+    return `f:${slide.farm.id}:${time}`;
+  }
+  return 'done';
+}
+
+/**
+ * Where a remembered slide is now: the same person, wherever the list puts
+ * them today — somebody added to an earlier house, or one who stopped eating,
+ * moves everybody after them by one, and the screen has to stay on who it was
+ * on, not on the number.
+ *
+ * When whoever it was is gone from the list — they stopped eating today, or
+ * went to the other libreta — their number now belongs to the next person,
+ * whose stickers have not come out. So it lands on the slide before: the next
+ * Siguiente brings that person up and prints them, rather than leaving them
+ * on the screen with nothing printed.
+ *
+ * @param {object[]} slides
+ * @param {{ key?: string, index?: number }} spot
+ * @returns {number}
+ */
+export function spotIndex(slides, spot) {
+  if (!slides?.length) return 0;
+  const found = spot?.key ? slides.findIndex((unused, i) => slideKey(slides, i) === spot.key) : -1;
+  if (found >= 0) return found;
+  const index = Number.isInteger(spot?.index) ? spot.index : 0;
+  return Math.max(0, Math.min(index - (spot?.key ? 1 : 0), slides.length - 1));
+}
+
 /* --- Who is at the keyboard -------------------------------------------------- */
 
 /**

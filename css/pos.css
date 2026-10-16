@@ -886,6 +886,8 @@
   border-top: 1px solid var(--border); padding-top: var(--s3);
 }
 .pkline__go { color: var(--brand-600); }
+/* Where tapping the card lands, when this computer was already in it today. */
+.pkline__resume { font-weight: 800; color: var(--brand-700); }
 
 /* --- What has been packed today --------------------------------------------- */
 
@@ -952,6 +954,64 @@
 .pkprint.is-off { color: var(--bad-600); background: var(--bad-50); border-color: var(--bad-500); }
 .pkprint.is-off .pkprint__switch { background: var(--ink-300); }
 .pkprint.is-off .pkprint__knob { left: 3px; }
+
+/* The two controls on the right: a special bag's sticker, and the switch. */
+.pkbar__tools { display: flex; align-items: center; gap: var(--s3); }
+.pkspecial {
+  display: inline-flex; align-items: center; gap: var(--s2);
+  min-height: 44px; padding: 0 var(--s4);
+  font: inherit; font-size: var(--fs-md); font-weight: 700;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-full);
+  cursor: pointer;
+}
+.pkspecial svg { flex: none; width: 20px; height: 20px; }
+.pkspecial:hover { background: var(--ink-50); }
+.pkspecial:focus-visible { outline: 3px solid var(--brand-500); outline-offset: 2px; }
+
+/* --- Etiqueta especial: who went in a bag packed by hand --------------------- */
+
+.spl { display: flex; flex-direction: column; gap: var(--s4); }
+.spl__lead { margin: 0; color: var(--text-soft); }
+.spl__farm { font-size: var(--fs-2xl); font-weight: 800; letter-spacing: -.02em; line-height: 1.1; }
+.spl__group { display: flex; flex-direction: column; gap: var(--s2); }
+.spl__place {
+  font-size: var(--fs-sm); font-weight: 800; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--text-soft);
+}
+/* A person is one big row to tap, on or off — no checkbox to aim at. */
+.spl__who {
+  display: flex; align-items: center; gap: var(--s3);
+  min-height: 54px; padding: 0 var(--s4);
+  font: inherit; font-size: var(--fs-lg); font-weight: 700; text-align: left;
+  color: var(--text);
+  background: var(--surface);
+  border: 2px solid var(--border-strong);
+  border-radius: var(--r-md);
+  cursor: pointer;
+}
+.spl__who:hover { background: var(--ink-50); }
+.spl__who:focus-visible { outline: 3px solid var(--brand-500); outline-offset: 2px; }
+.spl__check {
+  flex: none; display: grid; place-items: center;
+  width: 28px; height: 28px;
+  border: 2px solid var(--border-strong); border-radius: 7px;
+  color: transparent;
+}
+.spl__check svg { width: 18px; height: 18px; }
+.spl__name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.spl__x { flex: none; font-size: var(--fs-sm); font-weight: 800; color: var(--brand-600); }
+.spl__here {
+  flex: none; padding: 2px var(--s2);
+  font-size: var(--fs-xs); font-weight: 800; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--text-soft); background: var(--ink-100); border-radius: var(--r-full);
+}
+.spl__who.is-on { border-color: var(--brand-500); background: var(--brand-50); }
+.spl__who.is-on .spl__check { color: #fff; background: var(--brand-500); border-color: var(--brand-500); }
+.spl__foot { display: flex; flex-direction: column; gap: var(--s3); }
+.spl__sum { font-weight: 700; text-align: center; }
 
 /* One card, and no border on it. A hairline around a white card on a grey page
    is a line that draws itself; the page already says where the card ends. */

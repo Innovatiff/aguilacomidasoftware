@@ -258,3 +258,36 @@ export function pausePrinting(day, paused) {
     else localStorage.removeItem(PAUSE);
   } catch { /* storage refused: the pause lasts as long as the screen does */ }
 }
+
+/* --- Where this computer left each libreta ------------------------------------ */
+
+/**
+ * The slide this computer was on in a libreta, today.
+ *
+ * Going out to the menu — to fix what somebody cannot eat, to look at the
+ * board — and coming back used to start the libreta again at its first farm,
+ * with that farm's bag sticker and sixty-seven presses of Siguiente to get
+ * back to person sixty-eight. Now it comes back to the person it left.
+ *
+ * On the machine, like the pause, and for the same reasons: it is nothing the
+ * other computer needs, nothing in Firestore changes for it, and it is over
+ * with the day. The slide is remembered by who is on it (`key`) as well as by
+ * its number, so somebody added to an earlier house while the libreta was
+ * closed does not move it back by one.
+ */
+const SPOT = (lineId) => `aguila.empaque.vas.${lineId}`;
+
+export function savedSpot(lineId, day) {
+  try {
+    const spot = JSON.parse(localStorage.getItem(SPOT(lineId)) || 'null');
+    return spot?.day === day && Number.isInteger(spot.index) ? spot : null;
+  } catch { return null; }
+}
+
+/** Writes it down; `null` forgets it, which is what finishing a libreta does. */
+export function saveSpot(lineId, day, spot) {
+  try {
+    if (spot) localStorage.setItem(SPOT(lineId), JSON.stringify({ day, key: spot.key, index: spot.index }));
+    else localStorage.removeItem(SPOT(lineId));
+  } catch { /* storage refused: the libreta starts at its beginning, as it used to */ }
+}

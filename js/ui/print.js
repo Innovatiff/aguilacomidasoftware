@@ -20,7 +20,9 @@
  */
 
 import { h, mount } from '../lib/dom.js';
-import { labelSheet, fitLabel, placeSheet, fitPlace } from './label.js';
+import {
+  labelSheet, fitLabel, placeSheet, fitPlace, specialSheet, fitSpecial,
+} from './label.js';
 import { money } from '../lib/format.js';
 import { paymentMethodMeta } from '../lib/model.js';
 import { parseDay } from '../lib/dates.js';
@@ -324,21 +326,51 @@ function printOne() {
  * being something the kitchen has to live with.
  *
  * @param {object}   stickers
- * @param {object}   [stickers.bag]     a bag's sticker: the farm and the house
+ * @param {object}   [stickers.bag]      a bag's sticker: the farm and the house
  *   (see `placeSheet` in js/ui/label.js)
- * @param {object[]} [stickers.labels]  people's stickers, in order (see `labelSheet`)
+ * @param {object}   [stickers.special]  a bag packed by hand, with its people
+ *   on it (see `specialSheet`)
+ * @param {object[]} [stickers.labels]   people's stickers, in order (see `labelSheet`)
  */
-export function printStickers({ bag = null, labels = [] } = {}) {
+export function printStickers({ bag = null, special = null, labels = [] } = {}) {
   const sheets = [
     ...(bag ? [[placeSheet(bag), fitPlace]] : []),
+    ...(special ? [[specialSheet(special), fitSpecial]] : []),
     ...labels.map((spec) => [labelSheet(spec), fitLabel]),
   ];
   if (!sheets.length) return;
+  stickerJobs.push(sheets);
+  if (!pumping) nextStickers();
+}
+
+/*
+ * Sticker jobs waiting for the printer, oldest first.
+ *
+ * There is one print area, and the printer is asked for on the next frame, so
+ * two jobs started inside one frame — Siguiente pressed twice quickly, or a
+ * slow machine handing over two key presses at once — would each replace the
+ * other's stickers before either was printed: one person's lids twice and the
+ * other's never. So each job waits its turn: it is put in the area only after
+ * the one before it has gone to the printer.
+ */
+const stickerJobs = [];
+let pumping = false;
+
+function nextStickers() {
+  const sheets = stickerJobs.shift();
+  pumping = Boolean(sheets);
+  if (!sheets) return;
   paper('label');
   // Siblings, so `.lbl + .lbl` puts each on its own page.
   mount(printRoot(), ...sheets.map(([sheet]) => sheet));
   for (const [sheet, fit] of sheets) fit(sheet);
-  requestAnimationFrame(() => window.print());
+  requestAnimationFrame(() => {
+    try {
+      window.print();
+    } finally {
+      nextStickers();
+    }
+  });
 }
 
 /** Clears the print area — called after printing so nothing lingers. */

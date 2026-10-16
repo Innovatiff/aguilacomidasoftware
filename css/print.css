@@ -524,3 +524,52 @@
   letter-spacing: 0.08em;
   white-space: nowrap;
 }
+
+/* --- A bag packed by hand ------------------------------------------------------
+   The bag's sticker with its people on it: the farm and the houses a size
+   down, a rule, the names in columns, and the totals along the bottom. How
+   large the names are and how many columns they take is decided by
+   fitSpecial() in js/ui/label.js, by measuring; these are where it starts. */
+
+.lbl--special > * { flex: none; }
+.lbl--special .place__farm { font-size: 9mm; }
+.lbl--special .place__where { margin-top: 0.6mm; font-size: 6mm; }
+.lbl--special .lbl__rule { margin: 1.4mm 0; }
+
+.lbl--special .place__names {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-auto-flow: column;           /* down the first column, then the next */
+  grid-template-columns: minmax(0, 1fr);
+  column-gap: 3mm;
+  align-content: start;
+  overflow: hidden;
+  font-size: 5mm;
+}
+.place__who {
+  display: flex;
+  align-items: baseline;
+  gap: 0.8mm;
+  min-width: 0;
+  line-height: 1.2;
+}
+.place__name {
+  min-width: 0;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* ×2 is what the containers are counted by, so it is the one thing in the
+   list in bold. */
+.place__x { flex: none; font-weight: 800; }
+
+.lbl--special .place__foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 3mm;
+  margin-top: 1.2mm;
+}
+.lbl--special .place__foot b { font-size: 3mm; font-weight: 800; letter-spacing: 0.02em; }

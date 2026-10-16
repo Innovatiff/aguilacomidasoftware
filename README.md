@@ -582,9 +582,12 @@ etiqueta, las dos en el mismo papel de **100 × 50 mm**:
 
 Una bolsa nueva empieza cada cuatro personas **o cuando cambia la ubicación**,
 aunque a la anterior le quepa gente: una bolsa se deja en una sola casa, y su
-etiqueta dice esa. Una persona sola en su casa también es una bolsa, con su
-etiqueta. Por ejemplo, Georgia con seis en Casa Azul, cuatro en Casa Roja y
-una en Casa Verde, sin que el recorrido cambie en nada:
+etiqueta dice esa. Una ubicación con más de cuatro se parte de a cuatro: **diez
+personas en la misma ubicación son tres etiquetas de bolsa**, una antes de la
+persona 1, otra antes de la 5 y otra antes de la 9. Una persona sola en su casa
+también es una bolsa, con su etiqueta. Por ejemplo, Georgia con seis en Casa
+Azul, cuatro en Casa Roja y una en Casa Verde, sin que el recorrido cambie en
+nada:
 
 | En la pantalla | Lo que sale |
 |---|---|
@@ -597,7 +600,9 @@ una en Casa Verde, sin que el recorrido cambie en nada:
 | Persona 11 (Casa Verde) | GEORGIA / CASA VERDE, y luego las suyas |
 
 Todo lo de una diapositiva sale junto, en un solo envío a la impresora y en el
-orden en que se pega: primero la bolsa, luego las tapas. Abajo, chico, la
+orden en que se pega: primero la bolsa, luego las tapas. Si se aprieta
+*Siguiente* muy rápido, cada envío espera su turno: no se pierde ni se repite
+ninguna etiqueta. Abajo, chico, la
 etiqueta de la bolsa lleva el día y la libreta, como todas. Una farma sin
 ubicaciones lleva en su bolsa solo el nombre de la farma.
 
@@ -606,8 +611,22 @@ dice cuántas bolsas son. Si una farma está repartida entre las dos libretas,
 cada libreta hace sus propias bolsas con su gente. Cuántas personas van por
 bolsa es un solo número (`BAG_SIZE` en `js/lib/packing.js`).
 
-La libreta **siempre empieza desde cero**, en su primera farma, así que al
-abrirla sale la etiqueta de su primera bolsa.
+**La libreta sigue donde se quedó.** Si se sale al menú —a cambiar lo que
+alguien no come, a ver el tablero— o se cierra el navegador, al volver a
+entrar sigue en la misma persona, sin imprimir nada (sus etiquetas ya
+salieron), y el siguiente *Siguiente* imprime como siempre. La tarjeta de la
+libreta lo dice antes de entrar: *Sigues en Rafael Núñez · 23 de 174*.
+
+- Se acuerda de la persona, no del número: si mientras tanto llegó alguien a
+  una casa de antes, sigue en la misma persona.
+- Si la persona en la que iba ya no está hoy —la pausaron, o pasó a la otra
+  libreta—, vuelve a la de antes, para que *Siguiente* traiga e imprima a la
+  que sigue y nadie se quede sin etiquetas.
+- Lo guarda **esa computadora**, para ese día; cada libreta lleva su propio
+  lugar. Nada de esto se escribe en Firestore.
+- Solo la primera vez del día empieza en la primera farma, con la etiqueta
+  de su primera bolsa. **Terminar** olvida el lugar: si se vuelve a abrir
+  después, empieza desde arriba.
 
 Regresar no imprime nada: eso es para revisar un nombre ya empacado, y una
 etiqueta por cada revisión es un rollo perdido para el miércoles. Volver a
@@ -620,12 +639,13 @@ para no tener que moverse:
   la persona que empieza cada bolsa siguiente (esa bolsa). La primera farma no
   tiene ninguna diapositiva antes a la cual regresar.
 
-**El interruptor de arriba a la derecha** — *Imprimir etiquetas* — apaga y
-prende la impresión con un clic, sin desconectar la impresora. Apagado se pone
-rojo y dice *Impresión apagada*: se puede ir para atrás y para adelante, o
-avanzar hasta donde se había quedado la libreta, sin que salga ni una
-etiqueta, y desaparecen los botones de imprimir. Al prenderlo no sale nada
-por sí solo; sale desde el siguiente *Siguiente*.
+**El interruptor de arriba a la derecha** — *Siguiente imprime* — apaga y
+prende con un clic lo que sale solo, sin desconectar la impresora. Apagado se
+pone rojo y dice *Siguiente no imprime*: se puede ir para atrás y para
+adelante todo lo que se quiera sin que salga ni una etiqueta. Al prenderlo no
+sale nada por sí solo; sale desde el siguiente *Siguiente*. **Los botones que
+dicen «imprimir» imprimen siempre**, prendido o apagado: apretar uno es
+decidirlo.
 
 - Es **solo de esa computadora**: no apaga la de la otra libreta.
 - **Se recuerda por ese día**: si se cierra el navegador o se sale de la
@@ -633,13 +653,33 @@ por sí solo; sale desde el siguiente *Siguiente*.
   que una pausa olvidada no deje a nadie sin etiquetas.
 - *Empaque → Configurar → Imprimir las etiquetas solas* sigue siendo el
   interruptor de toda la cocina; con ése apagado, el de la pantalla no
-  aparece.
+  aparece, ni los botones de imprimir.
+
+**Etiqueta especial**, también arriba a la derecha, es para una bolsa que no
+es de cuatro —dos personas, o tres—. Abre la farma de la pantalla, casa por
+casa, con la persona en la que va marcada *Aquí vas*. Se toca a quién lleva la
+bolsa y *Imprimir etiqueta* saca una: la farma, la ubicación (o las
+ubicaciones, si van de casas distintas), los nombres con **×2** para quien lleva
+dos, y abajo cuántos son: «2 personas · 3 comidas». No cambia el recorrido ni
+guarda nada; es solo una etiqueta.
+
+| Etiqueta | Cuándo sale | Qué dice |
+|---|---|---|
+| De la bolsa | Sola, cada cuatro personas o cuando cambia la casa | La farma y la ubicación |
+| De cada persona | Sola, al llegar a esa persona; una por comida | El nombre, la farma y la casa, preferencias, nota, el QR |
+| Especial | Cuando se aprieta *Etiqueta especial* | La farma, la ubicación, los nombres escogidos y cuántos son |
 
 **La etiqueta de cada persona** lleva, de arriba abajo: el nombre grande en
 mayúsculas, una raya, la farma y la ubicación, las preferencias, la nota, y al
 pie el día, la libreta y el número de la persona —y, para quien lleva dos,
 *1/2* y *2/2*—. A la izquierda un **QR de 32 mm** que lleva a la página donde
 esa persona instala su propia app, con su correo ya escrito.
+
+**Lo que empacar guarda, y dónde.** Empacar no cambia clientes, farmas,
+pagos ni la configuración. Lo único que escribe en Firestore es el registro
+del día de cada libreta (`packRuns`): quién la empezó, cuándo, cuántos van y
+cuándo se terminó. El interruptor y el lugar donde se quedó se guardan en esa
+computadora, y la etiqueta especial no guarda nada.
 
 **En la etiqueta nunca se imprime una alergia.** Las alergias están en la
 pantalla de empaque, en rojo, donde alguien las lee con la comida todavía
@@ -862,7 +902,9 @@ js/
   ui/                 shell, kit de componentes, hojas, chat
     print.js          recibos, reportes y etiquetas, por el diálogo del navegador
     label.js          las etiquetas de 100 × 50 mm: la de cada comida de
-                      cada persona y la de cada bolsa —farma y ubicación—
+                      cada persona, la de cada bolsa —farma y ubicación— y
+                      la especial, con la gente escogida
+    special-label.js  Etiqueta especial: tocar a quién lleva una bolsa
     day-board.js      el tablero de hoy, en la computadora de la cocina
     sortable.js       ordenar una lista arrastrando, o con el teclado
   screens/            una pantalla por archivo

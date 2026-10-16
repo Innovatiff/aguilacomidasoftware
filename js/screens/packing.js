@@ -20,9 +20,11 @@ import { button, emptyState, skeletonRows, alert, dataErrorCard } from '../ui/ki
 import { go } from '../lib/router.js';
 import { store, subscribe, activeClients, isReady, firstError, startStore } from '../data/store.js';
 import {
-  watchPacking, watchPackers, watchPackRuns, seatedPacker, sitDown,
+  watchPacking, watchPackers, watchPackRuns, seatedPacker, sitDown, savedSpot,
 } from '../data/packing.js';
-import { packingSequence, packerByPin, unassignedPlaces, canDo } from '../lib/packing.js';
+import {
+  packingSequence, packerByPin, unassignedPlaces, canDo, spotIndex,
+} from '../lib/packing.js';
 import { today, formatDayLong, formatTime, capitalize } from '../lib/dates.js';
 import { kitchen } from '../lib/mode.js';
 import { plural, number } from '../lib/format.js';
@@ -260,14 +262,52 @@ export function renderPacking() {
           h('span.pkline__l', plan.farmCount === 1 ? 'farma' : 'farmas'))),
 
       h('div.pkline__foot',
-        run
-          ? h('span', run.done
-            ? `La terminó ${names(run)}`
-              + `${run.finishedAt ? ` a las ${formatTime(run.finishedAt)}` : ''}`
-            : `${mine ? 'La empezaste tú' : `La está empacando ${names(run)}`}`
-              + `${run.packed ? ` · va en ${run.packed} de ${run.people}` : ''}`)
-          : h('span', plan.people ? 'Nadie la ha tocado hoy' : 'No hay nada que empacar'),
+        resumeAt(line, plan, run)
+          || (run
+            ? h('span', run.done
+              ? `La terminó ${names(run)}`
+                + `${run.finishedAt ? ` a las ${formatTime(run.finishedAt)}` : ''}`
+              : `${mine ? 'La empezaste tú' : `La está empacando ${names(run)}`}`
+                + `${run.packed ? ` · va en ${run.packed} de ${run.people}` : ''}`)
+            : h('span', plan.people ? 'Nadie la ha tocado hoy' : 'No hay nada que empacar')),
         plan.people ? h('span.pkline__go', icon('chevronR')) : null));
+  }
+
+  /**
+   * Where opening this libreta will land, when this computer was already in
+   * it today: the person, by name, and how far that is. It is what tapping
+   * the card does, said before the tap, so nobody expects the first farm and
+   * gets person sixty-eight — or the other way round.
+   */
+  function resumeAt(line, plan, run) {
+    // Finished — here or on the other computer — says who finished it.
+    const here = run?.done ? null : spotOf(line, plan);
+    if (!here) return null;
+    const who = here.slide.kind === 'client' ? here.slide.client.name
+      : here.slide.kind === 'farm' ? `la farma ${here.slide.farm.name}`
+        : 'el final';
+    return h('span.pkline__resume', `Sigues en ${who} · ${number(here.done)} de ${number(here.people)}`);
+  }
+
+  /**
+   * Where this computer will carry on a libreta today — the slide, and how
+   * many people that is out of how many — or null when it has not been in it,
+   * or finished it. Worked out from the list as it is now, so it is exact;
+   * the day's record only counts every few people.
+   */
+  function spotOf(line, plan = null) {
+    const spot = line ? savedSpot(line.id, day) : null;
+    if (!spot) return null;
+    const sequence = plan || packingSequence({
+      line, lines: setup.lines, farms: store.farms, clients: activeClients(), day,
+    });
+    if (!sequence.slides.length) return null;
+    const at = spotIndex(sequence.slides, spot);
+    return {
+      slide: sequence.slides[at],
+      done: sequence.slides.slice(0, at + 1).filter((one) => one.kind === 'client').length,
+      people: sequence.people,
+    };
   }
 
   /* --- What has been packed today ------------------------------------------ */
@@ -283,7 +323,15 @@ export function renderPacking() {
             ? `Terminada${run.finishedAt ? ` a las ${formatTime(run.finishedAt)}` : ''}`
               + ` · ${plural(run.people, 'persona', 'personas')}`
             : `Empezada${run.startedAt ? ` a las ${formatTime(run.startedAt)}` : ''}`
-              + ` · va en ${number(run.packed || 0)} de ${number(run.people)}`)))))); 
+              + ` · va en ${progressOf(run)}`)))))); 
+  }
+
+  /** "23 de 174": exact where this computer has the place, the record's otherwise. */
+  function progressOf(run) {
+    const here = spotOf(setup.lines.find((line) => line.id === run.lineId));
+    return here
+      ? `${number(here.done)} de ${number(here.people)}`
+      : `${number(run.packed || 0)} de ${number(run.people)}`;
   }
 
   const unsubscribe = subscribe(paint);

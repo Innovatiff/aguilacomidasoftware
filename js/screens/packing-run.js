@@ -42,14 +42,23 @@
  * packed, and a sticker for every check is a roll of labels gone by Wednesday.
  * Going forward again does, which is how a jammed sticker is replaced. A
  * person's slide also has a button for one more of their stickers, and a
- * slide where a bag's sticker came out has one for the bag.
+ * slide where a bag's sticker came out has one for the bag. A bag packed by
+ * hand — two people's food, or three — gets its sticker from Etiqueta
+ * especial, at the top right, where the packer taps who went in it.
  *
  * Printing has two switches. Empaque → Configurar turns it off for the whole
  * kitchen, which is what the morning the printer dies wants. The one at the
- * top right of this screen pauses it on this computer, for today: to walk back
- * over people already packed and forward again, or up to where a libreta was
- * left, without a sticker for each — which used to mean pulling the printer's
- * cable out.
+ * top right of this screen stops Siguiente printing on this computer, for
+ * today: to walk back over people already packed and forward again without a
+ * sticker for each — which used to mean pulling the printer's cable out. The
+ * buttons that say "imprimir" print either way; pressing one is the decision.
+ *
+ * **It carries on where it was left.** Going out to the menu and back, or
+ * closing the browser, comes back to the same person on this computer — with
+ * no stickers, because theirs came out when they first came up — and the next
+ * Siguiente prints as usual. Only a libreta opened for the first time that
+ * day starts at its first farm and prints its first bag. Terminar forgets the
+ * place, so the libreta opened again after it starts from the top.
  *
  * The keyboard moves it too: space, enter or the right arrow go forward, the
  * left arrow goes back. On a counter machine with a cheap mouse that is the
@@ -68,11 +77,12 @@ import { go } from '../lib/router.js';
 import { store, subscribe, activeClients, isReady, firstError, startStore } from '../data/store.js';
 import {
   watchPacking, watchPackers, startRun, finishRun, noteProgress, seatedPacker,
-  printingPaused, pausePrinting,
+  printingPaused, pausePrinting, savedSpot, saveSpot,
 } from '../data/packing.js';
 import { printStickers } from '../ui/print.js';
+import { specialLabel } from '../ui/special-label.js';
 import {
-  packingSequence, lineOf, canDo, bagAt,
+  packingSequence, lineOf, canDo, bagAt, slideKey, spotIndex,
 } from '../lib/packing.js';
 import { today, formatDayLong, capitalize } from '../lib/dates.js';
 import { plural, number } from '../lib/format.js';
@@ -87,15 +97,19 @@ export function renderPackingRun(context) {
   let setup = null;
   let failure = null;
   let at = 0;              // which slide
+  let atKey = null;        // and who or what is on it — see `keyOf`
   let plan = null;         // the sequence, rebuilt when the roster changes
   let runId = null;        // the record this morning is being written to
   let opening = false;
+  let placed = false;      // put where this computer left it, once
+  let resumed = false;     // ...and it had left it somewhere today
+  let finished = false;    // Terminar: nothing more to remember
   let bagOnOpen = false;   // the first farm's bag, printed once when it opens
   let paused = printingPaused(day);   // this computer's switch, top right
 
-  // Stickers come out when the kitchen prints them and this computer is not
-  // paused. Everything that prints, and every button that offers to, asks this.
-  const printing = () => Boolean(setup?.autoPrint) && !paused;
+  // Whether this kitchen prints stickers at all (Empaque → Configurar). The
+  // switch at the top right only decides whether Siguiente prints them.
+  const prints = () => Boolean(setup?.autoPrint);
 
   // Nobody at the keyboard: the record would have no name on it, which is the
   // whole reason the number is asked for. Back to the door.
@@ -130,20 +144,51 @@ export function renderPackingRun(context) {
         line, lines: setup.lines, farms: store.farms, clients: activeClients(), day,
       }),
     };
-    // Always from the beginning. It used to come back to plate nineteen after
-    // a browser was closed, which was right when the screen was only a screen;
-    // now every person that goes by prints a label, and resuming halfway means
-    // eighteen containers with nothing on them.
-    if (at > plan.slides.length - 1) at = Math.max(0, plan.slides.length - 1);
+    // The first time, where this computer left this libreta today, if it did.
+    if (!placed) {
+      placed = true;
+      const spot = savedSpot(lineId, day);
+      if (spot) {
+        resumed = true;
+        at = spot.index;
+        atKey = spot.key;
+      }
+    }
+    // Then the same person, wherever the list now puts them (`spotIndex`):
+    // the screen stays on who it was on, not on the number. A list that comes
+    // back empty for a moment while the roster reloads moves nothing.
+    if (plan.slides.length) {
+      at = spotIndex(plan.slides, { key: atKey, index: at });
+      atKey = keyOf(at);
+      remember();
+    }
     open();
 
-    // The libreta opens on its first farm, and arriving there is the same as
-    // pressing Siguiente onto it: that farm's bag gets its sticker. Once — the
-    // roster changing later rebuilds the plan, and that is not an arrival.
+    // A libreta opened for the first time today opens on its first farm, and
+    // arriving there is the same as pressing Siguiente onto it: that farm's
+    // bag gets its sticker. Coming back to one already started prints nothing
+    // — whoever is on the screen had theirs when they first came up. Once
+    // either way: the roster changing later rebuilds the plan, and that is not
+    // an arrival.
     if (!bagOnOpen && plan.slides.length) {
       bagOnOpen = true;
-      printFor(at);
+      if (!resumed) printFor(at);
     }
+  }
+
+  /** Who or what is on a slide of this morning — see `slideKey`. */
+  function keyOf(index) {
+    return slideKey(plan?.slides, index);
+  }
+
+  /**
+   * Writes down, on this computer, where this libreta is. Not once it is
+   * finished: the list can still change in the moment before the screen
+   * closes, and writing the place down again then would bring the next
+   * opening back to the end instead of to the top.
+   */
+  function remember() {
+    if (!finished && plan?.slides.length) saveSpot(lineId, day, { key: atKey, index: at });
   }
 
   /**
@@ -175,6 +220,8 @@ export function renderPackingRun(context) {
     const next = Math.max(0, Math.min(at + step, plan.slides.length - 1));
     if (next === at) return;
     at = next;
+    atKey = keyOf(at);
+    remember();
     paint();
 
     // Forward only. Going back is how somebody checks a name they already
@@ -200,14 +247,16 @@ export function renderPackingRun(context) {
    * on nothing.
    *
    * `extra` is the button for one more of a person's stickers; `bagOnly`, the
-   * one for their bag's again.
+   * one for their bag's again. `pressed` is any button: those print with the
+   * switch off too — somebody pressing "imprimir" has decided — while the
+   * stickers that come out by themselves with Siguiente obey it.
    *
    * Wrapped, because a printer that is off or out of paper must not stop the
    * morning — the screen is the job, the stickers are the convenience.
    */
-  function printFor(index, { extra = false, bagOnly = false } = {}) {
+  function printFor(index, { extra = false, bagOnly = false, pressed = false } = {}) {
     const slide = plan?.slides[index];
-    if (!printing() || !slide) return;
+    if (!prints() || !slide || (paused && !pressed)) return;
     try {
       const bag = bagAt(plan.slides, index);
       const bagSticker = bag && {
@@ -253,10 +302,13 @@ export function renderPackingRun(context) {
   /** A small button that prints without moving, and gives the keyboard back. */
   const reprint = (label, options) => h('button.pkreprint', {
     type: 'button',
-    onclick: (event) => { event.currentTarget.blur(); printFor(at, options); },
+    onclick: (event) => { event.currentTarget.blur(); printFor(at, { ...options, pressed: true }); },
   }, icon('printer'), label);
 
   function finish() {
+    // Walked to the end: the next time this libreta is opened, it is a new pass.
+    finished = true;
+    saveSpot(lineId, day, null);
     const close = runId
       ? finishRun(runId, { packed: plan ? plan.people : 0 })
       : Promise.resolve();
@@ -266,6 +318,9 @@ export function renderPackingRun(context) {
 
   const onKey = (event) => {
     if (event.target?.tagName === 'INPUT' || event.target?.tagName === 'TEXTAREA') return;
+    // A sheet is open over the libreta — Etiqueta especial — and the space bar
+    // is choosing people in it, not moving the libreta underneath.
+    if (document.querySelector('.scrim')) return;
     if ([' ', 'Enter', 'ArrowRight', 'PageDown'].includes(event.key)) { event.preventDefault(); move(1); }
     if (['ArrowLeft', 'PageUp'].includes(event.key)) { event.preventDefault(); move(-1); }
   };
@@ -332,15 +387,52 @@ export function renderPackingRun(context) {
         // How many people are packed, and nothing else. The number of farms
         // was on this line too; it never changed while anybody was reading it.
         h('div.pkbar__text', `${number(done)} de ${number(people)}`),
-        setup?.autoPrint ? printSwitch() : null));
+        prints()
+          ? h('div.pkbar__tools',
+              plan.slides[at]?.kind === 'done' ? null : specialButton(),
+              printSwitch())
+          : null));
   }
 
   /**
-   * Printing on and off for this computer, in one click: top right, in the
-   * same place on every slide, and away from the two big buttons a wet thumb
-   * is aiming for. Off is red, so a pause nobody undid is noticed before a bag
-   * goes out with nothing on it. Turning it back on prints nothing by itself;
-   * the next Siguiente does.
+   * Etiqueta especial: a bag's sticker with the people the packer taps — for
+   * a bag of two or three, not the libreta's four. It offers the farm on the
+   * screen, house by house, as far as the next farm.
+   */
+  function specialButton() {
+    return h('button.pkspecial', {
+      type: 'button',
+      onclick: (event) => {
+        event.currentTarget.blur();
+        let head = at;
+        while (head > 0 && plan.slides[head].kind !== 'farm') head -= 1;
+        const groups = [];
+        for (let i = head + 1; i < plan.slides.length && plan.slides[i].kind === 'client'; i += 1) {
+          const one = plan.slides[i];
+          const last = groups[groups.length - 1];
+          const person = { id: one.client.id, name: one.client.name, plates: one.plates };
+          if (last && (last.place?.id || '') === (one.place?.id || '')) last.people.push(person);
+          else groups.push({ place: one.place, people: [person] });
+        }
+        const slide = plan.slides[at];
+        specialLabel({
+          farm: plan.slides[head].farm,
+          groups,
+          here: slide.kind === 'client' ? slide.client.id : null,
+          day,
+          lineName: plan.line?.name || '',
+        });
+      },
+    }, icon('note'), 'Etiqueta especial');
+  }
+
+  /**
+   * Whether Siguiente prints, on this computer, in one click: top right, in
+   * the same place on every slide, and away from the two big buttons a wet
+   * thumb is aiming for. Off is red, so a pause nobody undid is noticed before
+   * a bag goes out with nothing on it. Turning it back on prints nothing by
+   * itself; the next Siguiente does. The buttons that say "imprimir" print
+   * either way.
    */
   function printSwitch() {
     const on = !paused;
@@ -357,7 +449,7 @@ export function renderPackingRun(context) {
       },
     },
     icon('printer'),
-    h('span.pkprint__text', on ? 'Imprimir etiquetas' : 'Impresión apagada'),
+    h('span.pkprint__text', on ? 'Siguiente imprime' : 'Siguiente no imprime'),
     h('span.pkprint__switch', h('span.pkprint__knob')));
   }
 
@@ -386,7 +478,7 @@ export function renderPackingRun(context) {
       // The first bag's sticker came out when this slide did. This is for
       // when it jammed — and for the first farm, which has no slide before it
       // to step back to and come forward from.
-      printing()
+      prints()
         ? reprint(bag?.of > 1
           ? 'Volver a imprimir la etiqueta de la bolsa 1'
           : 'Volver a imprimir la etiqueta de la bolsa')
@@ -432,7 +524,7 @@ export function renderPackingRun(context) {
       // Their stickers came out when this slide did — one per comida. One
       // more, for a container that needs it; and this bag's again, on the
       // slide where it came out.
-      printing()
+      prints()
         ? h('div.pkreprints',
             reprint('Imprimir otra etiqueta', { extra: true }),
             bag?.starts && bag.number > 1

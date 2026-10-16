@@ -21,6 +21,7 @@
 import { h, svg } from '../lib/dom.js';
 import { qrMatrix } from '../lib/qr.js';
 import { formatDayShort } from '../lib/dates.js';
+import { plural } from '../lib/format.js';
 
 /* --- The QR ----------------------------------------------------------------- */
 
@@ -153,6 +154,40 @@ export function placeSheet({
 }
 
 /**
+ * A bag packed by hand: the farm, the house — or houses — and the people the
+ * packer says went in it, with ×2 beside whoever takes two, and along the
+ * bottom how many people and containers that makes, which is what whoever
+ * closes the bag counts against.
+ *
+ * Most bags are the libreta's: four people of one house, labelled by
+ * `placeSheet`. This is for the ones that are not — two people's food in a
+ * bag, or three, because that is how it fitted or how the van is going.
+ *
+ * @param {object} spec
+ * @param {string} spec.farmName
+ * @param {string[]} [spec.placeNames]  the houses of the people in it, in order
+ * @param {{ name: string, plates: number }[]} spec.people
+ * @param {string} spec.day          'YYYY-MM-DD'
+ * @param {string} spec.lineName     which libreta, for the "R1"
+ */
+export function specialSheet({
+  farmName, placeNames = [], people = [], day, lineName,
+}) {
+  const places = placeNames.map(upper).filter(Boolean);
+  const plates = people.reduce((sum, one) => sum + (Number(one.plates) || 0), 0);
+  return h('div.lbl.lbl--place.lbl--special',
+    h('div.place__farm', upper(farmName)),
+    places.length ? h('div.place__where', places.join(' · ')) : null,
+    h('div.lbl__rule'),
+    h('div.place__names', people.map((one) => h('div.place__who',
+      h('span.place__name', String(one.name || '').trim().replace(/\s+/g, ' ')),
+      one.plates > 1 ? h('b.place__x', `×${one.plates}`) : null))),
+    h('div.place__foot',
+      h('span', `${footerDay(day)} · R${routeOf(lineName)}`),
+      h('b', `${plural(people.length, 'persona', 'personas')} · ${plural(plates, 'comida', 'comidas')}`)));
+}
+
+/**
  * The line at the bottom of the sticker: today's note if the kitchen wrote one
  * this morning, otherwise the standing one on their file.
  *
@@ -214,4 +249,58 @@ export function fitLabel(root) {
 export function fitPlace(sheet) {
   const farm = fitLine(sheet?.querySelector('.place__farm'), { max: 14, min: 5 });
   fitLine(sheet?.querySelector('.place__where'), { max: Math.min(10, farm || 10), min: 4.5 });
+}
+
+/*
+ * The names on a special bag, in millimetres: as large as they fit, and never
+ * smaller than a thermal head still prints cleanly — 2.6mm is about 7½
+ * points, twenty dots of letter at 203 dpi.
+ */
+const NAMES_MAX = 5;
+const NAMES_MIN = 2.6;
+const NAMES_STEP = 0.1;
+const NAMES_COLUMNS = 3;
+
+/**
+ * Lays out a special bag's sticker that is already in the document: the farm
+ * and the houses on their lines, and the names as large as they can be in as
+ * few columns as hold all of them whole.
+ *
+ * Larger letters win over fewer columns; at the same size, fewer columns win,
+ * because each column is a list read from the top. If nothing holds every
+ * name whole, the smallest letters are used and a name too long for its
+ * column ends in "…" rather than pushing the totals off the paper.
+ */
+export function fitSpecial(sheet) {
+  const farm = fitLine(sheet?.querySelector('.place__farm'), { max: 9, min: 5 });
+  fitLine(sheet?.querySelector('.place__where'), { max: Math.min(6, farm || 6), min: 3.4 });
+  const list = sheet?.querySelector('.place__names');
+  if (!list) return;
+  const names = [...list.querySelectorAll('.place__name')];
+
+  const lay = (size, columns) => {
+    list.style.fontSize = `${size}mm`;
+    list.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`;
+    list.style.gridTemplateRows = `repeat(${Math.max(1, Math.ceil(names.length / columns))}, auto)`;
+    return {
+      short: list.scrollHeight <= list.clientHeight + 1,
+      whole: names.every((name) => name.scrollWidth <= name.clientWidth + 1),
+    };
+  };
+
+  // Counted in steps rather than by subtracting a decimal, which drifts.
+  const steps = Math.round((NAMES_MAX - NAMES_MIN) / NAMES_STEP);
+  for (let step = 0; step <= steps; step += 1) {
+    const size = Math.round((NAMES_MAX - step * NAMES_STEP) * 100) / 100;
+    for (let columns = 1; columns <= NAMES_COLUMNS; columns += 1) {
+      const fit = lay(size, columns);
+      if (fit.short && fit.whole) return;
+      // Short enough but a name is cut: another column only narrows them all,
+      // so the next thing worth trying is smaller letters.
+      if (fit.short) break;
+    }
+  }
+  for (let columns = 1; columns <= NAMES_COLUMNS; columns += 1) {
+    if (lay(NAMES_MIN, columns).short) return;
+  }
 }
