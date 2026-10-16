@@ -91,6 +91,8 @@
   status = 200
 
 # Y con la diagonal al final, que es como la teclea media gente.
+# From there its relative paths would look for everything under /empaque/, so
+# the page moves itself to /empaque before loading anything (top of empaque.html).
 [[redirects]]
   from = "/empaque/"
   to = "/empaque.html"

@@ -31,7 +31,9 @@ import { errorText } from '../firebase.js';
  * @param {string} options.lineName   which libreta, for the "R1"
  * @returns {Promise<boolean|undefined>} true once a sticker went to the printer
  */
-export function specialLabel({ farm, groups, here, day, lineName }) {
+export function specialLabel({
+  farm, groups, here, day, lineName, lineId,
+}) {
   const everyone = groups.flatMap((group) => group.people.map((one) => ({ ...one, place: group.place })));
   const chosen = new Set();
   const rows = new Map();
@@ -73,6 +75,7 @@ export function specialLabel({ farm, groups, here, day, lineName }) {
           people: people.map(({ name, plates }) => ({ name, plates })),
           day,
           lineName,
+          lineId,
         },
       });
       toastOk('Etiqueta especial impresa');

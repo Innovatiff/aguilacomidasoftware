@@ -53,12 +53,16 @@ import { errorText } from '../firebase.js';
  * @param {Function} config.done    (state, result) => { what, who, note, extra }
  * @param {Function} config.onExit  called when the operator leaves
  */
+/** How long a confirmation is on screen before it can be confirmed, in ms. */
+const CONFIRM_AFTER = 350;
+
 export function runFlow({ title, steps, state = {}, subject, commit, done, onExit }) {
   const model = { ...state };
   let index = 0;
   let direction = 'next';
   let busy = false;
   let finished = null;
+  let shownAt = 0;         // when the step on screen was drawn
 
   const stepsNow = () => steps(model);
 
@@ -104,6 +108,7 @@ export function runFlow({ title, steps, state = {}, subject, commit, done, onExi
     const list = stepsNow();
     index = Math.max(0, Math.min(index, list.length - 1));
     const step = list[index];
+    shownAt = Date.now();
 
     stepBadge.textContent = `Paso ${index + 1} de ${list.length}`;
     stepBadge.hidden = false;
@@ -142,6 +147,9 @@ export function runFlow({ title, steps, state = {}, subject, commit, done, onExi
     queueMicrotask(() => {
       const first = body.querySelector('input:not([type=hidden]), textarea, select');
       if (first && first.type !== 'date') first.focus({ preventScroll: true });
+      // A confirmation with nothing to type: the button, so a keyboard still
+      // confirms with Enter — on purpose, once it is on screen.
+      else if (!first && stepsNow()[index]?.last && !nextBtn.disabled) nextBtn.focus({ preventScroll: true });
     });
   }
 
@@ -188,6 +196,10 @@ export function runFlow({ title, steps, state = {}, subject, commit, done, onExi
     const list = stepsNow();
     const step = list[index];
     if (step.ready && !step.ready(model)) return;
+    // The confirmation is drawn on the button that was just pressed to reach
+    // it: the second half of a double click — or Enter pressed twice — would
+    // save what nobody read. It has to be on screen a moment first.
+    if (step.last && Date.now() - shownAt < CONFIRM_AFTER) return;
 
     if (!step.last) {
       direction = 'next';
@@ -249,10 +261,14 @@ export function runFlow({ title, steps, state = {}, subject, commit, done, onExi
    * itself (a list that adds a row on Enter) keeps it: one key, one action.
    */
   function onKey(event) {
+    if (event.repeat) return;
     if (event.key === 'Escape') { event.preventDefault(); goBack(); return; }
     if (event.key !== 'Enter' || event.defaultPrevented) return;
     const el = document.activeElement;
     if (el && (el.tagName === 'TEXTAREA' || el.tagName === 'BUTTON')) return;
+    // What the comment above promises: on the last step Enter only counts on
+    // the focused button, which the browser turns into its click.
+    if (!finished && stepsNow()[index]?.last) return;
     event.preventDefault();
     if (!nextBtn.disabled) goNext();
   }

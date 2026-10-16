@@ -22,7 +22,7 @@ import { folioFor } from './receipts.js';
 import {
   invoiceId, draftInvoice, draftCharge, chargeIdFor, isCharge, invoiceTitle,
   balanceOf, invoiceStatus, round2, periodOf, periodOfIndex, cycleFromPayment,
-  isPayable, isCovered, payDayAfter, periodWord,
+  isPayable, isCovered, payDayAfter, periodWord, paymentsOf,
 } from '../lib/billing.js';
 import { periodCharge } from '../lib/pricing.js';
 import {
@@ -142,22 +142,24 @@ export async function issueInvoice(client, period, charge, meals, author, extra 
 
   return runTransaction(db, async (tx) => {
     const snap = await tx.get(ref);
-    const paid = snap.exists() ? Number(snap.data().paid) || 0 : 0;
-    const payments = snap.exists() ? snap.data().payments || [] : [];
-    const amount = draft.amount;
+    // Already written — by the cycle, by a payment, or by somebody who then
+    // corrected its amount. Writing it again would put back the plan's price
+    // over that correction, so the bill that exists stays the bill.
+    if (snap.exists()) return { id, ...snap.data(), existed: true };
 
+    const amount = draft.amount;
     const record = {
       ...draft,
-      paid,
-      payments,
-      settled: paid >= amount - 0.005,
-      issuedAt: snap.exists() ? snap.data().issuedAt || serverTimestamp() : serverTimestamp(),
+      paid: 0,
+      payments: [],
+      settled: amount <= 0.005,
+      issuedAt: serverTimestamp(),
       issuedByName: author?.name || '',
       updatedAt: serverTimestamp(),
     };
-    if (record.settled && !snap.data()?.paidAt) record.paidAt = serverTimestamp();
+    if (record.settled) record.paidAt = serverTimestamp();
 
-    tx.set(ref, record, { merge: true });
+    tx.set(ref, record);
     return { id, ...record };
   });
 }
@@ -198,7 +200,7 @@ export async function addCharge({ client, amount, reason, date }, author) {
     paidAt: null,
   };
 
-  await setDoc(ref, record);
+  await landed(setDoc(ref, record));
   return { id, ...record };
 }
 
@@ -287,6 +289,17 @@ function correction(data, next, note, author) {
 }
 
 /**
+ * The bills that make up what somebody owes today: hand-written debts, and
+ * fortnights already served that are not fully paid. The one rule every
+ * balance on screen uses, so a correction moves exactly the number shown.
+ */
+export function owedBills(bills, client, day = today()) {
+  return (bills || []).filter((bill) => balanceOf(bill) > 0.005
+    && (isCharge(bill)
+      || isPayable({ start: bill.periodStart, end: bill.periodEnd }, client, day)));
+}
+
+/**
  * Puts somebody's balance on a number, whatever it takes to get there.
  *
  * This is the one the counter actually reaches for. Nobody thinks "invoice
@@ -314,8 +327,9 @@ export async function adjustBalance({ client, target, note }, author) {
 
   const snap = await getDocs(query(invoicesRef(),
     where('clientId', '==', client.id), where('settled', '==', false)));
-  const open = listData(snap)
-    .filter((invoice) => balanceOf(invoice) > 0.005)
+  // The same bills the balance on screen counts: a fortnight still running is
+  // not owed yet, so it is neither in the number nor lowered by it.
+  const open = owedBills(listData(snap), client)
     .sort((a, b) => String(b.periodStart).localeCompare(String(a.periodStart)));
 
   const balance = round2(open.reduce((sum, invoice) => sum + balanceOf(invoice), 0));
@@ -467,6 +481,9 @@ export async function billsOf(clientId) {
   return snap.docs.map((found) => ({ id: found.id, ...found.data() }));
 }
 
+/** Active, or written before there was a status at all. */
+const beingServed = (client) => !client?.status || client.status === 'active';
+
 /**
  * The same, from bills already in hand — the arithmetic, kept apart so it can
  * be checked without a database.
@@ -498,8 +515,12 @@ export function payableRows(payer, bills, pricing, { day = today(), setCycle = f
     });
   }
 
+  // Fortnights nobody billed are only worked out for somebody being served. A
+  // paused or retired worker is not billed by the cycle, so a fortnight with
+  // no bill is one they did not eat: what they pay goes to the bills they do
+  // have, and the rest waits on the receipt.
   const charge = periodCharge(payer, pricing);
-  if (charge.priced && charge.amount > 0) {
+  if (beingServed(payer) && charge.priced && charge.amount > 0) {
     const known = new Set(bills.map((bill) => bill.id));
     const since = servingSince(payer);
     const current = periodOf(payer, day);
@@ -585,7 +606,7 @@ export function aheadRows(payer, bills, pricing, { day = today(), amount = 0 } =
       });
       left = round2(left - owed);
     } else {
-      if (!(charge.priced && charge.amount > 0)) break;
+      if (!beingServed(payer) || !(charge.priced && charge.amount > 0)) break;
       rows.push({
         id,
         title: formatRange(period.start, period.end),
@@ -739,7 +760,7 @@ async function applyPayment({
         const record = {
           ...draft,
           paid,
-          payments: [...(draft.payments || []), entry],
+          payments: [...paymentsOf(draft), entry],
           settled,
           status: settled ? 'paid' : 'due',
           ...(settled ? { paidAt: serverTimestamp() } : { paidAt: null }),
@@ -750,8 +771,10 @@ async function applyPayment({
 
         applied.push({
           invoiceId: row.id,
-          periodStart: record.periodStart,
-          periodEnd: record.periodEnd,
+          // A bill from before dates were kept on every one — a debt typed by
+          // hand years ago — has none to copy.
+          periodStart: record.periodStart || '',
+          periodEnd: record.periodEnd || '',
           // Stamped now so the receipt keeps saying what it paid for even if
           // the bill behind it is later removed.
           title: invoiceTitle(record),
@@ -877,11 +900,24 @@ async function keepPayment({
     folio: folioFor(receiptRef.id, day),
     at: serverTimestamp(),
   };
-  await Promise.race([setDoc(receiptRef, receipt), wait(4000)]);
+  await landed(setDoc(receiptRef, receipt));
   return { id: receiptRef.id, ...receipt, at: new Date() };
 }
 
 const wait = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+
+/**
+ * Waits for a write to reach the server, but not forever.
+ *
+ * Offline, Firestore keeps the write on this computer and sends it when the
+ * internet is back, and its promise only settles then — a screen awaiting it
+ * would spin until somebody reloaded. A refusal still comes back within the
+ * wait; one that comes later must not surface as an unhandled error.
+ */
+async function landed(write, ms = 4000) {
+  write.catch(() => {});
+  await Promise.race([write, wait(ms)]);
+}
 
 /**
  * Cancels a whole payment — every fortnight it touched, in one go.
@@ -897,11 +933,16 @@ const wait = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
  * Instead a second, negative receipt is written against it, the way a cash book
  * is corrected. Both stay visible to both sides, and the two cancel out.
  */
-export async function voidReceipt(receipt, author) {
+export async function voidReceipt(receipt, author, { date = '', note = '' } = {}) {
   if (!receipt?.id) throw new Error('Ese recibo ya no existe.');
   if (Number(receipt.amount) < 0) throw new Error('Un recibo de cancelación no se puede cancelar.');
 
-  const counterRef = doc(collection(db, 'receipts'));
+  // One cancellation per receipt, whoever presses and however many times: the
+  // id is the receipt's, so a second one finds the first already there. The
+  // folio comes from a fresh id, or a cancellation on the day of the payment
+  // would carry the payment's own folio.
+  const counterRef = doc(db, 'receipts', `void_${receipt.id}`);
+  const folioId = doc(collection(db, 'receipts')).id;
   const clientRef = receipt.clientId ? doc(db, 'clients', receipt.clientId) : null;
   // The bills this payment went to, as the receipt says — and any bill holding
   // a part of it now. Money that was paid onto a fortnight before it had been
@@ -909,13 +950,14 @@ export async function voidReceipt(receipt, author) {
   // and the receipt, which nobody may rewrite, still names the first one.
   const holding = receipt.clientId
     ? (await billsOf(receipt.clientId))
-      .filter((bill) => (bill.payments || []).some((payment) => payment.receiptId === receipt.id))
+      .filter((bill) => paymentsOf(bill).some((payment) => payment.receiptId === receipt.id))
       .map((bill) => bill.id)
     : [];
   const targets = [...new Set([...(receipt.applied || []).map((row) => row.invoiceId), ...holding])];
 
   return runTransaction(db, async (tx) => {
     // Every read before any write — Firestore refuses the other order.
+    if ((await tx.get(counterRef)).exists()) throw new Error('Este pago ya estaba cancelado.');
     const clientSnap = clientRef ? await tx.get(clientRef) : null;
     const rows = [];
     for (const invoiceId of targets) {
@@ -933,8 +975,8 @@ export async function voidReceipt(receipt, author) {
       if (!snap.exists()) continue;
       const data = snap.data();
 
-      const kept = (data.payments || []).filter((payment) => payment.receiptId !== receipt.id);
-      const dropped = (data.payments || []).filter((payment) => payment.receiptId === receipt.id);
+      const kept = paymentsOf(data).filter((payment) => payment.receiptId !== receipt.id);
+      const dropped = paymentsOf(data).filter((payment) => payment.receiptId === receipt.id);
       if (!dropped.length) continue;
 
       const back = round2(dropped.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0));
@@ -982,7 +1024,7 @@ export async function voidReceipt(receipt, author) {
       }
     }
 
-    const day = today();
+    const day = date || today();
     const counter = {
       clientId: receipt.clientId,
       clientName: receipt.clientName || '',
@@ -994,7 +1036,7 @@ export async function voidReceipt(receipt, author) {
       amount: -(round2(removed + (Number(receipt.unapplied) || 0)) || round2(receipt.amount)),
       method: receipt.method || 'cash',
       reference: '',
-      note: `Cancelación del recibo ${receipt.folio || receipt.id}.`,
+      note: note || `Cancelación del recibo ${receipt.folio || receipt.id}.`,
       date: day,
       applied: undone,
       balanceAfter: 0,
@@ -1002,13 +1044,42 @@ export async function voidReceipt(receipt, author) {
       reversalOfFolio: receipt.folio || '',
       takenByName: author?.name || '',
       takenByUid: author?.uid || null,
-      folio: folioFor(counterRef.id, day),
+      folio: folioFor(folioId, day),
       at: serverTimestamp(),
     };
     tx.set(counterRef, counter);
 
     return { id: counterRef.id, ...counter, undone };
   });
+}
+
+/**
+ * Puts a payment that was kept whole onto the fortnights it was for.
+ *
+ * A payment taken while the bills could not be read — no internet, a bad
+ * record — went in entire, "a cuenta", so it was never lost. Its receipt
+ * cannot be rewritten, so it is settled the way a cash book is: cancelled on
+ * the day it was taken, and the same money taken again on that same day, this
+ * time spread over what they owed then. The day's total does not move, and
+ * the second receipt says which one it came from.
+ */
+export async function spreadHeld(receipt, client, pricing, author) {
+  if (!receipt?.held) throw new Error('Este pago ya está repartido.');
+  if (!client?.id) throw new Error('No encontramos al cliente de este pago.');
+  const day = receipt.date || today();
+  await voidReceipt(receipt, author, {
+    date: day,
+    note: `Se repartió en sus quincenas: el recibo ${receipt.folio || receipt.id} se volvió a registrar.`,
+  });
+  return takePayment({
+    client,
+    pricing,
+    amount: receipt.amount,
+    method: receipt.method,
+    reference: receipt.reference || '',
+    note: [`Repartido del recibo ${receipt.folio || receipt.id}.`, receipt.note].filter(Boolean).join(' '),
+    date: day,
+  }, author);
 }
 
 /**
@@ -1033,7 +1104,7 @@ export async function reversePayment(id, index, author) {
     const data = snap.data();
     const clientRef = data.clientId ? doc(db, 'clients', data.clientId) : null;
     const clientSnap = clientRef ? await tx.get(clientRef) : null;
-    const payments = [...(data.payments || [])];
+    const payments = [...paymentsOf(data)];
     const [removed] = payments.splice(index, 1);
     if (!removed) throw new Error('Ese pago ya no existe.');
 
@@ -1048,8 +1119,9 @@ export async function reversePayment(id, index, author) {
     });
 
     // If this fortnight is no longer settled, the client is no longer paid up
-    // through it — walk the marker back to the day before it started.
-    if (clientSnap?.exists() && !settled) {
+    // through it — walk the marker back to the day before it started. A
+    // hand-written debt is not a fortnight: reopening it un-pays no food.
+    if (clientSnap?.exists() && !settled && !isCharge(data)) {
       const was = clientSnap.data().paidThrough || null;
       if (was && was >= data.periodEnd) {
         tx.update(clientRef, {

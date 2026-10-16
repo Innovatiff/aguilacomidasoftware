@@ -35,7 +35,7 @@ import {
 } from '../lib/billing.js';
 import { matches, fold } from '../lib/format.js';
 import { normalizeExtras } from '../lib/pricing.js';
-import { findLocation } from './farms.js';
+import { findLocation, TERM_FIELDS } from './farms.js';
 
 const clientsRef = () => collection(db, 'clients');
 
@@ -300,12 +300,22 @@ export async function updateClient(clientId, patch, previousEmail, farm) {
   await batch.commit();
 }
 
-/** Moves a worker to another location — of their farm, or of another one. */
-export async function moveClient(clientId, farm, locationId) {
+/**
+ * Moves a worker to another location — of their farm, or of another one.
+ *
+ * Their pay date, how often they pay and the days they eat are theirs and go
+ * with them. Only what belongs to the farm — the delivery window and the days
+ * of grace — changes, and only when the farm does.
+ */
+export async function moveClient(clientId, farm, locationId, fromFarmId) {
   const placed = place({ farmId: farm?.id, locationId }, farm);
+  const terms = termsOf(farm);
+  const farmTerms = farm?.id && farm.id !== fromFarmId
+    ? Object.fromEntries(TERM_FIELDS.map((field) => [field, terms[field]]))
+    : {};
   await updateDoc(doc(db, 'clients', clientId), {
     ...placed,
-    ...termsOf(farm),
+    ...farmTerms,
     updatedAt: serverTimestamp(),
   });
 }

@@ -240,6 +240,22 @@ export const CHARGE_KIND = 'charge';
 export const isCharge = (invoice) => invoice?.kind === CHARGE_KIND;
 
 /**
+ * A bill's payments as a list, whatever shape they were stored in.
+ *
+ * They are written as a list. A bill that has been through older versions of
+ * this software, or edited by hand in the console, can carry them as a map —
+ * and one bill like that used to take down every screen that read it: the
+ * receipt's "Es por", the check for payments made ahead, the payment itself.
+ * Anything in it that is not an entry is left out.
+ */
+export function paymentsOf(bill) {
+  const stored = bill?.payments;
+  const list = Array.isArray(stored) ? stored
+    : (stored && typeof stored === 'object' ? Object.values(stored) : []);
+  return list.filter((entry) => entry && typeof entry === 'object');
+}
+
+/**
  * A deterministic-ish id that still sorts by date.
  *
  * Payments are applied oldest first, and the code that does it orders bills by
@@ -300,7 +316,7 @@ export const appliedTitle = (row) =>
  */
 export function paidFor(receipt, bills = []) {
   const held = (bills || []).flatMap((bill) => {
-    const mine = (bill.payments || []).filter((payment) => payment.receiptId === receipt?.id);
+    const mine = paymentsOf(bill).filter((payment) => payment.receiptId === receipt?.id);
     if (!mine.length) return [];
     return [{
       invoiceId: bill.id,

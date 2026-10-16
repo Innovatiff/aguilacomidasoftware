@@ -20,9 +20,9 @@ import {
 } from '../ui/kit.js';
 import { go } from '../lib/router.js';
 import { watchReceipt, watchReversal } from '../data/receipts.js';
-import { voidReceipt, watchClientInvoices } from '../data/invoices.js';
+import { voidReceipt, spreadHeld, watchClientInvoices } from '../data/invoices.js';
 import { printReceipt } from '../ui/print.js';
-import { printContext } from '../data/store.js';
+import { printContext, clientById, store } from '../data/store.js';
 import { toastOk, toastBad, confirm } from '../ui/overlay.js';
 import { session } from '../data/session.js';
 import { errorText } from '../firebase.js';
@@ -38,6 +38,7 @@ export function renderReceipt(context) {
   let cancelled = null;      // the negative receipt written against this one
   let missing = false;
   let bills = null;          // the client's bills, once the receipt says whose
+  let spreading = false;
 
   const stops = [
     watchReceipt(id, (row) => {
@@ -130,8 +131,8 @@ export function renderReceipt(context) {
       receipt.held && !isVoid
         ? alert('Este pago entró entero y quedó a cuenta, sin repartirse en sus quincenas, porque '
           + 'en ese momento no se pudo calcular lo que debía'
-          + `${heldReason(receipt.heldWhy)}. El dinero está registrado; revisa su ficha para `
-          + 'ponerlo donde va.', 'warn')
+          + `${heldReason(receipt.heldWhy)}. El dinero está registrado. Con internet, «Repartir en `
+          + 'sus quincenas» lo pone donde va.', 'warn')
         : null,
 
       receipt.held ? null : card(h('div.row.row--between',
@@ -150,6 +151,11 @@ export function renderReceipt(context) {
         // First, because this is what somebody opens an old receipt to do:
         // the client lost their copy, or the till was closed by accident
         // before it printed.
+        receipt.held && !isVoid && !reversal
+          ? button(spreading ? 'Repartiendo…' : 'Repartir en sus quincenas', {
+              variant: 'primary', block: true, icon: 'refresh', disabled: spreading, onClick: spread,
+            })
+          : null,
         button('Imprimir recibo', {
           variant: 'dark', block: true, icon: 'receipt',
           onClick: () => printReceipt(receipt, { ...printContext(receipt), copy: true }),
@@ -207,12 +213,40 @@ export function renderReceipt(context) {
     }
   }
 
+  /** A payment kept whole, put on the fortnights it was for — see `spreadHeld`. */
+  async function spread() {
+    if (spreading) return;
+    const client = clientById(receipt.clientId);
+    if (!client) { toastBad('Todavía no carga la lista de clientes. Intenta en un momento.'); return; }
+    const ok = await confirm({
+      title: 'Repartir en sus quincenas',
+      message: `Los ${money(receipt.amount)} de ${receipt.folio} se ponen en lo que ${receipt.clientName} `
+        + `debía el ${formatDayLong(receipt.date)}. Este recibo queda cancelado y sale uno nuevo, del `
+        + 'mismo día, que dice qué pagó. El total del día no cambia.',
+      confirmLabel: 'Repartir',
+      icon: 'refresh',
+    });
+    if (!ok) return;
+    spreading = true;
+    draw();
+    try {
+      const fresh = await spreadHeld(receipt, client, store.pricing,
+        { uid: session.uid, name: session.displayName });
+      toastOk(fresh.held ? `Sigue sin poderse repartir · ${fresh.folio}` : `Repartido · ${fresh.folio}`);
+      go(`/receipts/${fresh.id}`);
+    } catch (error) {
+      spreading = false;
+      draw();
+      toastBad(errorText(error));
+    }
+  }
+
   /** What one line of "Es por" is: a debt, a fortnight, or money kept on account. */
   function rowMeta(row) {
     if (row.kind === 'charge') return 'Deuda agregada';
     if (row.kind === 'credit') return 'Sin quincena todavía: quedó a cuenta';
     if (row.moved) return 'Periodo de comida · se movió aquí, a la quincena que pagó';
-    if (row.early) return 'Periodo de comida · a cuenta, antes de que terminara';
+    if (row.early || row.ahead) return 'Periodo de comida · a cuenta, antes de que terminara';
     return 'Periodo de comida';
   }
 

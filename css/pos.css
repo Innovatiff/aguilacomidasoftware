@@ -1015,6 +1015,22 @@
 
 /* One card, and no border on it. A hairline around a white card on a grey page
    is a line that draws itself; the page already says where the card ends. */
+/* Somebody added behind the place the libreta is at. Above the slide and in
+   the warning colour, because nothing else on the screen will bring them up. */
+.pkmissed {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: var(--s3);
+  padding: var(--s3) var(--s4);
+  background: var(--warn-50);
+  border: 2px solid var(--warn-500);
+  border-radius: var(--r-lg);
+}
+.pkmissed__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pkmissed__text strong { font-size: var(--fs-md); color: var(--warn-600); }
+.pkmissed__text span { font-size: var(--fs-md); font-weight: 700; color: var(--text); overflow-wrap: anywhere; }
+.pkmissed__acts { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.pkmissed__acts .pkreprint { margin-top: 0; }
+
 .pkstage__slide {
   display: flex; flex-direction: column;
   min-height: 300px;

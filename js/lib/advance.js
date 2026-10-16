@@ -30,7 +30,7 @@ import {
   addDays, daysBetween, today as todayKey, formatRange, formatDay,
 } from './dates.js';
 import {
-  invoiceId, isCharge, isPayable, periodOf, dueDateFor, invoiceTitle, round2,
+  invoiceId, isCharge, isPayable, periodOf, dueDateFor, invoiceTitle, round2, paymentsOf,
 } from './billing.js';
 
 const CENT = 0.005;
@@ -73,7 +73,7 @@ export const isAhead = (bill, entry, client = null) =>
 export function planAdvanceFix({ client, bills = [], since = '', day = todayKey() }) {
   // Working copies: the bills and their lists of payments. The entries
   // themselves are shared, so their timestamps are written back untouched.
-  const work = new Map(bills.map((bill) => [bill.id, { ...bill, payments: [...(bill.payments || [])] }]));
+  const work = new Map(bills.map((bill) => [bill.id, { ...bill, payments: [...paymentsOf(bill)] }]));
   const changed = new Set();
   const created = new Set();
   const moves = [];

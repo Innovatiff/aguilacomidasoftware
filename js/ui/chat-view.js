@@ -107,6 +107,9 @@ export function chatView({ clientId, role, sender, client, quickReplies = [], em
   function buildComposer() {
     const box = h('textarea.chat__input', {
       rows: 1,
+      // What the rules accept in one message; past it the send would be
+      // refused with nothing on screen saying why.
+      maxlength: 4000,
       placeholder: 'Escribe un mensaje…',
       'aria-label': 'Mensaje',
       oninput: () => { send.disabled = !box.value.trim() || sending; },
@@ -137,7 +140,11 @@ export function chatView({ clientId, role, sender, client, quickReplies = [], em
       pinned = true;
 
       try {
-        await sendMessage(clientId, { text }, { ...sender, role }, client);
+        // Without internet the message waits on this phone ("enviando…") and
+        // goes when it is back; the box is free for the next one meanwhile.
+        const sent = sendMessage(clientId, { text }, { ...sender, role }, client);
+        sent.catch(() => {});
+        await Promise.race([sent, new Promise((resolve) => { setTimeout(resolve, 4000); })]);
       } catch (error) {
         box.value = text;         // never lose what someone typed
         autosizeNow(box);

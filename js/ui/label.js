@@ -75,8 +75,13 @@ function footerDay(day) {
   return `${date.padStart(2, '0')} ${upper(month)}`;
 }
 
-/** "R1" for Libreta 1: the number in the libreta's name, or 1. */
-const routeOf = (lineName) => String(lineName || '').match(/\d+/)?.[0] || '1';
+/**
+ * "R1" for Libreta 1: the number in the libreta's name — or, renamed to a
+ * word ("Norte"), the one it was made with, so two libretas never print the
+ * same route.
+ */
+const routeOf = (lineName, lineId) => String(lineName || '').match(/\d+/)?.[0]
+  || String(lineId || '').match(/\d+/)?.[0] || '1';
 
 /** "Sentence case": the kitchen types in whatever case it likes. */
 function sentence(value) {
@@ -92,18 +97,19 @@ function sentence(value) {
  * @param {string} spec.placeName   the house, block or greenhouse
  * @param {string} spec.day         'YYYY-MM-DD'
  * @param {string} spec.lineName    which libreta, for the "R1" in the footer
+ * @param {string} [spec.lineId]    its id, for the number when the name has none
  * @param {number} spec.sequence    their position in that libreta, from 1
  * @param {string} spec.appUrl      where the QR points
  * @param {{ at: number, of: number }} [spec.copy]  which of their containers,
  *   for somebody who takes two comidas and so gets two stickers
  */
 export function labelSheet({
-  client, farmName, placeName, day, lineName, sequence, appUrl, copy,
+  client, farmName, placeName, day, lineName, lineId, sequence, appUrl, copy,
 }) {
   const preferences = (client?.preferencias || []).filter(Boolean).map(upper);
   // Today's note wins over the standing one, and disappears with the day.
   const note = sentence(noteFor(client, day));
-  const route = routeOf(lineName);
+  const route = routeOf(lineName, lineId);
   const where = [farmName, placeName].filter(Boolean).map(upper).join(' · ');
 
   const url = installUrl(appUrl, client?.email);
@@ -142,7 +148,7 @@ export function labelSheet({
  * @param {string} spec.lineName     which libreta, for the "R1"
  */
 export function placeSheet({
-  farmName, placeName, day, lineName,
+  farmName, placeName, day, lineName, lineId,
 }) {
   const place = upper(placeName);
   return h('div.lbl.lbl--place',
@@ -150,7 +156,7 @@ export function placeSheet({
       h('div.place__farm', upper(farmName)),
       place ? h('div.lbl__rule') : null,
       place ? h('div.place__where', place) : null),
-    h('div.place__foot', `${footerDay(day)} · R${routeOf(lineName)}`));
+    h('div.place__foot', `${footerDay(day)} · R${routeOf(lineName, lineId)}`));
 }
 
 /**
@@ -171,7 +177,7 @@ export function placeSheet({
  * @param {string} spec.lineName     which libreta, for the "R1"
  */
 export function specialSheet({
-  farmName, placeNames = [], people = [], day, lineName,
+  farmName, placeNames = [], people = [], day, lineName, lineId,
 }) {
   const places = placeNames.map(upper).filter(Boolean);
   const plates = people.reduce((sum, one) => sum + (Number(one.plates) || 0), 0);
@@ -183,7 +189,7 @@ export function specialSheet({
       h('span.place__name', String(one.name || '').trim().replace(/\s+/g, ' ')),
       one.plates > 1 ? h('b.place__x', `×${one.plates}`) : null))),
     h('div.place__foot',
-      h('span', `${footerDay(day)} · R${routeOf(lineName)}`),
+      h('span', `${footerDay(day)} · R${routeOf(lineName, lineId)}`),
       h('b', `${plural(people.length, 'persona', 'personas')} · ${plural(plates, 'comida', 'comidas')}`)));
 }
 

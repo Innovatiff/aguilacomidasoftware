@@ -22,14 +22,14 @@ import {
   loading, defList, defRow, emptyState, badge, chargeRows,
 } from '../ui/kit.js';
 import { toastOk, toastBad, confirm } from '../ui/overlay.js';
-import { go, back } from '../lib/router.js';
+import { go, back, currentPath } from '../lib/router.js';
 import { session } from '../data/session.js';
 import {
   createClient, updateClient, getClient, emptyClient, deleteClient, setClientStatus,
   isValidEmail, termsOf, cleanTag, normalizeTags, tagsInUse, hasTag, servingSince,
 } from '../data/clients.js';
 import { ensureConversation } from '../data/chat.js';
-import { store, farmById, clientsOfFarm } from '../data/store.js';
+import { store, farmById, clientsOfFarm, whenReady, isReady } from '../data/store.js';
 import { openChargeSheet } from '../ui/charge-sheet.js';
 import { openOpeningSheet } from '../ui/opening-sheet.js';
 import {
@@ -47,9 +47,18 @@ export async function renderClientForm(context) {
   const clientId = context.params.id;
   const isNew = !clientId || clientId === 'new';
 
+  // The farms decide which houses can be picked and what a new person's terms
+  // are: opened straight from a link, the form waits for them rather than
+  // drawing a farm with no houses.
+  if (!isReady()) {
+    screen({ title: 'Cliente', backTo: '/clients', tab: 'clients', body: loading() });
+    await whenReady();
+  }
   let model = isNew
     ? emptyClient(farmById(context.query.farm))
     : store.clients.find((c) => c.id === clientId) || await getClient(clientId);
+  // Somebody tapped away while it loaded: the page they went to is theirs.
+  if (currentPath() !== context.path) return;
 
   if (!model) {
     screen({
@@ -74,6 +83,8 @@ export async function renderClientForm(context) {
   // Remembered before editing: moving the email has to retire the previous
   // lookup, or the old address would keep opening the app.
   const original = { email: model.email };
+  // The whole form as it opened, to save only what was changed in it.
+  const opened = JSON.parse(JSON.stringify(model));
 
   let saving = false;
   let errors = {};
@@ -166,7 +177,20 @@ export async function renderClientForm(context) {
 
         go(`/clients/${id}${email ? `?welcome=${encodeURIComponent(email)}` : ''}`, { replace: true });
       } else {
-        await updateClient(clientId, model, original.email, farm());
+        // Only what was changed here. The whole record would carry back what
+        // it said when the form opened — a payment taken meanwhile, today's
+        // note from the kitchen — and undo it.
+        const changed = new Set(Object.keys(model).filter((key) => !LEFT_ALONE.has(key)
+          && JSON.stringify(model[key] ?? null) !== JSON.stringify(opened[key] ?? null)));
+        // Extras are counted per day they eat, so the two travel together.
+        if (changed.has('deliveryDays') || changed.has('extras')) {
+          changed.add('deliveryDays');
+          changed.add('extras');
+        }
+        if (changed.size) {
+          await updateClient(clientId, Object.fromEntries([...changed].map((key) => [key, model[key]])),
+            original.email, farm());
+        }
         toastOk('Cambios guardados');
         go(`/clients/${clientId}`, { replace: true });
       }
@@ -723,6 +747,9 @@ export async function renderClientForm(context) {
 
   draw();
 }
+
+/** Never written from this form, whatever it holds. */
+const LEFT_ALONE = new Set(['id', 'createdAt', 'updatedAt']);
 
 const clientsAt = (farmId, locationId) =>
   clientsOfFarm(farmId).filter((client) => client.locationId === locationId).length;

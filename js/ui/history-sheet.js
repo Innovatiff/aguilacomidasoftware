@@ -47,9 +47,9 @@ export function openHistorySheet({ client, author }) {
       let method = 'cash';
       let date = today();
       let note = '';
-      // On by default: the date of the last payment is where the fortnight
-      // falls, and setting it here is the point of typing the payment in.
-      let setCycle = true;
+      // Off by default: a payment never moves anybody's pay date on its own.
+      // The switch is there for the one time somebody wants exactly that.
+      let setCycle = false;
       let busy = false;
 
       const submit = h('button.btn.btn--primary.btn--block.btn--lg', { type: 'submit' });
@@ -123,8 +123,8 @@ export function openHistorySheet({ client, author }) {
 
       field({
         label: '¿Qué día pagó?',
-        hint: `De esta fecha sale su ${word}. Se cobra en ${payDaysInWords()}; si eliges `
-          + `otro día, la ${word} empieza el siguiente día de cobro.`,
+        hint: `Si fijas su ${word} con esta fecha: se cobra en ${payDaysInWords()}, y si `
+          + `eliges otro día, la ${word} empieza el siguiente día de cobro.`,
         control: input({
           type: 'date', value: date, max: today(),
           onchange: (event) => { date = event.target.value || today(); repaint(); },
@@ -142,7 +142,8 @@ export function openHistorySheet({ client, author }) {
 
       switchRow(`Fijar su ${word} con esta fecha`, {
         checked: setCycle,
-        hint: 'Recomendado. Es lo que decide cuándo le toca pagar otra vez.',
+        hint: 'Sólo si su fecha de pago de hoy está mal. Es lo que decide cuándo le toca '
+          + 'pagar otra vez.',
         onChange: (value) => { setCycle = value; repaint(); },
       }),
       cycleLine,

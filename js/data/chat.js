@@ -80,16 +80,32 @@ export const getConversation = async (clientId) =>
  */
 export async function ensureConversation(client) {
   const ref = doc(db, 'conversations', client.id);
-  if ((await getDoc(ref)).exists()) return;
+  // Never in the way of opening the chat. Without internet the thread cannot
+  // be read, and a write only settles once it is back: what is written then is
+  // only what cannot undo anything — whose thread it is.
+  let found = null;
+  try { found = await Promise.race([getDoc(ref), wait(3000)]); } catch { found = null; }
+  if (found?.exists?.()) return;
 
-  await setDoc(ref, {
-    clientId: client.id,
-    clientName: client.name || '',
-    unreadAdmin: 0,
-    unreadClient: 0,
-    createdAt: serverTimestamp(),
-  });
+  const write = found
+    ? setDoc(ref, {
+        clientId: client.id,
+        clientName: client.name || '',
+        unreadAdmin: 0,
+        unreadClient: 0,
+        createdAt: serverTimestamp(),
+      })
+    : setDoc(ref, { clientId: client.id, clientName: client.name || '' }, { merge: true });
+  write.catch(() => {});
+  try {
+    await Promise.race([write, wait(3000)]);
+  } catch {
+    // Refused: the first message creates the thread anyway, and opening the
+    // chat — or finishing a registration — must not stop on its summary.
+  }
 }
+
+const wait = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 
 /**
  * Posts a message and updates the thread summary in one batch, so the inbox

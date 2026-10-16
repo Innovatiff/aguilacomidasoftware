@@ -11,7 +11,7 @@ import {
   card, button, badge, avatar, defList, defRow, itemRow, list, sectionLabel,
   alert, meter, loading, field, fieldGroup, input, select, tagList, chargeRows,
 } from '../ui/kit.js';
-import { toastOk, toastBad, sheet } from '../ui/overlay.js';
+import { toastOk, toastBad, sheet, confirm } from '../ui/overlay.js';
 import { openChargeSheet } from '../ui/charge-sheet.js';
 import { openDebtSheet } from '../ui/debt-sheet.js';
 import { openBalanceSheet } from '../ui/balance-sheet.js';
@@ -33,7 +33,7 @@ import { ensureConversation } from '../data/chat.js';
 import {
   periodOf, periodOfIndex, projectPeriod, balanceOf, invoiceStatus,
   STATUS_LABEL, STATUS_TONE, invoiceId, isCharge, invoiceTitle, appliedTitle,
-  payDayAfter, periodWord, cadenceWord, paidThroughOn, paidFor, isPayable,
+  payDayAfter, periodWord, cadenceWord, paidThroughOn, paidFor, isPayable, isCovered,
 } from '../lib/billing.js';
 import { tierFor, periodCharge, mealsOn } from '../lib/pricing.js';
 import {
@@ -268,8 +268,8 @@ export function renderClientDetail(context) {
             cycleIsSet(model)
               ? `${capitalize(periodWord(model))} fijada con el pago del `
                 + `${formatDay(model.cycleSetOn)}.`
-              : `Su ${periodWord(model)} todavía es la del rancho. Se fija sola con el `
-                + 'próximo pago que le registres.')),
+              : `Su ${periodWord(model)} todavía es la del rancho. Si no es la suya, `
+                + 'cámbiala en Editar.')),
 
         priced
           ? null
@@ -313,7 +313,11 @@ export function renderClientDetail(context) {
     const paid = totalOf(receipts);
     const voided = cancelledIds(receipts);
     // "Last paid" must skip a payment that was taken back.
-    const last = receipts.find((row) => Number(row.amount) > 0 && !voided.has(row.id));
+    // By the day it was paid: a notebook payment typed in today is still older
+    // than last week's.
+    const stamp = (row) => (row.at?.toMillis ? row.at.toMillis() : 0);
+    const last = receipts.filter((row) => Number(row.amount) > 0 && !voided.has(row.id))
+      .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || stamp(b) - stamp(a))[0];
 
     return h('div.stack.stack-3',
       sectionLabel('Historial de pagos', receipts.length
@@ -661,11 +665,25 @@ export function renderClientDetail(context) {
       return;
     }
 
+    // Two ways of charging somebody for a fortnight that is not theirs to pay:
+    // one already paid in the notebook, or one before they started eating.
+    const since = servingSince(model);
+    const doubt = isCovered(choice, model.paidThrough)
+      ? `Según su cuenta ya pagó hasta el ${formatDay(model.paidThrough)}, y esta ${periodWord(model)} entra ahí.`
+      : (since && choice.start < since
+        ? `Empezó a comer el ${formatDay(since)}, después de que empezó esta ${periodWord(model)}.`
+        : '');
+    if (doubt && !await confirm({
+      title: '¿Facturarla de todos modos?',
+      message: `${doubt} Si la facturas, la va a deber.`,
+      confirmLabel: 'Facturar',
+    })) return;
+
     try {
       const charge = periodCharge(model, store.pricing);
-      await issueInvoice(model, choice, charge, charge.meals,
+      const bill = await issueInvoice(model, choice, charge, charge.meals,
         { uid: session.uid, name: session.displayName });
-      toastOk('Factura generada');
+      toastOk(bill.existed ? 'Esa factura ya estaba hecha' : 'Factura generada');
       go(`/invoices/${invoiceId(model.id, choice.start)}`);
     } catch (error) {
       toastBad(errorText(error));
@@ -767,7 +785,7 @@ export function renderClientDetail(context) {
     if (!picked || (picked.farm.id === model.farmId && picked.locationId === model.locationId)) return;
 
     try {
-      await moveClient(model.id, picked.farm, picked.locationId);
+      await moveClient(model.id, picked.farm, picked.locationId, model.farmId);
       toastOk('Ubicación actualizada');
     } catch (error) { toastBad(errorText(error)); }
   }
@@ -799,7 +817,7 @@ async function copy(text) {
 
 /** How far through the current cycle we are, 0–100. */
 function periodProgress(period) {
-  const total = 14;
+  const total = Number(period.every) || 14;   // a week for somebody who pays weekly
   const elapsed = Math.max(0, Math.min(total,
     (new Date(`${today()}T12:00:00`) - new Date(`${period.start}T12:00:00`)) / 86400000 + 1));
   return Math.round((elapsed / total) * 100);

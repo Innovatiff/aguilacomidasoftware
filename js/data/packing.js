@@ -22,7 +22,7 @@
 
 import {
   db, doc, collection, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot,
-  query, where, orderBy, serverTimestamp, docData, listData,
+  query, where, orderBy, serverTimestamp, arrayUnion, docData, listData,
 } from '../firebase.js';
 import {
   normalizePacking, ABILITIES, pinTakenBy,
@@ -98,7 +98,12 @@ export async function savePacker({ id, name, pin, active = true, can = {} }, aut
   if (number.length > 8) throw new Error('El PIN no puede tener más de 8 dígitos.');
 
   const clash = active ? pinTakenBy(others, number, id) : null;
-  if (clash) throw new Error(`Ese PIN ya lo usa ${clash.name}. Escoge otro.`);
+  if (clash) {
+    throw new Error(String(clash.pin).trim() === number
+      ? `Ese PIN ya lo usa ${clash.name}. Escoge otro.`
+      : `Ese PIN empieza igual que el de ${clash.name}, y al teclear uno se entraría con el otro. `
+        + 'Escoge otro.');
+  }
 
   const permissions = {};
   for (const { key } of ABILITIES) permissions[key] = can[key] !== false;
@@ -149,31 +154,55 @@ const byStart = (a, b) => {
  * The id is the day and the libreta, so re-opening a libreta somebody already
  * started today continues that record instead of writing a second one.
  */
+export const runIdOf = (day, lineId) => `${day}_${lineId}`;
+
 export async function startRun({ line, packer, people, plates, farms, day = today() }) {
-  const id = `${day}_${line.id}`;
+  const id = runIdOf(day, line.id);
   const ref = doc(db, 'packRuns', id);
+  const counts = {
+    date: day,
+    lineId: line.id,
+    lineName: line.name,
+    farms: Number(farms) || 0,
+    people: Number(people) || 0,
+    plates: Number(plates) || 0,
+    updatedAt: serverTimestamp(),
+  };
 
   // A libreta somebody else already opened today — one person relieved another,
   // or a browser was closed and a different computer picked it up. The record
   // keeps whoever started it *and* everybody who worked it, because "whose list
   // was this?" has more than one honest answer on a morning like that, and a
   // record that silently swaps the name is worse than one that says both.
-  const prev = docData(await getDoc(ref));
+  //
+  // Without internet that record cannot be read, and the libreta opens all the
+  // same: what is written then is only what cannot undo anything — the counts,
+  // and this name added to the list of who worked it.
+  let found;
+  try {
+    found = await Promise.race([getDoc(ref), wait(3000)]);
+  } catch { found = null; }
+  if (!found) {
+    const record = {
+      ...counts,
+      packerId: packer?.id || '',
+      packerName: packer?.name || '',
+      packerNames: arrayUnion(packer?.name || ''),
+    };
+    await landed(setDoc(ref, record, { merge: true }));
+    return { id, ...record, packerNames: [packer?.name || ''] };
+  }
+  const prev = docData(found);
   const names = [...new Set([
     ...(prev?.packerNames || [prev?.packerName].filter(Boolean)),
     packer?.name || '',
   ].filter(Boolean))];
 
   const record = {
-    date: day,
-    lineId: line.id,
-    lineName: line.name,
+    ...counts,
     packerId: prev?.packerId || packer?.id || '',
     packerName: names[0] || packer?.name || '',
     packerNames: names,
-    farms: Number(farms) || 0,
-    people: Number(people) || 0,
-    plates: Number(plates) || 0,
     // Opening a libreta that was already finished — to look at it again, or
     // because somebody tapped the wrong card — does not un-finish the morning.
     // The record says what happened; walking it to the end again closes it
@@ -181,10 +210,21 @@ export async function startRun({ line, packer, people, plates, farms, day = toda
     done: prev?.done === true,
     ...(prev?.finishedAt ? {} : { finishedAt: null }),
     ...(prev?.startedAt ? {} : { startedAt: serverTimestamp() }),
-    updatedAt: serverTimestamp(),
   };
-  await setDoc(ref, record, { merge: true });
+  await landed(setDoc(ref, record, { merge: true }));
   return { id, ...record };
+}
+
+const wait = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+
+/**
+ * Waits for a write to reach the server, but not forever: offline it is kept
+ * on this computer and sent when the internet is back, and its promise only
+ * settles then. A refusal still comes back within the wait.
+ */
+async function landed(write, ms = 4000) {
+  write.catch(() => {});
+  await Promise.race([write, wait(ms)]);
 }
 
 /** Closes it: the libreta was walked to the end. */
@@ -287,7 +327,14 @@ export function savedSpot(lineId, day) {
 /** Writes it down; `null` forgets it, which is what finishing a libreta does. */
 export function saveSpot(lineId, day, spot) {
   try {
-    if (spot) localStorage.setItem(SPOT(lineId), JSON.stringify({ day, key: spot.key, index: spot.index }));
-    else localStorage.removeItem(SPOT(lineId));
+    if (!spot) { localStorage.removeItem(SPOT(lineId)); return; }
+    localStorage.setItem(SPOT(lineId), JSON.stringify({
+      day,
+      key: spot.key,
+      index: spot.index,
+      // Everybody who has been on the screen this pass — so somebody added
+      // behind the place it is at can be told apart from those packed.
+      seen: Array.isArray(spot.seen) ? spot.seen : undefined,
+    }));
   } catch { /* storage refused: the libreta starts at its beginning, as it used to */ }
 }

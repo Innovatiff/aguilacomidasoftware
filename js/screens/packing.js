@@ -18,12 +18,12 @@ import { icon } from '../lib/icons.js';
 import { screen, lifetime, topbarButton } from '../ui/shell.js';
 import { button, emptyState, skeletonRows, alert, dataErrorCard } from '../ui/kit.js';
 import { go } from '../lib/router.js';
-import { store, subscribe, activeClients, isReady, firstError, startStore } from '../data/store.js';
+import { store, subscribe, activeClients, isReady, startStore } from '../data/store.js';
 import {
   watchPacking, watchPackers, watchPackRuns, seatedPacker, sitDown, savedSpot,
 } from '../data/packing.js';
 import {
-  packingSequence, packerByPin, unassignedPlaces, canDo, spotIndex,
+  packingSequence, packerByPin, longerPinFrom, unassignedPlaces, canDo, spotIndex,
 } from '../lib/packing.js';
 import { today, formatDayLong, formatTime, capitalize } from '../lib/dates.js';
 import { kitchen } from '../lib/mode.js';
@@ -40,6 +40,7 @@ export function renderPacking() {
   let packer = seatedPacker();
   let typed = '';
   let wrong = false;
+  let waiting = null;      // a number that is also the start of a longer one
 
   const stops = [
     watchPacking((found) => { setup = found; paint(); }, (error) => { failure = error; paint(); }),
@@ -75,7 +76,9 @@ export function renderPacking() {
   }
 
   function bodyFor() {
-    const broken = failure || firstError();
+    // Only what packing reads can stop it: the farms and the people. A chat or
+    // a bill that failed to load is the office's problem, not the morning's.
+    const broken = failure || store.errors.farms || store.errors.clients || null;
     if (broken) return dataErrorCard(broken, { onRetry: () => startStore() });
     if (!setup || !packers || !isReady()) return skeletonRows(4);
     if (!packers.length) return noPackers();
@@ -121,6 +124,7 @@ export function renderPacking() {
 
     const press = (digit) => {
       wrong = false;
+      clearTimeout(waiting);
       typed = (typed + digit).slice(0, longest);
       paintDots();
       // It tries as soon as it could be somebody's number. Nobody should have
@@ -128,26 +132,35 @@ export function renderPacking() {
       if (typed.length >= 4) tryIt();
     };
 
-    const rub = () => { wrong = false; typed = typed.slice(0, -1); paintDots(); };
+    const rub = () => { wrong = false; clearTimeout(waiting); typed = typed.slice(0, -1); paintDots(); };
 
     function tryIt() {
       const found = packerByPin(packers, typed);
-      if (found) {
-        packer = { id: found.id, name: found.name };
-        sitDown(packer);
-        typed = '';
-        // In the kitchen the number is the way in to the whole machine, and
-        // what follows it is the menu. In the panel this screen was opened to
-        // pack, and the next question is which libreta.
-        if (kitchen()) { go('/rapido'); return; }
-        paint();
+      // Somebody's number, and the start of somebody else's longer one — set
+      // up before two numbers like that were refused. A moment's pause says
+      // it was the short one; another digit, the long one.
+      if (found && longerPinFrom(packers, typed)) {
+        const now = typed;
+        waiting = setTimeout(() => { if (life.alive() && typed === now) enter(found); }, 1200);
         return;
       }
+      if (found) { enter(found); return; }
       // Still short of the longest number anybody has: they may not have
       // finished. Once it is that long and still matches nobody, it is wrong,
       // and it is cleared so the next attempt starts from nothing rather than
       // being glued onto this one.
       if (typed.length >= longest) { wrong = true; typed = ''; paint(); }
+    }
+
+    function enter(found) {
+      packer = { id: found.id, name: found.name };
+      sitDown(packer);
+      typed = '';
+      // In the kitchen the number is the way in to the whole machine, and
+      // what follows it is the menu. In the panel this screen was opened to
+      // pack, and the next question is which libreta.
+      if (kitchen()) { go('/rapido'); return; }
+      paint();
     }
 
     const key = (label, onPress, className = '') =>
@@ -334,7 +347,15 @@ export function renderPacking() {
       : `${number(run.packed || 0)} de ${number(run.people)}`;
   }
 
-  const unsubscribe = subscribe(paint);
+  // Left open overnight, the menu would offer yesterday's libretas and what
+  // was packed yesterday: at midnight it opens again on the new day.
+  const unsubscribe = subscribe(() => {
+    if (today() !== day) {
+      setTimeout(() => { if (life.alive()) go('/empaque', { replace: true }); });
+      return;
+    }
+    paint();
+  });
   return life.ending(unsubscribe, ...stops);
 }
 

@@ -74,10 +74,10 @@ import { screen, lifetime } from '../ui/shell.js';
 import { button, emptyState, skeletonRows, dataErrorCard } from '../ui/kit.js';
 import { toastBad } from '../ui/overlay.js';
 import { go } from '../lib/router.js';
-import { store, subscribe, activeClients, isReady, firstError, startStore } from '../data/store.js';
+import { store, subscribe, activeClients, isReady, startStore } from '../data/store.js';
 import {
   watchPacking, watchPackers, startRun, finishRun, noteProgress, seatedPacker,
-  printingPaused, pausePrinting, savedSpot, saveSpot,
+  printingPaused, pausePrinting, savedSpot, saveSpot, runIdOf,
 } from '../data/packing.js';
 import { printStickers } from '../ui/print.js';
 import { specialLabel } from '../ui/special-label.js';
@@ -106,6 +106,7 @@ export function renderPackingRun(context) {
   let finished = false;    // Terminar: nothing more to remember
   let bagOnOpen = false;   // the first farm's bag, printed once when it opens
   let paused = printingPaused(day);   // this computer's switch, top right
+  let seen = null;         // who has been on the screen this pass, by id
 
   // Whether this kitchen prints stickers at all (Empaque → Configurar). The
   // switch at the top right only decides whether Siguiente prints them.
@@ -152,6 +153,7 @@ export function renderPackingRun(context) {
         resumed = true;
         at = spot.index;
         atKey = spot.key;
+        if (Array.isArray(spot.seen)) seen = new Set(spot.seen);
       }
     }
     // Then the same person, wherever the list now puts them (`spotIndex`):
@@ -160,6 +162,10 @@ export function renderPackingRun(context) {
     if (plan.slides.length) {
       at = spotIndex(plan.slides, { key: atKey, index: at });
       atKey = keyOf(at);
+      // A place written down before anybody kept count: whoever is before it
+      // was packed, as far as anybody can tell.
+      if (!seen) seen = new Set(plan.slides.slice(0, at).map(personOf).filter(Boolean));
+      see(at);
       remember();
     }
     open();
@@ -188,7 +194,35 @@ export function renderPackingRun(context) {
    * opening back to the end instead of to the top.
    */
   function remember() {
-    if (!finished && plan?.slides.length) saveSpot(lineId, day, { key: atKey, index: at });
+    if (!finished && plan?.slides.length) {
+      saveSpot(lineId, day, { key: atKey, index: at, seen: [...(seen || [])] });
+    }
+  }
+
+  /** The person on a slide, by id; nothing for a farm or the end. */
+  function personOf(slide) {
+    return slide?.kind === 'client' ? slide.client.id : null;
+  }
+
+  function see(index) {
+    const id = personOf(plan?.slides[index]);
+    if (id && seen) seen.add(id);
+  }
+
+  /**
+   * People the list now puts behind the place this libreta is at, who were
+   * never on the screen: added, or moved here, after the packer went past
+   * where they go. Nothing else would ever bring them up — Siguiente only goes
+   * forward — so they are said at the top until somebody deals with them.
+   */
+  function missed() {
+    if (!plan || !seen) return [];
+    const out = [];
+    for (let i = 0; i < at; i += 1) {
+      const id = personOf(plan.slides[i]);
+      if (id && !seen.has(id)) out.push({ slide: plan.slides[i], index: i });
+    }
+    return out;
   }
 
   /**
@@ -202,11 +236,13 @@ export function renderPackingRun(context) {
   function open() {
     if (runId || opening || !plan?.people) return;
     opening = true;
+    // Known before it is written, so the count and Terminar go to it even
+    // while the first write waits on the internet — they queue up behind it.
+    runId = runIdOf(day, plan.line.id);
     startRun({
       line: plan.line, packer, day,
       people: plan.people, plates: plan.plates, farms: plan.farmCount,
     })
-      .then((run) => { if (life.alive()) runId = run.id; })
       .catch((error) => { if (life.alive()) toastBad(errorText(error)); })
       .finally(() => { opening = false; });
   }
@@ -221,6 +257,7 @@ export function renderPackingRun(context) {
     if (next === at) return;
     at = next;
     atKey = keyOf(at);
+    see(at);
     remember();
     paint();
 
@@ -254,7 +291,9 @@ export function renderPackingRun(context) {
    * Wrapped, because a printer that is off or out of paper must not stop the
    * morning — the screen is the job, the stickers are the convenience.
    */
-  function printFor(index, { extra = false, bagOnly = false, pressed = false } = {}) {
+  function printFor(index, {
+    extra = false, bagOnly = false, pressed = false, alone = false,
+  } = {}) {
     const slide = plan?.slides[index];
     if (!prints() || !slide || (paused && !pressed)) return;
     try {
@@ -266,6 +305,7 @@ export function renderPackingRun(context) {
         placeName: bag.place?.id ? bag.place.name : '',
         day,
         lineName: plan.line?.name || '',
+        lineId: plan.line?.id || '',
       };
 
       if (slide.kind === 'farm' || bagOnly) {
@@ -277,9 +317,11 @@ export function renderPackingRun(context) {
       const label = {
         client: slide.client,
         farmName: slide.farm?.name || '',
-        placeName: slide.place?.name || '',
+        // "Sin ubicación" is the screen's word, not a place — as on the bag.
+        placeName: slide.place?.id ? slide.place.name : '',
         day,
         lineName: plan.line?.name || '',
+        lineId: plan.line?.id || '',
         // Their place in the libreta: the people up to and including them.
         sequence: plan.slides.slice(0, index + 1).filter((one) => one.kind === 'client').length,
         appUrl: store.business?.appUrl || '',
@@ -288,7 +330,8 @@ export function renderPackingRun(context) {
       printStickers({
         // The farm's slide already sent the first bag's; each one after it
         // comes out with the first person who goes in it.
-        bag: !extra && bag?.starts && bag.number > 1 ? bagSticker : null,
+        // `alone` is somebody packed out of turn: their own, nothing else.
+        bag: !extra && !alone && bag?.starts && bag.number > 1 ? bagSticker : null,
         labels: Array.from({ length: copies }, (unused, i) => ({
           ...label,
           copy: copies > 1 ? { at: i + 1, of: copies } : null,
@@ -309,15 +352,19 @@ export function renderPackingRun(context) {
     // Walked to the end: the next time this libreta is opened, it is a new pass.
     finished = true;
     saveSpot(lineId, day, null);
-    const close = runId
-      ? finishRun(runId, { packed: plan ? plan.people : 0 })
-      : Promise.resolve();
-    close.catch((error) => toastBad(errorText(error)))
-      .finally(() => go('/empaque'));
+    // Back to the menu at once. The record follows by itself, now or when the
+    // internet comes back; waiting on it is a button that does nothing.
+    if (runId) {
+      finishRun(runId, { packed: plan ? plan.people : 0 }).catch((error) => toastBad(errorText(error)));
+    }
+    go('/empaque');
   }
 
   const onKey = (event) => {
     if (event.target?.tagName === 'INPUT' || event.target?.tagName === 'TEXTAREA') return;
+    // A key held down repeats thirty times a second, each one a Siguiente and
+    // its stickers; and Ctrl or Alt with an arrow is the browser's, not ours.
+    if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
     // A sheet is open over the libreta — Etiqueta especial — and the space bar
     // is choosing people in it, not moving the libreta underneath.
     if (document.querySelector('.scrim')) return;
@@ -344,7 +391,9 @@ export function renderPackingRun(context) {
   }
 
   function bodyFor() {
-    const broken = failure || firstError();
+    // Only what packing reads can stop it: the farms and the people. A chat or
+    // a bill that failed to load is the office's problem, not the morning's.
+    const broken = failure || store.errors.farms || store.errors.clients || null;
     if (broken) return dataErrorCard(broken, { onRetry: () => startStore() });
     if (!setup || !isReady()) return skeletonRows(4);
 
@@ -369,6 +418,7 @@ export function renderPackingRun(context) {
     const slide = plan.slides[at];
     return h('div.pkstage__wrap',
       progress(),
+      missedBanner(),
       h('div.pkstage__slide',
         slide.kind === 'farm' ? farmSlide(slide)
           : slide.kind === 'client' ? clientSlide(slide)
@@ -392,6 +442,34 @@ export function renderPackingRun(context) {
               plan.slides[at]?.kind === 'done' ? null : specialButton(),
               printSwitch())
           : null));
+  }
+
+  /** Somebody behind the place it is at who was never packed — see `missed`. */
+  function missedBanner() {
+    const behind = missed();
+    if (!behind.length) return null;
+    const [{ slide, index }] = behind;
+    const where = [slide.farm?.name, slide.place?.id ? slide.place.name : '']
+      .filter(Boolean).join(' · ');
+    const act = (label, ico, fn) => h('button.pkreprint', {
+      type: 'button',
+      onclick: (event) => { event.currentTarget.blur(); fn(); },
+    }, icon(ico), label);
+    return h('div.pkmissed', { role: 'alert' },
+      h('div.pkmissed__text',
+        h('strong', behind.length > 1
+          ? `Faltan ${behind.length} personas que se agregaron antes de donde vas`
+          : 'Falta alguien que se agregó antes de donde vas'),
+        h('span', `${slide.client.name}${where ? ` · ${where}` : ''}`
+          + `${slide.plates > 1 ? ` · ${slide.plates} comidas` : ''}`)),
+      h('div.pkmissed__acts',
+        prints() ? act('Imprimir sus etiquetas', 'printer',
+          () => printFor(index, { pressed: true, alone: true })) : null,
+        act('Ya lo empaqué', 'check', () => {
+          seen.add(slide.client.id);
+          remember();
+          paint();
+        })));
   }
 
   /**
@@ -421,6 +499,7 @@ export function renderPackingRun(context) {
           here: slide.kind === 'client' ? slide.client.id : null,
           day,
           lineName: plan.line?.name || '',
+          lineId: plan.line?.id || '',
         });
       },
     }, icon('note'), 'Etiqueta especial');
@@ -561,7 +640,13 @@ export function renderPackingRun(context) {
   }
 
   rebuild();
-  const unsubscribe = subscribe(() => { rebuild(); paint(); });
+  const unsubscribe = subscribe(() => {
+    // A libreta is one morning's. Still open when the date turns, it goes back
+    // to the menu, which opens on the new day.
+    if (today() !== day) { setTimeout(() => { if (life.alive()) go('/empaque'); }); return; }
+    rebuild();
+    paint();
+  });
   return life.ending(unsubscribe, ...stops,
     () => document.removeEventListener('keydown', onKey));
 }

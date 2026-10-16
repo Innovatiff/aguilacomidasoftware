@@ -22,7 +22,7 @@ import { getReceipt } from '../data/receipts.js';
 import { store, clientById, invoicesFor } from '../data/store.js';
 import { postSystemMessage } from '../data/chat.js';
 import {
-  balanceOf, invoiceStatus, isCharge, invoiceTitle, periodWord, round2,
+  balanceOf, invoiceStatus, isCharge, invoiceTitle, periodWord, round2, paymentsOf,
   STATUS_LABEL, STATUS_TONE,
 } from '../lib/billing.js';
 import {
@@ -180,8 +180,8 @@ export function renderInvoice(context) {
 
       /* Payments */
       sectionLabel('Pagos recibidos'),
-      (invoice.payments || []).length
-        ? list((invoice.payments || []).map(paymentRow), { card: true })
+      paymentsOf(invoice).length
+        ? list(paymentsOf(invoice).map(paymentRow), { card: true })
         : card(h('p.t-sm.c-soft.center', 'Todavía no se ha registrado ningún pago.')),
 
       invoice.issuedByName
@@ -344,7 +344,15 @@ export function renderInvoice(context) {
    * the whole receipt, and says so plainly before doing it.
    */
   async function cancelPayment(payment, index) {
-    const receipt = payment.receiptId ? await getReceipt(payment.receiptId) : null;
+    let receipt = null;
+    try {
+      receipt = payment.receiptId ? await getReceipt(payment.receiptId) : null;
+    } catch (error) {
+      // Without its receipt this would cancel a part of the payment and leave
+      // the rest: better to say so than to do half.
+      toastBad(errorText(error));
+      return;
+    }
     const spread = (receipt?.applied || []).length > 1;
 
     const ok = await confirm({

@@ -17,7 +17,7 @@ import { h, mount } from '../lib/dom.js';
 import { sheet, toastOk, toastBad } from './overlay.js';
 import { field, moneyInput, input, defList, defRow, button, alert, switchRow } from './kit.js';
 import { icon } from '../lib/icons.js';
-import { addCharge } from '../data/invoices.js';
+import { addCharge, owedBills } from '../data/invoices.js';
 import { postSystemMessage } from '../data/chat.js';
 import { balanceOf, periodWord } from '../lib/billing.js';
 import { money, moneyFull } from '../lib/format.js';
@@ -40,7 +40,7 @@ const COMMON = ['Comida extra', 'Ajuste de saldo'];
  * @returns {Promise<object|null>} the charge that was written, or null
  */
 export function openDebtSheet({ client, invoices = [], author }) {
-  const balance = round2(invoices.reduce((sum, invoice) => sum + balanceOf(invoice), 0));
+  const balance = round2(owedBills(invoices, client).reduce((sum, invoice) => sum + balanceOf(invoice), 0));
   const word = periodWord(client);
 
   return sheet({
@@ -101,7 +101,9 @@ export function openDebtSheet({ client, invoices = [], author }) {
           try {
             const charge = await addCharge(
               { client, amount: value, reason: reason.trim(), date }, author);
-            if (tell) await announce(charge, client, round2(balance + value));
+            // Not awaited: offline, a chat message only settles once the
+            // internet is back.
+            if (tell) announce(charge, client, round2(balance + value)).catch(() => {});
             toastOk(`Deuda agregada · ${money(value)}`);
             close(charge);
           } catch (error) {

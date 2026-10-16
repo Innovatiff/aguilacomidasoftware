@@ -155,11 +155,15 @@ export function renderNoAccess(host, { name, email, onSignOut }) {
   let claimed = null;      // null = still checking
   let busy = false;
   let error = '';
-  let handedOff = false;
+  let handedOff = false;   // claimed, or this screen was left: draw nothing more
 
   const draw = () => { if (!handedOff) mount(host, view()); };
 
-  isClaimed().then((value) => { claimed = value; draw(); });
+  // Answered after the screen may already be gone — signed out, or added to
+  // the team — and then it must not draw itself back over what came next.
+  isClaimed()
+    .then((value) => { claimed = value; draw(); })
+    .catch(() => { claimed = true; draw(); });
 
   async function claim() {
     if (busy) return;
@@ -253,4 +257,5 @@ export function renderNoAccess(host, { name, email, onSignOut }) {
   }
 
   draw();
+  return () => { handedOff = true; };
 }

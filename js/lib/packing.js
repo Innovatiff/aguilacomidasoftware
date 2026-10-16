@@ -580,10 +580,23 @@ export function abilitiesInWords(packer) {
 export function pinTakenBy(packers, pin, exceptId) {
   const wanted = String(pin || '').trim();
   if (!wanted) return null;
-  return (packers || []).find((packer) => packer.id !== exceptId
-    && packer.active !== false
-    && String(packer.pin || '').trim() === wanted) || null;
+  // The same number, or one that begins the other: the keypad lets somebody
+  // in the moment what they typed is a number, so 1234 would open before the
+  // fifth digit of 12345 was ever pressed.
+  return (packers || []).find((packer) => {
+    const theirs = String(packer.pin || '').trim();
+    return packer.id !== exceptId && packer.active !== false && theirs
+      && (theirs.startsWith(wanted) || wanted.startsWith(theirs));
+  }) || null;
 }
+
+/** Whether somebody active has a longer number that starts with `typed`. */
+export const longerPinFrom = (packers, typed) => {
+  const start = String(typed || '').trim();
+  return !!start && (packers || []).some((packer) => packer.active !== false
+    && String(packer.pin || '').trim().length > start.length
+    && String(packer.pin || '').trim().startsWith(start));
+};
 
 /** True when two packers share a number, which would make the name a coin toss. */
 export const duplicatePins = (packers) => {

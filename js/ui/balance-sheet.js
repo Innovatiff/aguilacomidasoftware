@@ -21,7 +21,7 @@ import { h, mount } from '../lib/dom.js';
 import { sheet, toastOk, toastBad } from './overlay.js';
 import { field, moneyInput, input, defList, defRow, button, alert, switchRow } from './kit.js';
 import { icon } from '../lib/icons.js';
-import { adjustBalance } from '../data/invoices.js';
+import { adjustBalance, owedBills } from '../data/invoices.js';
 import { postSystemMessage } from '../data/chat.js';
 import { balanceOf, invoiceTitle, isCharge, round2 } from '../lib/billing.js';
 import { money, moneyFull } from '../lib/format.js';
@@ -43,8 +43,7 @@ const COMMON = ['Se le cobró de más', 'Corrección del cuaderno', 'Descuento a
  * @returns {Promise<object|null>} what the adjustment did, or null
  */
 export function openBalanceSheet({ client, invoices = [], author }) {
-  const open = invoices
-    .filter((invoice) => balanceOf(invoice) > 0.005)
+  const open = owedBills(invoices, client)
     .sort((a, b) => String(b.periodStart).localeCompare(String(a.periodStart)));
   const balance = round2(open.reduce((sum, invoice) => sum + balanceOf(invoice), 0));
 
@@ -156,7 +155,9 @@ export function openBalanceSheet({ client, invoices = [], author }) {
           try {
             const result = await adjustBalance(
               { client, target: wanted, note: note.trim() }, author);
-            if (tell) await announce(client, balance, wanted, note.trim());
+            // Not awaited: offline, a chat message only settles once the
+            // internet is back.
+            if (tell) announce(client, balance, wanted, note.trim()).catch(() => {});
             toastOk(`Saldo corregido · ${money(wanted)}`);
             close(result);
           } catch (error) {

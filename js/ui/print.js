@@ -365,10 +365,16 @@ function nextStickers() {
   const sheets = stickerJobs.shift();
   pumping = Boolean(sheets);
   if (!sheets) return;
-  paper('label');
-  // Siblings, so `.lbl + .lbl` puts each on its own page.
-  mount(printRoot(), ...sheets.map(([sheet]) => sheet));
-  for (const [sheet, fit] of sheets) fit(sheet);
+  try {
+    paper('label');
+    // Siblings, so `.lbl + .lbl` puts each on its own page.
+    mount(printRoot(), ...sheets.map(([sheet]) => sheet));
+    for (const [sheet, fit] of sheets) fit(sheet);
+  } catch {
+    // One job that cannot be laid out is lost, not every job behind it.
+    nextStickers();
+    return;
+  }
   requestAnimationFrame(() => {
     try {
       window.print();

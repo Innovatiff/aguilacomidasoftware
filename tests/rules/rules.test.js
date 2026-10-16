@@ -138,6 +138,12 @@ await check('admin adds a colleague to the team', setDoc(doc(admin, 'staff/jorge
 await check('admin removes a colleague', deleteDoc(doc(admin, 'staff/jorge@aguila.ca')), true);
 await check('admin changes the price list',
   setDoc(doc(admin, 'config/pricing'), { tiers: [{ mealsPerDay: 1, price: 80 }] }), true);
+await check('admin answers in a client\'s thread, as the kitchen',
+  setDoc(doc(admin, 'conversations/cA/messages/fromKitchen'),
+    { text: 'Gracias', senderUid: 'admin1', senderRole: 'admin' }), true);
+await check('admin cannot sign a message as the client',
+  setDoc(doc(admin, 'conversations/cA/messages/asClient'),
+    { text: 'x', senderUid: 'admin1', senderRole: 'client' }), false);
 await check('admin writes a receipt',
   setDoc(doc(admin, 'receipts/rNew'), { clientId: 'cA', amount: 140, folio: 'R-1', date: '2026-08-21' }), true);
 
@@ -149,6 +155,8 @@ await check('client reads the farm they eat at', getDoc(doc(rafa, 'farms/fA')), 
 await check('client reads their own invoice', getDoc(doc(rafa, 'invoices/cA_2026-08-05')), true);
 await check('client queries their own invoices',
   getDocs(query(collection(rafa, 'invoices'), where('clientId', '==', 'cA'))), true);
+await check('client queries their own unpaid invoices, however old',
+  getDocs(query(collection(rafa, 'invoices'), where('clientId', '==', 'cA'), where('settled', '==', false))), true);
 await check('client reads the price list', getDoc(doc(rafa, 'config/pricing')), true);
 await check('client reads their own receipt', getDoc(doc(rafa, 'receipts/rA')), true);
 await check('client lists their own receipts',
@@ -194,6 +202,9 @@ await check('client cannot post into another client\'s thread',
 await check('client cannot post as somebody else',
   setDoc(doc(rafa, 'conversations/cA/messages/spoof'),
     { text: 'x', senderUid: 'admin1', senderRole: 'admin' }), false);
+await check('client cannot sign a message as the kitchen, even in their own thread',
+  setDoc(doc(rafa, 'conversations/cA/messages/asKitchen'),
+    { text: 'Ya pagaste todo', senderUid: 'rafa', senderRole: 'admin' }), false);
 await check('client cannot post a system note',
   setDoc(doc(rafa, 'conversations/cA/messages/sys'),
     { text: 'Pago recibido', senderUid: null, senderRole: 'system' }), false);

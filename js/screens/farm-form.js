@@ -19,12 +19,12 @@ import {
   card, field, input, textarea, select, button, alert, sectionLabel, loading,
 } from '../ui/kit.js';
 import { toastOk, toastBad, confirm } from '../ui/overlay.js';
-import { go, back } from '../lib/router.js';
+import { go, back, currentPath } from '../lib/router.js';
 import { session } from '../data/session.js';
 import {
   createFarm, updateFarm, getFarm, emptyFarm, deleteFarm, setFarmStatus, TERM_FIELDS,
 } from '../data/farms.js';
-import { farmById, clientsOfFarm } from '../data/store.js';
+import { farmById, clientsOfFarm, whenReady, isReady } from '../data/store.js';
 import {
   periodFor, PAY_EVERY, servingDays, payDayOnOrAfter, payDaysInWords, periodWord,
 } from '../lib/billing.js';
@@ -32,11 +32,23 @@ import { WEEKDAYS_SHORT, today, formatRange } from '../lib/dates.js';
 import { plural } from '../lib/format.js';
 import { errorText } from '../firebase.js';
 
+/** What this form edits. Everything else on a farm is somebody else's. */
+const EDITABLE = [
+  'name', 'contactName', 'phone', 'address', 'notes', 'defaultMealsPerDay',
+  'deliveryDays', 'deliveryWindow', 'defaultPayEvery', 'cycleAnchor', 'graceDays', 'status',
+];
+
 export async function renderFarmForm(context) {
   const farmId = context.params.id;
   const isNew = !farmId || farmId === 'new';
 
+  if (!isReady()) {
+    screen({ title: 'Rancho', backTo: '/farms', tab: 'farms', body: loading() });
+    await whenReady();
+  }
   let model = isNew ? emptyFarm() : farmById(farmId) || await getFarm(farmId);
+  // Somebody tapped away while it loaded: the page they went to is theirs.
+  if (currentPath() !== context.path) return;
 
   if (!model) {
     screen({
@@ -49,6 +61,8 @@ export async function renderFarmForm(context) {
   // What the terms were before this edit — the fan-out compares against it.
   const previous = { ...model };
   model = { ...emptyFarm(), ...model };
+  // The form as it opened, to send only what was changed in it.
+  const opened = JSON.parse(JSON.stringify(model));
 
 
   let saving = false;
@@ -102,7 +116,14 @@ export async function renderFarmForm(context) {
         toastOk('Rancho registrado');
         go(`/farms/${id}`, { replace: true });
       } else {
-        await updateFarm(farmId, model, previous);
+        // Only what was changed here. The whole form would carry the farm's
+        // houses as they were when it opened — and a house added meanwhile, on
+        // the other computer or from the kitchen, would be wiped by saving a
+        // phone number.
+        const patch = Object.fromEntries(EDITABLE
+          .filter((key) => JSON.stringify(model[key]) !== JSON.stringify(opened[key]))
+          .map((key) => [key, model[key]]));
+        if (Object.keys(patch).length) await updateFarm(farmId, patch, previous);
         toastOk('Cambios guardados');
         go(`/farms/${farmId}`, { replace: true });
       }
@@ -112,8 +133,10 @@ export async function renderFarmForm(context) {
     }
   }
 
+  // Changed in this form — not merely missing from an older farm document
+  // and filled in by the defaults, which would ask about a change nobody made.
   const termsChanged = () => TERM_FIELDS.some(
-    (key) => JSON.stringify(model[key]) !== JSON.stringify(previous[key]));
+    (key) => JSON.stringify(model[key]) !== JSON.stringify(opened[key]));
 
   function form() {
     return h('form.page__inner.page__inner--narrow.stack.stack-4', { onsubmit: save, novalidate: true },

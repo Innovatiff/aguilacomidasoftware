@@ -10,7 +10,7 @@
 
 import { $ } from './lib/dom.js';
 import { configureShell, clearShell, setTabBadge, splash, notePath, screen } from './ui/shell.js';
-import { register, setNotFound, start, go, onNavigate } from './lib/router.js';
+import { register, setNotFound, start, stop as stopRouter, go, onNavigate } from './lib/router.js';
 import { startSession, watchSession, session, signOutNow } from './data/session.js';
 import { startStore, stopStore, subscribe, unreadCount } from './data/store.js';
 import { renderAuth, renderNoAccess } from './screens/login.js';
@@ -55,6 +55,7 @@ const host = $('#app');
 let phase = null;          // 'auth' | 'pending' | 'app'
 let routerStarted = false;
 let stopBadge = null;
+let leaveNoAccess = null;
 
 splash(host);
 startSession();
@@ -72,7 +73,7 @@ watchSession(() => {
 
 function showNoAccess() {
   clearShell(host);
-  renderNoAccess(host, {
+  leaveNoAccess = renderNoAccess(host, {
     // The profile name, not `displayName` — that falls back to the email
     // address, which reads badly in a greeting.
     name: session.profile?.name || session.staff?.name || '',
@@ -84,8 +85,12 @@ function showNoAccess() {
 function enter(next) {
   if (phase === next) return;
 
+  leaveNoAccess?.();
+  leaveNoAccess = null;
+
   // Leaving the app phase: drop every listener before the next account starts.
   if (phase === 'app') {
+    stopRouter();
     stopBadge?.();
     stopBadge = null;
     stopStore();

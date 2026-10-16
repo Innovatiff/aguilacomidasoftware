@@ -12,6 +12,14 @@
     incluido el arranque del service worker. Si se toca uno, se toca el otro.
   -->
   <meta charset="utf-8">
+  <script>
+    // "/empaque/", with the slash: every relative path below would be looked
+    // for under /empaque/ and the screen would come up blank. It moves itself
+    // to "/empaque" before asking for anything.
+    if (/\/empaque\/$/.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/+$/, '') + location.search + location.hash);
+    }
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#21262c">
   <meta name="description" content="La libreta de empaque de El Águila Cocina: quién empaca, qué rancho y qué lleva cada persona.">

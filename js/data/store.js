@@ -63,6 +63,24 @@ export function subscribe(fn) {
 
 const emit = () => { for (const fn of subscribers) fn(state); };
 
+/*
+ * The date moves on by itself. A kitchen computer is left on overnight with
+ * the panel open, and everything worked out "for today" — who eats, what is
+ * owed, which fortnight is running — has to be about the morning it is now,
+ * not the one the page was opened on.
+ */
+function checkDay() {
+  const now = today();
+  if (now === state.day) return;
+  state.day = now;
+  forgetPendingBills();
+  emit();
+}
+if (typeof document !== 'undefined') {
+  setInterval(checkDay, 60 * 1000);
+  document.addEventListener('visibilitychange', checkDay);
+}
+
 /**
  * Records a listener's failure and stops waiting on it.
  *
@@ -389,6 +407,7 @@ export const tillIsWindowed = () => state.receipts.length >= RECENT_RECEIPTS;
 
 let scan = { rows: [], total: 0, periods: 0, unpriced: [], skipped: {} };
 let scanState = 'idle';     // idle | running | done
+let scanRound = 0;          // which ask an answer belongs to
 
 /** The last scan, or null while nobody has asked yet. */
 export const pendingBills = () => (scanState === 'done' ? scan : null);
@@ -403,14 +422,24 @@ export function ensurePendingBills() {
   if (!state.loaded.clients || !state.loaded.pricing) return;
 
   scanState = 'running';
-  pendingBilling(state.clients, state.pricing)
-    .then((found) => { scan = found; })
-    .catch(() => { scan = { rows: [], total: 0, periods: 0, unpriced: [], skipped: {} }; })
-    .finally(() => { scanState = 'done'; emit(); });
+  const round = scanRound;
+  pendingBilling(state.clients, state.pricing, state.day)
+    .then((found) => { if (round === scanRound) scan = found; })
+    .catch(() => {
+      if (round === scanRound) scan = { rows: [], total: 0, periods: 0, unpriced: [], skipped: {} };
+    })
+    .finally(() => {
+      // Forgotten while it ran — bills were issued meanwhile: this answer is
+      // already stale, and the next look asks again.
+      if (round !== scanRound) return;
+      scanState = 'done';
+      emit();
+    });
 }
 
 /** Issuing bills is the one thing that makes the answer stale. */
 export function forgetPendingBills() {
+  scanRound += 1;
   scanState = 'idle';
   scan = { rows: [], total: 0, periods: 0, unpriced: [], skipped: {} };
 }
@@ -484,3 +513,17 @@ export function printContext() {
 
 /** True once the screens have enough to render without skeletons. */
 export const isReady = () => state.loaded.farms && state.loaded.clients;
+
+/** Resolves once the farms and the people have loaded — or failed to. */
+export function whenReady() {
+  if (isReady()) return Promise.resolve();
+  return new Promise((resolve) => {
+    let done = false;
+    const stop = subscribe(() => {
+      if (done || !isReady()) return;
+      done = true;
+      queueMicrotask(() => stop());
+      resolve();
+    });
+  });
+}

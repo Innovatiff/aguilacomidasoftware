@@ -631,5 +631,9 @@ export function renderClients(context) {
     } catch (error) { toastBad(errorText(error)); }
   }
 
-  return life.ending(subscribe(draw));
+  // Data arrives all day — a payment, a message. While somebody is typing in
+  // the search box only the list follows it, or the box would be rebuilt
+  // under their fingers and lose the cursor.
+  return life.ending(subscribe(() => (
+    document.activeElement?.closest?.('.searchbar') ? redraw() : draw())));
 }

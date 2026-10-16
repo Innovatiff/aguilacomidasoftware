@@ -83,13 +83,26 @@ export async function resolve() {
   const teardown = await render(context);
   // Only keep the teardown if we are still on the same route: an await here can
   // outlive its own navigation when the user taps quickly.
-  if (current.path === target) current.teardown = typeof teardown === 'function' ? teardown : null;
+  if (current?.path === target) current.teardown = typeof teardown === 'function' ? teardown : null;
   else if (typeof teardown === 'function') teardown();
 }
 
 export function start() {
   window.addEventListener('hashchange', resolve);
   return resolve();
+}
+
+/**
+ * Stops answering the address bar and closes the screen on it — signing out.
+ * Its listeners go with it, instead of reading on as nobody, and pressing
+ * back on the login screen does not draw a page of the panel over it.
+ */
+export function stop() {
+  window.removeEventListener('hashchange', resolve);
+  if (current?.teardown) {
+    try { current.teardown(); } catch { /* signing out must not fail on a screen */ }
+  }
+  current = null;
 }
 
 /** The route currently on screen, for highlighting the active tab. */

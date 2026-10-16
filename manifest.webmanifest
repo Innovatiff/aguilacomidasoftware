@@ -19,7 +19,7 @@
     { "src": "./assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "shortcuts": [
-    { "name": "Ruta de hoy", "url": "./index.html#/route" },
+    { "name": "Libreta de hoy", "url": "./index.html#/libreta" },
     { "name": "Cobranza", "url": "./index.html#/billing" },
     { "name": "Mensajes", "url": "./index.html#/messages" }
   ]

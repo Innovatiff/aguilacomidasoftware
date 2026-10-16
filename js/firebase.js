@@ -40,13 +40,26 @@ export const app = initializeApp(firebaseConfig);
  * and the write has to survive until the connection comes back.
  */
 export const db = (() => {
+  /*
+   * A field left undefined is skipped rather than refused. Without this, one
+   * missing value anywhere in a write — a bill saved years ago without a date,
+   * a client with no location — makes Firestore reject the whole thing, and
+   * at the counter that is a payment that does not go in.
+   */
+  const always = { ignoreUndefinedProperties: true };
   try {
     return initializeFirestore(app, {
+      ...always,
       localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
     });
   } catch {
-    // Already initialised, or the browser blocks IndexedDB (private mode).
-    return getFirestore(app);
+    // The browser blocks IndexedDB (private mode): in memory, same rules.
+    try {
+      return initializeFirestore(app, always);
+    } catch {
+      // Already initialised.
+      return getFirestore(app);
+    }
   }
 })();
 

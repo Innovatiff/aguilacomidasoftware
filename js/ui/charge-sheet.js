@@ -41,6 +41,8 @@ import { formatDay, weekdayName, today, addDays } from '../lib/dates.js';
 import { PAYMENT_METHODS } from '../lib/model.js';
 import { errorText } from '../firebase.js';
 
+let charging = false;
+
 /**
  * @param {object} options
  * @param {object} options.client    who is paying
@@ -48,7 +50,20 @@ import { errorText } from '../firebase.js';
  * @param {object} options.author    { uid, name }
  * @returns {Promise<object|null>} the receipt, or null if nothing was taken
  */
-export async function openChargeSheet({ client, pricing, author }) {
+export async function openChargeSheet(options) {
+  // One at a time: a double tap on «Cobrar» while the bills are read would
+  // otherwise open two sheets, and the second payment is a real one. The
+  // second tap gets "nothing taken", so nothing after it prints twice.
+  if (charging) return null;
+  charging = true;
+  try {
+    return await chargeSheet(options);
+  } finally {
+    charging = false;
+  }
+}
+
+async function chargeSheet({ client, pricing, author }) {
   /*
    * What they owe is read from their own bills, once, before the sheet opens:
    * a fortnight paid in full is not in memory anywhere, and without it a
@@ -239,7 +254,9 @@ export async function openChargeSheet({ client, pricing, author }) {
             const receipt = await takePayment(
               { client, pricing, amount: value, method, reference, note, date, setCycle },
               author);
-            await announce(receipt, client);
+            // Not awaited: offline, a chat message only settles once the internet
+            // is back, and the payment is already in.
+            announce(receipt, client).catch(() => {});
             toastOk(`Cobrado ${money(value)} · ${receipt.folio}`);
             close(receipt);
           } catch (error) {

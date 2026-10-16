@@ -23,7 +23,7 @@ import {
 import { openChargeSheet } from '../ui/charge-sheet.js';
 import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
-import { store, subscribe, billingFor, invoicesFor } from '../data/store.js';
+import { store, subscribe, billingFor, invoicesFor, moneyStats } from '../data/store.js';
 import { matchesSearch } from '../data/clients.js';
 import { watchReceiptsOn, totalOf, cancelledIds } from '../data/receipts.js';
 import { chargeFor } from '../lib/pricing.js';
@@ -150,9 +150,8 @@ export function renderCheckout() {
         }),
         stat({
           label: 'Por cobrar',
-          value: money(store.outstanding.reduce((sum, invoice) =>
-            sum + Math.max(0, (Number(invoice.amount) || 0) - (Number(invoice.paid) || 0)), 0), { round: true }),
-          foot: 'En todas las facturas abiertas',
+          value: money(moneyStats().outstanding, { round: true }),
+          foot: 'Lo ya servido y las deudas',
           onClick: () => go('/billing'),
         }),
       ]),

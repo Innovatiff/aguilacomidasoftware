@@ -82,7 +82,9 @@ export async function pendingBilling(clients, pricing, day = today()) {
     const current = periodOf(client, day).index;
     for (let back = 1; back <= LOOK_BACK; back += 1) {
       const period = periodOfIndex(client, current - back);
-      const key = period.start;
+      // A weekly payer and a fortnightly one can start on the same day and
+      // still end on different ones: each keeps the period that is theirs.
+      const key = `${period.start}|${period.end}`;
       if (!periods.has(key)) periods.set(key, { period, clients: [] });
       periods.get(key).clients.push(client);
     }
@@ -102,7 +104,12 @@ export async function pendingBilling(clients, pricing, day = today()) {
    * the manager had already tapped somebody. Asked together, it is one wait.
    */
   const groups = [...periods.values()];
-  const issuedBy = await Promise.all(groups.map(({ period }) => issuedIn(period.start)));
+  const reads = new Map();
+  const readOnce = (start) => {
+    if (!reads.has(start)) reads.set(start, issuedIn(start));
+    return reads.get(start);
+  };
+  const issuedBy = await Promise.all(groups.map(({ period }) => readOnce(period.start)));
 
   for (let i = 0; i < groups.length; i += 1) {
     const { period, clients: group } = groups[i];
@@ -159,8 +166,8 @@ export async function pendingBilling(clients, pricing, day = today()) {
 export async function issueAll(rows, author) {
   let issued = 0;
   for (const row of rows) {
-    await issueInvoice(row.client, row.period, row.charge, row.meals, author);
-    issued += 1;
+    const bill = await issueInvoice(row.client, row.period, row.charge, row.meals, author);
+    if (!bill.existed) issued += 1;
   }
   return issued;
 }
@@ -245,7 +252,7 @@ export async function openBalance(client, periods, author) {
   let issued = 0;
 
   for (const period of chosen) {
-    await issueInvoice(
+    const bill = await issueInvoice(
       client,
       { index: period.index, start: period.start, end: period.end },
       period.charge || period.amount,
@@ -253,7 +260,7 @@ export async function openBalance(client, periods, author) {
       author,
       { fromNotebook: true },
     );
-    issued += 1;
+    if (!bill.existed) issued += 1;
   }
   return issued;
 }

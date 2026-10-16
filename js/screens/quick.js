@@ -517,9 +517,30 @@ export function renderQuick() {
       clients: store.clients,
       value: s.client,
       balanceOf: owedBy,
-      onPick: (client) => { s.client = client; api.revalidate(); },
+      onPick: (client) => {
+        if (s.client && s.client.id !== client.id) forgetPerson(s);
+        s.client = client;
+        api.revalidate();
+      },
     }),
   });
+
+  /*
+   * Picking somebody else starts their answers over. What was chosen for the
+   * first person — their days, their amount, their status — is not the
+   * second's, and saving it on them would change somebody nobody looked at.
+   */
+  const PERSONAL = {
+    amount: 0, owing: null, loadingFor: null, setCycle: false, target: null,
+    days: undefined, meals: undefined, status: undefined, endsOn: undefined,
+    payEvery: undefined, anchor: undefined,
+  };
+  function forgetPerson(s) {
+    for (const [key, blank] of Object.entries(PERSONAL)) {
+      if (blank === undefined) delete s[key];
+      else s[key] = blank;
+    }
+  }
 
   /** The person's name and where they are, for a confirmation table. */
   /** Feeds the bar that keeps the chosen person on screen. */

@@ -248,10 +248,11 @@ service cloud.firestore {
       match /messages/{messageId} {
         allow read: if isAdmin() || ownsClient(clientId);
 
-        // You may only post as yourself, and only into your own thread.
-        allow create: if (isAdmin() || ownsClient(clientId))
+        // You may only post as yourself, and only into your own thread — and
+        // as what you are: a client cannot sign a message as the kitchen.
+        allow create: if ((isAdmin() && request.resource.data.senderRole == 'admin')
+            || (ownsClient(clientId) && request.resource.data.senderRole == 'client'))
           && request.resource.data.senderUid == request.auth.uid
-          && request.resource.data.senderRole in ['admin', 'client']
           && request.resource.data.text is string
           && request.resource.data.text.size() > 0
           && request.resource.data.text.size() <= 4000;

@@ -193,8 +193,9 @@ dice a cuántos va a alcanzar antes de guardar. Las facturas ya emitidas no se
 tocan.
 
 **Mover a alguien** — de ubicación o de rancho — se hace desde su ficha, en
-**Cambiar de ubicación**. Al mover de rancho, sus condiciones pasan a ser las
-del rancho nuevo.
+**Cambiar de ubicación**. Su fecha de pago, cada cuánto paga y los días que come
+son suyos y se van con la persona. Al mover de rancho sólo toma lo que es del
+rancho nuevo: el horario de entrega y los días de gracia.
 
 Para eliminar una ubicación primero hay que mover a quien esté ahí, y para
 eliminar un rancho primero hay que vaciarlo. Es a propósito: borrar en cascada
@@ -340,7 +341,10 @@ como su propio recibo, **a cuenta**, con su folio, y marcado **«Por revisar»**
 en el mostrador. Sin internet se queda en esa computadora y se sube solo al
 volver la conexión. El recibo de ese pago dice *PAGO RECIBIDO* (no «al
 corriente» ni un saldo que no se calculó), y en el panel explica por qué quedó
-así para que el encargado lo ponga donde va.
+así. Con internet, el botón **Repartir en sus quincenas** de ese recibo lo
+pone donde va: el recibo retenido se cancela con la fecha de ese día y el
+mismo dinero entra otra vez, ese mismo día y con la misma forma de pago, ahora
+repartido. El total del día no cambia y el recibo nuevo dice de cuál salió.
 
 Al terminar sale el **recibo con folio** (`R-260821-WPUF`), y ese mismo recibo
 aparece en la app de la persona en segundos, junto con un aviso en su chat. El
@@ -522,8 +526,11 @@ Cada persona que trabaja en la cocina tiene su usuario: su **nombre**, su
 *Empaque → Configurar → Usuarios → Nuevo usuario*:
 
 1. **El nombre**, como lo va a ver en la pantalla.
-2. **El PIN**, de 4 a 8 números. Dos personas activas no pueden tener el mismo:
-   el panel no deja guardarlo y dice quién ya lo usa.
+2. **El PIN**, de 4 a 8 números. Dos personas activas no pueden tener el mismo,
+   ni uno que empiece igual que el de otra (4821 y 48210): el teclado deja
+   entrar en cuanto lo escrito es un número, y el corto abriría antes de
+   teclear el largo. El panel no deja guardarlo y dice con quién choca. Si ya
+   había dos así de antes, el corto entra tras una pausa de un segundo.
 3. **Qué puede hacer**: un interruptor por cada botón del menú de la cocina.
    *Todo* y *Nada* los prenden o apagan juntos.
 
@@ -640,6 +647,16 @@ libreta lo dice antes de entrar: *Sigues en Rafael Núñez · 23 de 174*.
 - Solo la primera vez del día empieza en la primera farma, con la etiqueta
   de su primera bolsa. **Terminar** olvida el lugar: si se vuelve a abrir
   después, empieza desde arriba.
+- **Si llega alguien a una casa que ya pasó**, *Siguiente* nunca lo traería:
+  sólo va para adelante. Por eso sale arriba un aviso amarillo —*Falta alguien
+  que se agregó antes de donde vas · Abel Ortiz · Georgia · Casa Azul · 2
+  comidas*— con **Imprimir sus etiquetas** (sólo las suyas, una por comida,
+  sin bolsa) y **Ya lo empaqué**, que lo quita. Se queda hasta que alguien
+  diga que ya está.
+- Una tecla que se queda apretada no pasa a la gente de corrido, y Ctrl o Alt
+  con una flecha son del navegador, no de la libreta.
+- Si la libreta se queda abierta pasada la medianoche, regresa sola al menú,
+  que abre en el día nuevo.
 
 Regresar no imprime nada: eso es para revisar un nombre ya empacado, y una
 etiqueta por cada revisión es un rollo perdido para el miércoles. Volver a
@@ -858,6 +875,10 @@ Las reglas se publican desde la consola, sin instalar nada:
 
 1. Consola de Firebase → **Firestore Database → Reglas**.
 2. Pega el contenido de `firestore.rules` y **Publicar**.
+
+**Cuándo volver a pegarlas.** Cada vez que cambia `firestore.rules`. La última
+vez fue para que un cliente no pueda firmar un mensaje como si fuera la cocina,
+ni siquiera en su propio chat.
 
 **Los índices.** Hacen falta dos, y no se pegan: se crean con un clic. La
 primera vez que abras la ficha de un cliente o su lista de recibos, si falta
