@@ -500,8 +500,27 @@
   align-items: stretch;
   gap: 0;
 }
-.bag__farm {
+/* The farm, and beside it which of its bags this is when it has more than one
+   — the thing that tells two of a farm's bags apart at a glance. */
+.bag__head {
   flex: none;
+  display: flex;
+  align-items: center;
+  gap: 3mm;
+}
+.bag__num {
+  flex: none;
+  font-size: 3.6mm;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  border: 0.4mm solid #000;
+  border-radius: 1mm;
+  padding: 0.3mm 1.4mm;
+  white-space: nowrap;
+}
+.bag__farm {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 6mm;
   font-weight: 800;
   line-height: 1.05;

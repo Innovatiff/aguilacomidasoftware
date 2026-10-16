@@ -969,6 +969,11 @@
 .pkreprint:focus-visible { outline: 3px solid var(--brand-500); outline-offset: 2px; }
 .pkreprint svg { width: 20px; height: 20px; }
 
+/* On a person's slide: one more of their stickers, and — where a bag's sticker
+   came out — that bag's again. Side by side, under everything else. */
+.pkreprints { display: flex; flex-wrap: wrap; gap: var(--s3); margin-top: var(--s6); }
+.pkreprints .pkreprint { margin-top: 0; }
+
 /* --- One person ------------------------------------------------------------- */
 
 /* Set large on purpose. This is read from a step or two back, by somebody
@@ -981,6 +986,16 @@
   font-size: var(--fs-md); font-weight: 700;
   letter-spacing: .12em; text-transform: uppercase;
   color: var(--text-soft);
+}
+/* Which bag, boxed like the "BOLSA 2/3" on the bag's own sticker. */
+.pkperson__bag {
+  display: inline-block;
+  margin-left: var(--s3);
+  padding: 1px var(--s2);
+  border: 2px solid var(--text);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  letter-spacing: .06em;
 }
 
 /* The name and the count are one thought, so they are one row. The name is

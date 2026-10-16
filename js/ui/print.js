@@ -302,44 +302,43 @@ function printOne() {
 }
 
 /**
- * Prints one packing label.
+ * Prints stickers in one job: a bag's, then a person's — one for each of their
+ * containers.
  *
- * The extra step over a receipt is the measuring: the sticker is mounted,
- * `fitLabel` shrinks the name until it stops wrapping, and only then is the
- * printer asked for. That order is the whole reason `#print-root` is parked
- * off the screen instead of being `display: none` — a subtree with no layout
- * has no width to compare against.
+ * One job and not one per sticker. A label printer feeds one label per page,
+ * so a job of three pages is three labels in a row; three jobs sent in a
+ * second are three requests a browser printing without asking can drop one
+ * of. And they come out in the order they go on: the bag first, then the
+ * lids.
  *
- * On a kitchen machine this runs once per person, with nobody pressing
- * anything: Chrome started with `--kiosk-printing` sends it straight to the
- * default printer and shows no dialog. Without that flag every label stops for
- * a confirmation, which is why the whole thing can be turned off in
- * Empaque → Configurar rather than being something the kitchen has to live
- * with.
+ * The extra step over a receipt is the measuring: each sticker is mounted,
+ * `fitLabel` shrinks its name until it stops wrapping and `fitBag` lays out
+ * the bag's list, and only then is the printer asked for. That order is the
+ * whole reason `#print-root` is parked off the screen instead of being
+ * `display: none` — a subtree with no layout has no width to compare against.
+ *
+ * On a kitchen machine this runs with nobody pressing anything: Chrome started
+ * with `--kiosk-printing` sends it straight to the default printer and shows
+ * no dialog. Without that flag every job stops for a confirmation, which is
+ * why the whole thing can be turned off in Empaque → Configurar rather than
+ * being something the kitchen has to live with.
+ *
+ * @param {object}   stickers
+ * @param {object}   [stickers.bag]     a bag's sticker (see `mountBag` in js/ui/label.js)
+ * @param {object[]} [stickers.labels]  people's stickers, in order (see `labelSheet`)
  */
-export function printLabel(spec) {
+export function printStickers({ bag = null, labels = [] } = {}) {
   paper('label');
   const root = printRoot();
-  mount(root, labelSheet(spec));
-  fitLabel(root);
-  requestAnimationFrame(() => window.print());
-}
-
-/**
- * Prints the sticker for a farm's bag: the farm, who is in it, and how many
- * plates, on the same paper as everybody's own label.
- *
- * Measured like the person's sticker, for the same reason, and then some: how
- * large the names can be and how many columns they need depends on how many
- * there are and how long they run, and only the browser can tell. A bag too
- * big for one sticker comes out as two, in a single print job.
- *
- * @param {object} spec  the farm, everybody in the bag, the day and the libreta
- *   (see `mountBag` in js/ui/label.js)
- */
-export function printBagLabel(spec) {
-  paper('label');
-  mountBag(printRoot(), spec);
+  if (bag) mountBag(root, bag);
+  else mount(root);
+  // Siblings of the bag's sheet, so `.lbl + .lbl` puts each on its own page.
+  for (const spec of labels) {
+    const sheet = labelSheet(spec);
+    root.append(sheet);
+    fitLabel(sheet);
+  }
+  if (!root.firstElementChild) return;
   requestAnimationFrame(() => window.print());
 }
 

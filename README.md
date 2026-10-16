@@ -473,8 +473,8 @@ farma* la deja como el cuaderno.
 - **Las ubicaciones de distintas farmas se pueden intercalar.** Casa 1 de
   Mucci, luego el Bloque de Morsea, luego Casa 2 de Mucci. La pantalla de
   empaque dice cada vez qué farma sigue y qué ubicaciones de ella vienen; si el
-  orden sale de una farma y regresa a ella después, es otro tramo, con su
-  propia etiqueta de bolsa — los platos se empacaron en otro momento.
+  orden sale de una farma y regresa a ella después, es otro tramo, con sus
+  propias bolsas — los platos se empacaron en otro momento.
 - **Una ubicación nueva no se pierde.** Si después se agrega una casa a la
   libreta, entra justo después de la última ubicación de su farma (o al final,
   si su farma no tenía ninguna). Se empaca igual, y se puede mover cuando
@@ -571,42 +571,64 @@ todas— y revisar.
 
 #### Las etiquetas que salen solas
 
-Los platos de una farma se van juntos en una bolsa. Por eso salen dos clases de
-etiqueta, las dos en el mismo papel de **100 × 50 mm**:
+Cada bolsa lleva la comida de **cuatro personas** —de una comida o de dos cada
+una— y se cierra. Por eso salen dos clases de etiqueta, las dos en el mismo
+papel de **100 × 50 mm**:
 
-1. **La de la bolsa**, al llegar a cada farma —antes que las de su gente—. Va
-   pegada en la bolsa y dice qué lleva adentro.
-2. **La de cada persona**, cada vez que aparece en la pantalla. Va encima de su
-   plato, dentro de esa bolsa.
+1. **La de la bolsa**, una por cada cuatro personas. Va pegada en la bolsa y
+   dice qué lleva adentro.
+2. **La de cada persona, una por comida**: dos para quien lleva dos, una para
+   quien lleva una. Cada una va encima de su recipiente, dentro de esa bolsa.
+
+Una farma de diez son tres bolsas: cuatro, cuatro y dos. Así salen, sin que el
+recorrido cambie en nada:
+
+| En la pantalla | Lo que sale |
+|---|---|
+| La farma | La etiqueta de la bolsa 1, con las primeras cuatro personas |
+| Persona 1 a 4 | Las suyas: dos si lleva dos, una si lleva una |
+| Persona 5 | La etiqueta de la bolsa 2, y luego las suyas |
+| Persona 6 a 8 | Las suyas |
+| Persona 9 | La etiqueta de la bolsa 3, y luego las suyas |
+| Persona 10 | Las suyas |
+
+Todo lo de una diapositiva sale junto, en un solo envío a la impresora y en el
+orden en que se pega: primero la bolsa, luego las tapas.
 
 La libreta **siempre empieza desde cero**, en su primera farma, así que al
-abrirla sale la etiqueta de esa bolsa. Después, cada *Siguiente* que cae en una
-persona saca la suya, y cada uno que cae en otra farma saca la de su bolsa.
+abrirla sale la etiqueta de su primera bolsa.
 
 Regresar no imprime nada: eso es para revisar un nombre ya empacado, y una
 etiqueta por cada revisión es un rollo perdido para el miércoles. Volver a
-avanzar sí imprime, que es como se repone una etiqueta atorada. La pantalla de
-cada farma tiene además **Volver a imprimir la etiqueta de la bolsa**, porque la
-primera farma no tiene ninguna antes a la cual regresar.
+avanzar sí imprime, que es como se repone una etiqueta atorada. Y hay botones
+para no tener que moverse:
 
-**La etiqueta de la bolsa** lleva la farma grande arriba, y debajo a todos los
-de esa bolsa en columnas, en el mismo orden en que se empacan, con **×2** junto
-a quien lleva dos. Abajo, el día y la libreta de un lado y del otro el total:
-«10 personas · 16 comidas», que es contra lo que quien cierra la bolsa cuenta
-los platos. Si una farma está repartida entre las dos libretas, cada bolsa lleva
-sólo la gente de su libreta.
+- **Imprimir otra etiqueta**, en cada persona: saca una más de esa persona,
+  una sola, para un recipiente que la necesite.
+- **Volver a imprimir la etiqueta de la bolsa**, en la farma (su bolsa 1) y en
+  la persona que empieza cada bolsa siguiente (esa bolsa). La primera farma no
+  tiene ninguna diapositiva antes a la cual regresar.
 
-La letra se acomoda sola: con pocas personas va grande y en una columna; con
-muchas, más chica y hasta en cuatro columnas, sin bajar nunca de 2.3 mm. Una
-etiqueta alcanza para unas cuarenta personas. Si una bolsa trae más, sigue en
-una segunda etiqueta en el mismo momento, marcadas *1/2* y *2/2*, y la gente se
-reparte parejo entre las dos.
+**La etiqueta de la bolsa** lleva la farma grande arriba y, si la farma tiene
+más de una bolsa, cuál es: **BOLSA 2/3**. Debajo, las cuatro personas de esa
+bolsa, en el mismo orden en que se empacan, con **×2** junto a quien lleva dos.
+Abajo, el día y la libreta de un lado y del otro lo que lleva esa bolsa:
+«4 personas · 8 comidas», que es contra lo que quien la cierra cuenta los
+recipientes. En la pantalla, cada persona dice en qué bolsa va —*Bolsa 2 de
+3*— y la farma dice cuántas bolsas son. Si una farma está repartida entre las
+dos libretas, cada libreta hace sus propias bolsas con su gente.
+
+Cuántas personas van por bolsa es un solo número (`BAG_SIZE` en
+`js/lib/packing.js`). La etiqueta de la bolsa acomoda la letra sola —con pocas
+personas grande y en una columna, con muchas más chica y hasta en cuatro
+columnas, sin bajar nunca de 2.3 mm—, así que ese número se puede cambiar sin
+tocar nada más.
 
 **La etiqueta de cada persona** lleva, de arriba abajo: el nombre grande en
 mayúsculas, una raya, la farma y la ubicación, las preferencias, la nota, y al
-pie el día, la libreta y el número de la persona. A la izquierda un **QR de
-32 mm** que lleva a la página donde esa persona instala su propia app, con su
-correo ya escrito.
+pie el día, la libreta y el número de la persona —y, para quien lleva dos,
+*1/2* y *2/2*—. A la izquierda un **QR de 32 mm** que lleva a la página donde
+esa persona instala su propia app, con su correo ya escrito.
 
 **En la etiqueta nunca se imprime una alergia.** Las alergias están en la
 pantalla de empaque, en rojo, donde alguien las lee con la comida todavía
@@ -645,7 +667,7 @@ En cada computadora de la cocina:
    final del campo *Destino* agrega un espacio y `--kiosk-printing`.
 3. Ciérrala y vuelve a abrirla desde ese acceso directo.
 
-Sin esa bandera, cada etiqueta abre un cuadro de diálogo que alguien tiene que
+Sin esa bandera, cada envío abre un cuadro de diálogo que alguien tiene que
 confirmar con las manos mojadas. Si eso pasa, o si la impresora se descompone,
 se apaga todo desde *Empaque → Configurar → Imprimir las etiquetas solas*.
 
@@ -814,8 +836,9 @@ js/
     model.js          estados de entrega, métodos de pago, respuestas rápidas
     icons.js          set de iconos SVG
     mode.js           por cuál de las dos puertas se abrió la app
-    packing.js        el orden en que se empaca —ubicación por ubicación— y
-                      los permisos de cada quien en la cocina
+    packing.js        el orden en que se empaca —ubicación por ubicación—,
+                      las bolsas de cuatro y los permisos de cada quien en
+                      la cocina
     board.js          el tablero de hoy: medias, completas y lo que no
                       pueden comer, contado cliente por cliente
     qr.js             códigos QR, escritos aquí: sin paquetes y sin internet
@@ -827,8 +850,8 @@ js/
     store.js          escuchas compartidas del panel
   ui/                 shell, kit de componentes, hojas, chat
     print.js          recibos, reportes y etiquetas, por el diálogo del navegador
-    label.js          las etiquetas de 100 × 50 mm: la del plato de cada
-                      persona y la de la bolsa de cada farma
+    label.js          las etiquetas de 100 × 50 mm: la de cada comida de
+                      cada persona y la de cada bolsa de cuatro
     day-board.js      el tablero de hoy, en la computadora de la cocina
     sortable.js       ordenar una lista arrastrando, o con el teclado
   screens/            una pantalla por archivo

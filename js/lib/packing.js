@@ -374,30 +374,67 @@ export function packingSequence({
 const byName = (a, b) => String(a.name).localeCompare(String(b.name), 'es');
 
 /**
- * What goes in one farm's bag: the people on the slides that follow a farm's
- * slide, up to the next farm, in the order they are packed — with how many
- * plates each one takes, and the totals the bag is checked against.
- *
- * Read off the slides rather than worked out again, so the sticker on the bag
- * can never list somebody the screen did not show, or miss somebody it did.
- * When a farm is split between the two libretas, each bag holds its own
- * libreta's half, which is exactly what each packer puts in it.
- *
- * @returns {{ farm: object, people: { name: string, plates: number }[],
- *   plates: number } | null}  null when the slide is not a farm
+ * How many people's food goes in one bag. The kitchen fills a bag with four
+ * people's containers — one comida or two each — and closes it.
  */
-export function bagOf(slides, index) {
+export const BAG_SIZE = 4;
+
+/**
+ * A farm's bags: the people after a farm's slide, in the order they are
+ * packed, four to a bag. Ten people are three bags — four, four and two.
+ *
+ * Cut from the slides rather than worked out again, so a bag's sticker can
+ * never list somebody the screen did not show, or put them in a different bag
+ * from the one the screen says. When a farm is split between the two
+ * libretas, each libreta's bags hold its own half, which is exactly what each
+ * packer puts in them; a farm the order comes back to later is bagged again
+ * from one.
+ *
+ * @returns {{ farm, number, of, people: { name, plates }[], plates,
+ *   first: number, last: number }[]}  `first` and `last` are the slide
+ *   indexes of the bag's first and last person; empty when the slide is not a
+ *   farm's
+ */
+export function bagsOf(slides, index) {
   const head = slides?.[index];
-  if (head?.kind !== 'farm') return null;
-  const people = [];
+  if (head?.kind !== 'farm') return [];
+  const members = [];
   for (let at = index + 1; at < slides.length && slides[at].kind === 'client'; at += 1) {
-    people.push({ name: slides[at].client.name, plates: slides[at].plates });
+    members.push(at);
   }
-  return {
-    farm: head.farm,
-    people,
-    plates: people.reduce((sum, one) => sum + one.plates, 0),
-  };
+  const bags = [];
+  for (let i = 0; i < members.length; i += BAG_SIZE) {
+    const chunk = members.slice(i, i + BAG_SIZE);
+    const people = chunk.map((at) => ({ name: slides[at].client.name, plates: slides[at].plates }));
+    bags.push({
+      farm: head.farm,
+      number: bags.length + 1,
+      people,
+      plates: people.reduce((sum, one) => sum + one.plates, 0),
+      first: chunk[0],
+      last: chunk[chunk.length - 1],
+    });
+  }
+  for (const bag of bags) bag.of = bags.length;
+  return bags;
+}
+
+/**
+ * The bag a slide belongs to: a farm's slide, its first bag; a person's, the
+ * bag their food goes in — with `starts` when they are the first in it, which
+ * is the moment that bag's sticker comes out.
+ *
+ * @returns {object|null}  as one of `bagsOf`, plus `starts`
+ */
+export function bagAt(slides, index) {
+  const slide = slides?.[index];
+  if (slide?.kind !== 'farm' && slide?.kind !== 'client') return null;
+  let head = index;
+  while (head >= 0 && slides[head].kind !== 'farm') head -= 1;
+  const bags = bagsOf(slides, head);
+  if (slide.kind === 'farm') return bags.length ? { ...bags[0], starts: true } : null;
+  const bag = bags.find((one) => index >= one.first && index <= one.last);
+  return bag ? { ...bag, starts: bag.first === index } : null;
 }
 
 /* --- Who is at the keyboard -------------------------------------------------- */

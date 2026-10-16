@@ -94,9 +94,11 @@ function sentence(value) {
  * @param {string} spec.lineName    which libreta, for the "R1" in the footer
  * @param {number} spec.sequence    their position in that libreta, from 1
  * @param {string} spec.appUrl      where the QR points
+ * @param {{ at: number, of: number }} [spec.copy]  which of their containers,
+ *   for somebody who takes two comidas and so gets two stickers
  */
 export function labelSheet({
-  client, farmName, placeName, day, lineName, sequence, appUrl,
+  client, farmName, placeName, day, lineName, sequence, appUrl, copy,
 }) {
   const preferences = (client?.preferencias || []).filter(Boolean).map(upper);
   // Today's note wins over the standing one, and disappears with the day.
@@ -116,19 +118,21 @@ export function labelSheet({
       preferences.length ? h('div.lbl__pref', preferences.join(' · ')) : null,
       note ? h('div.lbl__note', note) : null,
       h('div.lbl__foot',
-        `${footerDay(day)} · R${route} · ${String(sequence).padStart(3, '0')}`)));
+        `${footerDay(day)} · R${route} · ${String(sequence).padStart(3, '0')}`
+        + `${copy?.of > 1 ? ` · ${copy.at}/${copy.of}` : ''}`)));
 }
 
 /* --- The bag ---------------------------------------------------------------- */
 
 /**
- * The sticker that goes on a farm's bag.
+ * The sticker that goes on a bag.
  *
- * A farm's plates travel together in one bag, each with its own sticker on the
- * lid. This one goes on the bag and says what is inside it: the farm, large,
- * for whoever carries it; everybody in it, small and in columns, with ×2
+ * A farm's plates travel four people to a bag, each container with its own
+ * sticker on the lid. This one goes on the bag and says what is inside it:
+ * the farm, large, for whoever carries it — and which of the farm's bags this
+ * is, "BOLSA 2/3", when it has more than one; the people in it, with ×2
  * beside whoever takes two plates; and along the bottom the day and the
- * libreta on one side and the totals on the other — "10 personas · 16
+ * libreta on one side and the bag's totals on the other — "4 personas · 8
  * comidas", the number whoever closes the bag counts the plates against.
  *
  * No QR and no notes. It is the bag's packing list, not anybody's sticker.
@@ -139,12 +143,17 @@ export function labelSheet({
  * @param {{ people: number, plates: number }} spec.totals  the whole bag's
  * @param {string} spec.day         'YYYY-MM-DD'
  * @param {string} spec.lineName    which libreta, for the "R1"
+ * @param {{ number: number, of: number }} [spec.bag]  which of the farm's bags
  * @param {{ at: number, of: number }} [spec.page]  when one sticker is not enough
  */
-export function bagSheet({ farmName, people, totals, day, lineName, page }) {
+export function bagSheet({
+  farmName, people, totals, day, lineName, bag, page,
+}) {
   const part = page?.of > 1 ? ` · ${page.at}/${page.of}` : '';
   return h('div.lbl.lbl--bag',
-    h('div.bag__farm', upper(farmName)),
+    h('div.bag__head',
+      h('div.bag__farm', upper(farmName)),
+      bag?.of > 1 ? h('div.bag__num', `BOLSA ${bag.number}/${bag.of}`) : null),
     h('div.lbl__rule'),
     h('div.bag__names', (people || []).map((one) => h('div.bag__who',
       h('span.bag__name', String(one.name || '').trim().replace(/\s+/g, ' ')),
