@@ -130,15 +130,19 @@ export function labelSheet({
 
 /* --- The bag ---------------------------------------------------------------- */
 
+/** Whose bag it is, across the top of every bag's sticker. */
+const BRAND = 'EL ÁGUILA';
+
 /**
  * The sticker that goes on a bag: the farm and the house, and nothing else.
  *
  * A bag holds four people's containers, all for the same house, and each
  * container already has its own sticker with the person's name on it. This
  * one is for whoever carries the bag, and it answers one question — where it
- * goes — as large as the paper allows: the farm across the top, the ubicación
- * under it. The day and the libreta run small along the bottom, as on every
- * other sticker, so yesterday's bag is not mistaken for today's.
+ * goes — as large as the paper allows: the farm, the ubicación under it, and
+ * above both, smaller, whose bag it is — El Águila. The day and the libreta
+ * run small along the bottom, as on every other sticker, so yesterday's bag is
+ * not mistaken for today's.
  *
  * @param {object} spec
  * @param {string} spec.farmName
@@ -153,6 +157,7 @@ export function placeSheet({
   const place = upper(placeName);
   return h('div.lbl.lbl--place',
     h('div.place__body',
+      h('div.place__brand', BRAND),
       h('div.place__farm', upper(farmName)),
       place ? h('div.lbl__rule') : null,
       place ? h('div.place__where', place) : null),
@@ -182,6 +187,7 @@ export function specialSheet({
   const places = placeNames.map(upper).filter(Boolean);
   const plates = people.reduce((sum, one) => sum + (Number(one.plates) || 0), 0);
   return h('div.lbl.lbl--place.lbl--special',
+    h('div.place__brand', BRAND),
     h('div.place__farm', upper(farmName)),
     places.length ? h('div.place__where', places.join(' · ')) : null,
     h('div.lbl__rule'),

@@ -595,8 +595,9 @@ Cada bolsa lleva la comida de **cuatro personas** —de una comida o de dos cada
 una—, todas **de la misma ubicación**, y se cierra. Por eso salen dos clases de
 etiqueta, las dos en el mismo papel de **100 × 50 mm**:
 
-1. **La de la bolsa**: solo **la farma y su ubicación**, grandes, para quien
-   la lleva. Una por bolsa.
+1. **La de la bolsa**: **la farma y su ubicación**, grandes, para quien la
+   lleva, y arriba de la farma, más chico, **EL ÁGUILA**. Una por bolsa. La
+   etiqueta especial también lleva EL ÁGUILA arriba.
 2. **La de cada persona, una por comida**: dos para quien lleva dos, una para
    quien lleva una. Cada una va encima de su recipiente, dentro de la bolsa.
 

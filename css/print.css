@@ -514,6 +514,16 @@
   font-weight: 800;
   line-height: 1.08;
 }
+/* El Águila, above the farm: plainly there, and smaller than the farm, which
+   is still what the driver reads first. */
+.place__brand {
+  margin-bottom: 1.2mm;
+  font-size: 5mm;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  line-height: 1.05;
+  white-space: nowrap;
+}
 .place__farm { font-size: 14mm; letter-spacing: -0.02em; }
 .place__where { font-size: 10mm; letter-spacing: -0.01em; }
 .lbl--place .lbl__rule { margin: 2mm 0 2.2mm; border-top-width: 0.6mm; }
@@ -532,6 +542,7 @@
    fitSpecial() in js/ui/label.js, by measuring; these are where it starts. */
 
 .lbl--special > * { flex: none; }
+.lbl--special .place__brand { margin-bottom: 0.6mm; font-size: 3.6mm; }
 .lbl--special .place__farm { font-size: 9mm; }
 .lbl--special .place__where { margin-top: 0.6mm; font-size: 6mm; }
 .lbl--special .lbl__rule { margin: 1.4mm 0; }
