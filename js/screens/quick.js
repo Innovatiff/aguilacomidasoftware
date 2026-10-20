@@ -53,7 +53,7 @@ import { abilitiesOf, lineOf, arrangeLine, orderedPlaces } from '../lib/packing.
 import { arrangeSheet } from '../ui/libreta-order.js';
 import { sheet, toastOk, toastBad } from '../ui/overlay.js';
 import { errorText } from '../firebase.js';
-import { createFarm, newLocationId } from '../data/farms.js';
+import { createFarm, newLocationId, addLocations } from '../data/farms.js';
 import { openDayBoard } from '../ui/day-board.js';
 import { openAdvanceSheet } from '../ui/advance-sheet.js';
 import { planAdvanceFix } from '../lib/advance.js';
@@ -290,7 +290,7 @@ export function renderQuick() {
       h('div.postiles.postiles--2', { style: { marginBottom: '14px' } },
         tileCharge(), tileMeals()),
 
-      h('div.postiles.postiles--4',
+      h('div.postiles.postiles--5',
         posTile({
           icon: 'calendar', title: 'Cambiar días', family: 'plan',
           sub: 'Qué días come',
@@ -306,9 +306,18 @@ export function renderQuick() {
           sub: 'No pollo, no puerco…',
           onClick: () => ready && flowDiet(),
         }),
-        // Each family together: what they eat, then who is eating, then the
-        // two money corrections side by side at the end. Four across, so the
-        // money pair always shares a row.
+        posTile({
+          icon: 'farm', title: 'Nueva farma', family: 'plan',
+          sub: 'Con sus ubicaciones',
+          onClick: () => ready && flowNewFarm(),
+        }),
+        posTile({
+          icon: 'pin', title: 'Nueva ubicación', family: 'plan',
+          sub: 'En una farma',
+          onClick: () => ready && flowNewPlace(),
+        }),
+        // Five across, two rows: what they eat and where, on top; who is
+        // eating, then the two money corrections side by side, below.
         posTile({
           icon: 'userPlus', title: 'Nuevo cliente', family: 'who',
           sub: 'Dar de alta',
@@ -1158,64 +1167,10 @@ export function renderQuick() {
               warning);
           },
         },
-        {
-          id: 'places',
+        placesStep({
           title: '¿Qué ubicaciones tiene?',
           hint: 'Escribe una y toca Agregar. Casa 1, Bloque Norte, Invernadero 3…',
-          ready: (st) => st.places.length > 0,
-          build: (st, api) => {
-            const list = h('div.posplaces');
-            const warning = h('div');
-            const box = posText({
-              value: '',
-              placeholder: 'Ej. Casa 1',
-              onChange: () => mount(warning),
-              onkeydown: (event) => {
-                if (event.key !== 'Enter') return;
-                event.preventDefault();
-                add();
-              },
-            });
-
-            function add() {
-              const label = box.value.trim().replace(/\s+/g, ' ');
-              if (!label) return;
-              if (st.places.some((one) => sameName(one, label))) {
-                mount(warning, posNote(`${label} ya está en la lista.`, 'bad'));
-                return;
-              }
-              st.places.push(label);
-              box.value = '';
-              box.focus();
-              paint();
-              api.revalidate();
-            }
-
-            function paint() {
-              mount(list, st.places.map((label, i) => h('div.posplace',
-                h('span.posplace__n', String(i + 1)),
-                h('span.posplace__name', label),
-                h('button.posplace__x', {
-                  type: 'button',
-                  'aria-label': `Quitar ${label}`,
-                  onclick: () => {
-                    st.places.splice(i, 1);
-                    paint();
-                    api.revalidate();
-                  },
-                }, icon('x')))));
-            }
-            paint();
-
-            return h('div',
-              h('div.posadd',
-                h('div.grow', posField('Ubicación', box)),
-                h('button.posbtn.posbtn--add', { type: 'button', onclick: add },
-                  icon('plus'), 'Agregar')),
-              warning,
-              list);
-          },
-        },
+        }),
         {
           id: 'confirm',
           title: 'Revisa antes de darla de alta',
@@ -1238,6 +1193,143 @@ export function renderQuick() {
       done: (s) => ({
         what: 'Farma dada de alta',
         who: `${s.name.trim()} · ${plural(s.places.length, 'ubicación', 'ubicaciones')}`,
+      }),
+    });
+  }
+
+  /**
+   * "¿Qué ubicaciones?" — written one at a time, Agregar or Enter, into a list
+   * that can be corrected before anything is saved. For a new farm, and for
+   * new houses at one that exists; `taken` names the ones it already has.
+   */
+  function placesStep({ title, hint, taken = () => [] }) {
+    const sameName = (a, b) => String(a || '').trim().toLowerCase()
+      === String(b || '').trim().toLowerCase();
+    return {
+      id: 'places',
+      title,
+      hint,
+      ready: (st) => st.places.length > 0,
+      build: (st, api) => {
+        const list = h('div.posplaces');
+        const warning = h('div');
+        const box = posText({
+          value: '',
+          placeholder: 'Ej. Casa 1',
+          onChange: () => mount(warning),
+          onkeydown: (event) => {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            add();
+          },
+        });
+
+        function add() {
+          const label = box.value.trim().replace(/\s+/g, ' ');
+          if (!label) return;
+          if (st.places.some((one) => sameName(one, label))) {
+            mount(warning, posNote(`${label} ya está en la lista.`, 'bad'));
+            return;
+          }
+          if (taken(st).some((one) => sameName(one, label))) {
+            mount(warning, posNote(`Esa farma ya tiene ${label}.`, 'bad'));
+            return;
+          }
+          st.places.push(label);
+          box.value = '';
+          box.focus();
+          paint();
+          api.revalidate();
+        }
+
+        function paint() {
+          mount(list, st.places.map((label, i) => h('div.posplace',
+            h('span.posplace__n', String(i + 1)),
+            h('span.posplace__name', label),
+            h('button.posplace__x', {
+              type: 'button',
+              'aria-label': `Quitar ${label}`,
+              onclick: () => {
+                st.places.splice(i, 1);
+                paint();
+                api.revalidate();
+              },
+            }, icon('x')))));
+        }
+        paint();
+
+        return h('div',
+          h('div.posadd',
+            h('div.grow', posField('Ubicación', box)),
+            h('button.posbtn.posbtn--add', { type: 'button', onclick: add },
+              icon('plus'), 'Agregar')),
+          warning,
+          list);
+      },
+    };
+  }
+
+  /* --- Nueva ubicación -------------------------------------------------- */
+
+  /**
+   * New houses at a farm that already exists: which farm, their names, and a
+   * look before saving. They are in no libreta yet — Organizar libreta, or
+   * Empaque → Configurar, puts them in one — and somebody can be registered
+   * there at once.
+   */
+  function flowNewPlace() {
+    const farmOf = (st) => farmById(st.farmId);
+    start({
+      title: 'Nueva ubicación',
+      state: { farmId: '', places: [] },
+      subject: (st) => (farmOf(st) ? { name: farmOf(st).name, where: 'Farma' } : null),
+      steps: () => [
+        {
+          id: 'farm',
+          title: '¿En qué farma?',
+          ready: (st) => !!farmOf(st),
+          build: (st, api) => posPick({
+            columns: 3,
+            value: st.farmId,
+            onPick: (v) => {
+              if (v !== st.farmId) st.places = [];
+              st.farmId = v;
+              api.revalidate();
+            },
+            advance: api.next,
+            options: [...store.farms]
+              .sort((a, b) => String(a.name).localeCompare(String(b.name), 'es'))
+              .map((one) => ({
+                value: one.id,
+                label: one.name,
+                sub: plural((one.locations || []).length, 'ubicación', 'ubicaciones'),
+              })),
+          }),
+        },
+        placesStep({
+          title: '¿Cómo se llama la ubicación nueva?',
+          hint: 'Escribe una y toca Agregar. Si son varias, una por una.',
+          taken: (st) => (farmOf(st)?.locations || []).map((one) => one.name),
+        }),
+        {
+          id: 'confirm',
+          title: 'Revisa antes de agregarla',
+          last: true,
+          next: 'Agregar',
+          build: (st) => h('div',
+            posSummary([
+              ['Farma', farmOf(st)?.name || ''],
+              ['Ya tiene', (farmOf(st)?.locations || []).map((one) => one.name).join(' · ') || 'Ninguna'],
+              [st.places.length > 1 ? 'Nuevas' : 'Nueva', st.places.join(' · '), { total: true }],
+            ]),
+            posNote('Todavía no está en ninguna libreta: se mete en la suya desde Organizar '
+              + 'libreta o Empaque → Configurar. Ya se puede dar de alta gente ahí.', 'ok')),
+        },
+      ],
+      commit: (s) => addLocations(farmOf(s), s.places),
+      done: (s) => ({
+        what: s.places.length > 1 ? 'Ubicaciones agregadas' : 'Ubicación agregada',
+        who: `${farmOf(s)?.name || ''} · ${s.places.join(' · ')}`,
       }),
     });
   }

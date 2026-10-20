@@ -181,6 +181,26 @@ export async function addLocation(farm, name) {
   await saved(updateDoc(doc(db, 'farms', farm.id), { locations, updatedAt: serverTimestamp() }));
 }
 
+/**
+ * Several new locations at once — Nueva ubicación, at the counter.
+ *
+ * One write with all of them, against the farm as it is now: adding them one
+ * by one would read the farm before each and keep only the last.
+ */
+export async function addLocations(farm, names) {
+  const have = [...(farm?.locations || [])];
+  const labels = (names || []).map((name) => String(name || '').trim().replace(/\s+/g, ' ')).filter(Boolean);
+  if (!labels.length) throw new Error('Escribe el nombre de la ubicación.');
+  for (const label of labels) {
+    if (have.some((loc) => sameLabel(loc.name, label))) {
+      throw new Error(`${farm.name} ya tiene una ubicación que se llama ${label}.`);
+    }
+    have.push({ id: newLocationId(), name: label });
+  }
+  await saved(updateDoc(doc(db, 'farms', farm.id), { locations: have, updatedAt: serverTimestamp() }));
+  return have.slice(-labels.length);
+}
+
 /** Renames a location and carries the new label to everyone standing in it. */
 export async function renameLocation(farm, locationId, name) {
   const label = String(name || '').trim();

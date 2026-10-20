@@ -598,6 +598,17 @@ todas— y revisar.
   —también se puede desde *Empaque → Configurar*—. Mientras no estén en
   ninguna, el aviso de ubicaciones sin libreta lo dice.
 
+#### Nueva ubicación, desde el mostrador
+
+En la *Acción rápida* del panel, **Nueva ubicación** le agrega casas a una
+farma que ya existe: se escoge la farma, se escriben las ubicaciones —una por
+una, *Agregar* o Enter— y se revisa antes de guardar, con las que ya tenía a
+la vista. No deja repetir una que la farma ya tiene, aunque cambien las
+mayúsculas. Se guardan todas de una vez y en ese momento ya salen en *Nuevo
+cliente*. Como las de una farma nueva, todavía no están en ninguna libreta:
+salen *Nuevas* en *Organizar libreta*. *Nueva farma* también está ahí, la
+misma de la cocina.
+
 #### Organizar libreta
 
 Es el mismo *Orden de empaque* del panel, desde el menú de la cocina. Abre la
@@ -802,8 +813,9 @@ del panel, la pantalla de empaque y el tablero de hoy — y, como siempre,
 **nunca sale en la etiqueta**.
 
 Cobrar, la caja y lo cobrado hoy no están: son del mostrador. La *Acción
-rápida* del panel tiene también *No puede comer*, junto a *Cambiar días* y
-*Cambiar periodo*.
+rápida* del panel tiene también *No puede comer*, *Nueva farma* y *Nueva
+ubicación*, en la fila de *Cambiar días* y *Cambiar periodo*: cinco por fila,
+para que todo, con lo cobrado hoy, quepa en una pantalla de 768 de alto.
 
 **Tablero de hoy** — el botón al lado del saludo. Es lo que dicen los dos
 pizarrones de la pared, MEDIAS y COMPLETAS, pero contado por la computadora,
