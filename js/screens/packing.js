@@ -78,11 +78,20 @@ export function renderPacking() {
   function bodyFor() {
     // Only what packing reads can stop it: the farms and the people. A chat or
     // a bill that failed to load is the office's problem, not the morning's.
+    // And not even those, while this computer already has them saved: with no
+    // internet, or the day's database allowance spent, it packs from here.
     const broken = failure || store.errors.farms || store.errors.clients || null;
-    if (broken) return dataErrorCard(broken, { onRetry: () => startStore() });
+    const usable = !!setup && !!packers?.length && store.farms.length > 0 && store.clients.length > 0;
+    if (broken && !usable) return dataErrorCard(broken, { onRetry: () => startStore() });
     if (!setup || !packers || !isReady()) return skeletonRows(4);
     if (!packers.length) return noPackers();
-    return packer ? pickLine() : askPin();
+    if (!packer) return askPin();
+    return broken
+      ? h('div.stack.stack-4',
+          alert('Sin conexión con la base de datos. Se empaca con la lista guardada en esta '
+            + 'computadora; alguien agregado hace un momento podría no salir.', 'warn'),
+          pickLine())
+      : pickLine();
   }
 
   /* --- Nobody has been set up yet ---------------------------------------- */

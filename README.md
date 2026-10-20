@@ -1194,6 +1194,51 @@ ni borrar, y que la primera cuenta se pueda reclamar exactamente una vez. Ver
 
 ---
 
+## Para que nunca se detenga
+
+**Sin internet, o con la base de datos sin contestar**, la cocina sigue:
+
+- **Cobrar** entra siempre: el pago se guarda entero, con su recibo y folio,
+  marcado *Por revisar*, y se sube solo al volver la conexión. Luego, con
+  internet, **Repartir en sus quincenas** lo pone donde va.
+- **Pausar, reactivar, cambiar comidas o días, dar de alta** y guardar la ficha
+  terminan en segundos: el cambio queda en esa computadora y se sube solo.
+  Dar de alta *con correo* sí pide internet, para no quitarle la app a otra
+  persona con el mismo correo; sin correo se puede, y el correo se agrega luego.
+- **Empacar** sigue con la lista que ya tiene la computadora, con un aviso
+  amarillo arriba. *Terminar* regresa al menú en seguida.
+- Lo que sí espera a la conexión: cancelar un pago, corregir un saldo y
+  repartir un pago por revisar. Y una computadora que abre el sistema por
+  primera vez necesita internet para traer la lista.
+
+**No cerrar el navegador a la fuerza ni borrar sus datos** mientras haya algo
+sin subir: lo guardado sin conexión vive en ese navegador hasta que sube.
+
+**El límite diario de Firebase.** En el plan gratuito (*Spark*), Firestore da
+50,000 lecturas y 20,000 escrituras al día; al pasarse, **deja de contestar
+hasta el día siguiente**, y un sábado de cobro con todos abriendo su app se
+puede acercar. Para que eso no pase nunca:
+
+1. Consola de Firebase → engrane → **Uso y facturación** → cambiar al plan
+   **Blaze**. Sigue incluyendo lo gratuito de cada día; sólo se paga lo que
+   pase de ahí, centavos a este tamaño.
+2. En Google Cloud → **Facturación → Presupuestos y alertas**, un presupuesto
+   (por ejemplo $10 al mes) con aviso por correo.
+3. Con Blaze, en Firestore → **Recuperación ante desastres**: activar la
+   recuperación de un momento dado (7 días) y **respaldos diarios**. Así un
+   error de alguien se puede deshacer.
+4. En Firestore → **Uso** se ve cuántas lecturas se van por día.
+
+**Netlify.** El sitio no tiene compilación, así que gasta muy poco. En los
+planes nuevos por créditos cada publicación a producción cuenta: conviene
+juntar cambios y revisar el uso en Netlify → *Billing*.
+
+**Lo que no se puede perder.** Un recibo no se edita ni se borra desde el panel
+ni desde la app (lo impiden las reglas; sólo el dueño, desde la consola de
+Firebase, podría). Un rancho con gente
+no se borra, una ubicación con gente tampoco, y **un cliente con facturas o
+pagos no se borra: se desactiva**, que guarda todo su historial.
+
 ## Operación diaria
 
 1. **Consultar la libreta** — quién está en cada rancho y en cada ubicación, qué

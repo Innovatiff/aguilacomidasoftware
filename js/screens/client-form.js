@@ -730,8 +730,9 @@ export async function renderClientForm(context) {
         onClick: async () => {
           if (!await confirm({
             title: `Eliminar ${model.name}`,
-            message: 'Se borra la ficha y el acceso de su correo a la app. Las entregas y facturas '
-              + 'ya registradas no se eliminan. Esta acción no se puede deshacer.',
+            message: 'Se borra la ficha y el acceso de su correo a la app. Sólo se puede con quien '
+              + 'no tiene facturas ni pagos: a quien ya tiene historial se le desactiva. Esta acción '
+              + 'no se puede deshacer.',
             confirmLabel: 'Eliminar definitivamente', tone: 'danger', icon: 'alert',
           })) return;
           try {

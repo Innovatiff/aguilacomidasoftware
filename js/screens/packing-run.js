@@ -71,7 +71,7 @@
 import { h } from '../lib/dom.js';
 import { icon } from '../lib/icons.js';
 import { screen, lifetime } from '../ui/shell.js';
-import { button, emptyState, skeletonRows, dataErrorCard } from '../ui/kit.js';
+import { button, emptyState, skeletonRows, dataErrorCard, alert } from '../ui/kit.js';
 import { toastBad } from '../ui/overlay.js';
 import { go } from '../lib/router.js';
 import { store, subscribe, activeClients, isReady, startStore } from '../data/store.js';
@@ -393,8 +393,11 @@ export function renderPackingRun(context) {
   function bodyFor() {
     // Only what packing reads can stop it: the farms and the people. A chat or
     // a bill that failed to load is the office's problem, not the morning's.
+    // And not even those, while this computer already has them: with no
+    // internet, or the day's database allowance spent, the list saved here is
+    // enough to pack from.
     const broken = failure || store.errors.farms || store.errors.clients || null;
-    if (broken) return dataErrorCard(broken, { onRetry: () => startStore() });
+    if (broken && !canPackFromHere()) return dataErrorCard(broken, { onRetry: () => startStore() });
     if (!setup || !isReady()) return skeletonRows(4);
 
     if (!lineOf(setup.lines, lineId)) {
@@ -417,6 +420,7 @@ export function renderPackingRun(context) {
 
     const slide = plan.slides[at];
     return h('div.pkstage__wrap',
+      broken ? offlineNote() : null,
       progress(),
       missedBanner(),
       h('div.pkstage__slide',
@@ -442,6 +446,16 @@ export function renderPackingRun(context) {
               plan.slides[at]?.kind === 'done' ? null : specialButton(),
               printSwitch())
           : null));
+  }
+
+  /** Whether this computer already holds what packing needs. */
+  function canPackFromHere() {
+    return !!setup && store.farms.length > 0 && store.clients.length > 0;
+  }
+
+  function offlineNote() {
+    return alert('Sin conexión con la base de datos. Se empaca con la lista guardada en esta '
+      + 'computadora; alguien agregado hace un momento podría no salir.', 'warn');
   }
 
   /** Somebody behind the place it is at who was never packed — see `missed`. */

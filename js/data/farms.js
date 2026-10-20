@@ -20,7 +20,7 @@
 
 import {
   db, doc, collection, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot,
-  query, where, orderBy, serverTimestamp, writeBatch, docData, listData,
+  query, where, orderBy, serverTimestamp, writeBatch, docData, listData, saved,
 } from '../firebase.js';
 import { today } from '../lib/dates.js';
 import {
@@ -116,7 +116,7 @@ export async function createFarm(data, author) {
   if (!name) throw new Error('Escribe el nombre del rancho.');
 
   const ref = doc(farmsRef());
-  await setDoc(ref, {
+  await saved(setDoc(ref, {
     ...emptyFarm(),
     ...sanitize(data),
     name,
@@ -124,7 +124,7 @@ export async function createFarm(data, author) {
     updatedAt: serverTimestamp(),
     createdBy: author?.uid || null,
     createdByName: author?.name || '',
-  });
+  }));
 
   return { id: ref.id };
 }
@@ -138,7 +138,7 @@ export async function createFarm(data, author) {
 export async function updateFarm(farmId, patch, previous) {
   const clean = sanitize(patch);
 
-  await updateDoc(doc(db, 'farms', farmId), { ...clean, updatedAt: serverTimestamp() });
+  await saved(updateDoc(doc(db, 'farms', farmId), { ...clean, updatedAt: serverTimestamp() }));
 
   const nameChanged = clean.name !== undefined && clean.name !== previous?.name;
   const termsChanged = TERM_FIELDS.some(
@@ -151,7 +151,7 @@ export async function updateFarm(farmId, patch, previous) {
 }
 
 export async function setFarmStatus(farmId, status) {
-  await updateDoc(doc(db, 'farms', farmId), { status, updatedAt: serverTimestamp() });
+  await saved(updateDoc(doc(db, 'farms', farmId), { status, updatedAt: serverTimestamp() }));
 }
 
 /**
@@ -178,7 +178,7 @@ export async function addLocation(farm, name) {
   }
 
   const locations = [...(farm.locations || []), { id: newLocationId(), name: label }];
-  await updateDoc(doc(db, 'farms', farm.id), { locations, updatedAt: serverTimestamp() });
+  await saved(updateDoc(doc(db, 'farms', farm.id), { locations, updatedAt: serverTimestamp() }));
 }
 
 /** Renames a location and carries the new label to everyone standing in it. */
@@ -192,7 +192,7 @@ export async function renameLocation(farm, locationId, name) {
   const locations = (farm.locations || []).map(
     (loc) => (loc.id === locationId ? { ...loc, name: label } : loc),
   );
-  await updateDoc(doc(db, 'farms', farm.id), { locations, updatedAt: serverTimestamp() });
+  await saved(updateDoc(doc(db, 'farms', farm.id), { locations, updatedAt: serverTimestamp() }));
 
   await eachClient(
     query(clientsRef(), where('farmId', '==', farm.id), where('locationId', '==', locationId)),
@@ -215,7 +215,7 @@ export async function removeLocation(farm, locationId) {
   }
 
   const locations = (farm.locations || []).filter((loc) => loc.id !== locationId);
-  await updateDoc(doc(db, 'farms', farm.id), { locations, updatedAt: serverTimestamp() });
+  await saved(updateDoc(doc(db, 'farms', farm.id), { locations, updatedAt: serverTimestamp() }));
 }
 
 export const findLocation = (farm, locationId) =>
@@ -248,13 +248,13 @@ async function eachClient(clientQuery, write) {
     pending += 1;
     total += 1;
     if (pending >= BATCH_LIMIT) {
-      await batch.commit();
+      await saved(batch.commit());
       batch = writeBatch(db);
       pending = 0;
     }
   }
 
-  if (pending) await batch.commit();
+  if (pending) await saved(batch.commit());
   return total;
 }
 

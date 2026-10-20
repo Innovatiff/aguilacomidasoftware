@@ -25,9 +25,9 @@
  */
 
 import {
-  db, doc, collection, getDoc, updateDoc,
-  onSnapshot, query, orderBy, serverTimestamp,
-  writeBatch, docData, listData, toDate,
+  db, doc, collection, getDoc, getDocs, updateDoc,
+  onSnapshot, query, where, orderBy, limit, serverTimestamp,
+  writeBatch, docData, listData, toDate, saved,
 } from '../firebase.js';
 import { today, dayKey, daysBetween } from '../lib/dates.js';
 import {
@@ -137,10 +137,10 @@ export function daysLeft(client, day = today()) {
 
 /** Sets — or clears — the last day this person is served. */
 export async function setEndsOn(clientId, endsOn) {
-  await updateDoc(doc(db, 'clients', clientId), {
+  await saved(updateDoc(doc(db, 'clients', clientId), {
     endsOn: endsOn || '',
     updatedAt: serverTimestamp(),
-  });
+  }));
 }
 
 /**
@@ -199,7 +199,17 @@ export const getClient = async (clientId) => docData(await getDoc(doc(db, 'clien
 export async function clientForEmail(email) {
   const key = normalizeEmail(email);
   if (!isValidEmail(key)) return null;
-  const snap = await getDoc(doc(db, 'clientEmails', key));
+  // Without internet the address cannot be checked, and writing it blind could
+  // take somebody else's app away from them: better to say so.
+  let snap = null;
+  try {
+    snap = await Promise.race([getDoc(doc(db, 'clientEmails', key)),
+      new Promise((resolve) => { setTimeout(resolve, 6000); })]);
+  } catch { snap = null; }
+  if (!snap) {
+    throw new Error('Sin internet no se puede revisar el correo. Guárdalo sin correo y '
+      + 'agrégalo cuando vuelva la conexión.');
+  }
   return snap.exists() ? { email: key, ...snap.data() } : null;
 }
 
@@ -246,7 +256,7 @@ export async function createClient(data, farm, author) {
     });
   }
 
-  await batch.commit();
+  await saved(batch.commit());
   return { id: ref.id, email };
 }
 
@@ -297,7 +307,7 @@ export async function updateClient(clientId, patch, previousEmail, farm) {
     }
   }
 
-  await batch.commit();
+  await saved(batch.commit());
 }
 
 /**
@@ -313,11 +323,11 @@ export async function moveClient(clientId, farm, locationId, fromFarmId) {
   const farmTerms = farm?.id && farm.id !== fromFarmId
     ? Object.fromEntries(TERM_FIELDS.map((field) => [field, terms[field]]))
     : {};
-  await updateDoc(doc(db, 'clients', clientId), {
+  await saved(updateDoc(doc(db, 'clients', clientId), {
     ...placed,
     ...farmTerms,
     updatedAt: serverTimestamp(),
-  });
+  }));
 }
 
 /**
@@ -328,14 +338,27 @@ export async function moveClient(clientId, farm, locationId, fromFarmId) {
  * date comes from paper rather than from a receipt this software issued.
  */
 export async function setPaidThrough(clientId, paidThrough) {
-  await updateDoc(doc(db, 'clients', clientId), { paidThrough, updatedAt: serverTimestamp() });
+  await saved(updateDoc(doc(db, 'clients', clientId), { paidThrough, updatedAt: serverTimestamp() }));
 }
 
 export async function setClientStatus(clientId, status) {
-  await updateDoc(doc(db, 'clients', clientId), { status, updatedAt: serverTimestamp() });
+  await saved(updateDoc(doc(db, 'clients', clientId), { status, updatedAt: serverTimestamp() }));
 }
 
 export async function deleteClient(clientId, email) {
+  // Somebody with a bill or a payment has a history, and the file is what
+  // ties it together: who they are, where they eat, what they have paid up to.
+  // Theirs is set to inactive, which keeps all of it; only a file entered by
+  // mistake, with nothing on it yet, is deleted.
+  const [bills, receipts] = await Promise.all([
+    getDocs(query(collection(db, 'invoices'), where('clientId', '==', clientId), limit(1))),
+    getDocs(query(collection(db, 'receipts'), where('clientId', '==', clientId), limit(1))),
+  ]);
+  if (!bills.empty || !receipts.empty) {
+    throw new Error('Tiene facturas o pagos registrados. Para no perder su historial, '
+      + 'desactívalo en lugar de borrarlo.');
+  }
+
   const batch = writeBatch(db);
   batch.delete(doc(db, 'clients', clientId));
   const key = normalizeEmail(email);
@@ -442,11 +465,11 @@ export async function copyTagsToPreferences(clients) {
  */
 export async function setDayNote(clientId, text, day = today()) {
   const clean = String(text || '').trim();
-  await updateDoc(doc(db, 'clients', clientId), {
+  await saved(updateDoc(doc(db, 'clients', clientId), {
     notaDelDia: clean,
     notaDelDiaOn: clean ? day : '',
     updatedAt: serverTimestamp(),
-  });
+  }));
 }
 
 /**

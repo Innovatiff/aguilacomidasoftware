@@ -88,6 +88,20 @@ export function toDate(value) {
 }
 
 /** Snapshot -> plain object with its id, timestamps left as-is. */
+/**
+ * Waits for a write to reach the server, but not forever.
+ *
+ * With no internet — or with the day's database allowance spent — Firestore
+ * keeps the change on this computer and sends it as soon as it can, and its
+ * promise only settles then. A screen awaiting it would spin with the change
+ * already made. So it waits a few seconds: a refusal comes back within them;
+ * after that the change counts as made, and it goes up by itself.
+ */
+export async function saved(write, ms = 4000) {
+  write.catch(() => {});
+  await Promise.race([write, new Promise((resolve) => { setTimeout(resolve, ms); })]);
+}
+
 export const docData = (snap) => (snap.exists() ? { id: snap.id, ...snap.data() } : null);
 export const listData = (snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 

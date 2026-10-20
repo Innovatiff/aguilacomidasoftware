@@ -442,7 +442,7 @@ export async function recordPastPayment({ client, amount, method, date, note }, 
     at: serverTimestamp(),
   };
 
-  await setDoc(ref, receipt);
+  await landed(setDoc(ref, receipt));
   return { id: ref.id, ...receipt, at: new Date() };
 }
 
