@@ -399,7 +399,8 @@ export function renderClients(context) {
   async function reviewPending() {
     const { rows, total, unpriced, skipped } = pendingBills() || {};
     if (!rows) return;
-    const left = (skipped?.paid || 0) + (skipped?.notYet || 0) + (skipped?.ended || 0);
+    const left = (skipped?.paid || 0) + (skipped?.notYet || 0) + (skipped?.ended || 0)
+      + (skipped?.off || 0);
 
     const ok = await sheet({
       title: 'Periodos sin facturar',
@@ -430,6 +431,10 @@ export function renderClients(context) {
               skipped.ended
                 ? h('p.t-sm.c-soft', `${plural(skipped.ended, 'periodo posterior', 'periodos posteriores')} `
                   + 'al último día de personas que ya terminaron.')
+                : null,
+              skipped.off
+                ? h('p.t-sm.c-soft', `${plural(skipped.off, 'periodo', 'periodos')} que empezaron `
+                  + 'con esas personas en pausa.')
                 : null)
           : null,
 

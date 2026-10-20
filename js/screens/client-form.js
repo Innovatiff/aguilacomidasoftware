@@ -712,17 +712,21 @@ export async function renderClientForm(context) {
                 message: 'Deja de aparecer en las rutas nuevas. Sus facturas y su historial se conservan.',
                 confirmLabel: 'Poner en pausa', icon: 'pause',
               })) return;
-              await setClientStatus(clientId, 'paused');
-              toastOk('Cliente en pausa');
-              go(`/clients/${clientId}`);
+              try {
+                await setClientStatus(clientId, 'paused');
+                toastOk('Cliente en pausa');
+                go(`/clients/${clientId}`);
+              } catch (error) { toastBad(errorText(error)); }
             },
           })
         : button('Reactivar cliente', {
             variant: 'ok', block: true, icon: 'play',
             onClick: async () => {
-              await setClientStatus(clientId, 'active');
-              toastOk('Cliente reactivado');
-              go(`/clients/${clientId}`);
+              try {
+                await setClientStatus(clientId, 'active');
+                toastOk('Cliente reactivado');
+                go(`/clients/${clientId}`);
+              } catch (error) { toastBad(errorText(error)); }
             },
           }),
       button('Eliminar cliente', {

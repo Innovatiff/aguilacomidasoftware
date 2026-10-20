@@ -240,7 +240,9 @@ Cada renglón trae sus propias acciones, sin entrar a la ficha:
   **poner en pausa**, **marcar inactivo** o **reactivar**.
 
 Poner en pausa no pregunta nada — es reversible y pasa seguido, alguien se va
-tres semanas. Marcar inactivo sí pregunta: termina la relación, aunque lo que
+tres semanas. **Se puede pausar a cualquiera, deba o no**: lo que debe se queda
+en su cuenta para cuando venga a pagar, y desde ese momento sale de la libreta
+de empaque. Marcar inactivo sí pregunta: termina la relación, aunque lo que
 deba sigue registrado y su historial se conserva.
 
 **Dos cosas pasan solas.** La pantalla no espera a que alguien se acuerde:
@@ -952,13 +954,23 @@ no a las 19:00 UTC. Guardar `2026-08-19` elimina los errores de zona horaria
 entre el teléfono de la cocina y el del rancho.
 
 **Los ids son deterministas.** Una factura es `clientId_inicioDePeriodo`, así que
-volver a facturar un periodo actualiza la factura en vez de duplicarla — y por
-eso emitir dos veces nunca cobra dos veces.
+volver a facturar un periodo deja la factura que ya existe —con sus pagos y
+correcciones— en vez de duplicarla, y por eso emitir dos veces nunca cobra dos
+veces.
 
 **Se factura a todos los clientes activos.** El plan es una suscripción: quien
 está en el plan debe la quincena. Quien no deba cobrarse se pone **en pausa**,
 que es un toque en su renglón. Antes se facturaba sólo a quien tenía entregas
 registradas; sin ruta esa compuerta no existe, y la pausa la sustituye.
+
+**Cada pausa queda anotada con su día**, y lo que cuenta es cómo estaba la
+persona **el primer día de cada quincena**, igual que cuando empieza o
+termina: la quincena que empezó comiendo se le factura aunque la pausen
+después; la que empezó con ella en pausa, no, aunque luego la reactiven. Así,
+quien se fue tres semanas y regresa no paga las quincenas que no comió, y a
+quien pausan justo después de terminar su quincena no se le olvida cobrar esa.
+Quien ya estaba en pausa antes de que existiera esta anotación se trata como
+siempre: no se le factura nada mientras siga en pausa.
 
 **El cobro es aritmética, no calendario.** Cada rancho tiene una fecha ancla y
 el periodo *i* va de `ancla + 14i` a `ancla + 14i + 13`. Cualquier fecha cae en
@@ -1214,20 +1226,21 @@ ni borrar, y que la primera cuenta se pueda reclamar exactamente una vez. Ver
 **No cerrar el navegador a la fuerza ni borrar sus datos** mientras haya algo
 sin subir: lo guardado sin conexión vive en ese navegador hasta que sube.
 
-**El límite diario de Firebase.** En el plan gratuito (*Spark*), Firestore da
-50,000 lecturas y 20,000 escrituras al día; al pasarse, **deja de contestar
-hasta el día siguiente**, y un sábado de cobro con todos abriendo su app se
-puede acercar. Para que eso no pase nunca:
+**El límite diario de Firebase.** El proyecto está en el plan **Blaze** (pago
+por uso): no hay un límite diario que lo detenga. Cada día sigue incluyendo
+50,000 lecturas y 20,000 escrituras sin costo, y sólo se paga lo que pase de
+ahí, centavos a este tamaño. (En el plan gratuito, *Spark*, al pasarse
+Firestore deja de contestar hasta el día siguiente: no hay que volver a él.)
 
-1. Consola de Firebase → engrane → **Uso y facturación** → cambiar al plan
-   **Blaze**. Sigue incluyendo lo gratuito de cada día; sólo se paga lo que
-   pase de ahí, centavos a este tamaño.
-2. En Google Cloud → **Facturación → Presupuestos y alertas**, un presupuesto
-   (por ejemplo $10 al mes) con aviso por correo.
-3. Con Blaze, en Firestore → **Recuperación ante desastres**: activar la
-   recuperación de un momento dado (7 días) y **respaldos diarios**. Así un
-   error de alguien se puede deshacer.
-4. En Firestore → **Uso** se ve cuántas lecturas se van por día.
+1. En Google Cloud → **Facturación → Presupuestos y alertas**, un presupuesto
+   (por ejemplo $10 al mes) con aviso por correo. No detiene nada; avisa si
+   algo se dispara.
+2. En Firestore → **Recuperación ante desastres**: activar la recuperación de
+   un momento dado (7 días) y **respaldos diarios**. Así un error de alguien se
+   puede deshacer.
+3. En Firestore → **Uso** se ve cuántas lecturas se van por día.
+4. Que la tarjeta de la cuenta de facturación esté vigente: si Google no puede
+   cobrar, con el tiempo suspende el proyecto.
 
 **Netlify.** El sitio no tiene compilación, así que gasta muy poco. En los
 planes nuevos por créditos cada publicación a producción cuenta: conviene

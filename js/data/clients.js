@@ -27,7 +27,7 @@
 import {
   db, doc, collection, getDoc, getDocs, updateDoc,
   onSnapshot, query, where, orderBy, limit, serverTimestamp,
-  writeBatch, docData, listData, toDate, saved,
+  writeBatch, arrayUnion, docData, listData, toDate, saved,
 } from '../firebase.js';
 import { today, dayKey, daysBetween } from '../lib/dates.js';
 import {
@@ -128,6 +128,41 @@ export function servingStatus(client, day = today()) {
 }
 
 export const isServing = (client, day = today()) => servingStatus(client, day) === 'active';
+
+/**
+ * Whether somebody was on the plan on a given day, by their record of pauses.
+ *
+ * `status` only says what they are today. Billing asks about days already
+ * gone — was this fortnight theirs? — and the answer for somebody who was
+ * paused for three weeks and came back is not today's "active". So every
+ * change of status is also written down, with its day (`statusLog`), and this
+ * reads it: the last change on or before `day` decides.
+ *
+ * Before the first change written down, they were the opposite of what that
+ * change made them. Somebody off today with nothing written down — set before
+ * the record existed — counts as off on every day, which is how they were
+ * treated until now.
+ */
+export function onPlanOn(client, day) {
+  const log = (Array.isArray(client?.statusLog) ? client.statusLog : [])
+    .filter((entry) => entry?.on && entry?.status)
+    // Two changes on one day — paused by mistake and put back — in the order
+    // they were made.
+    .sort((a, b) => String(a.on).localeCompare(String(b.on)) || (Number(a.at) || 0) - (Number(b.at) || 0));
+  if (!log.length) return !client?.status || client.status === 'active';
+  let status = log[0].status === 'active' ? 'paused' : 'active';
+  for (const entry of log) {
+    if (String(entry.on) > String(day)) break;
+    status = entry.status;
+  }
+  return status === 'active';
+}
+
+/**
+ * The record of a change of status, made today. See `onPlanOn`. The moment is
+ * what keeps two identical changes on one day from being taken for one.
+ */
+const statusEntry = (status, day = today()) => ({ on: day, status, at: Date.now() });
 
 /** Days left before their service ends, or null when there is no end date. */
 export function daysLeft(client, day = today()) {
@@ -291,6 +326,7 @@ export async function updateClient(clientId, patch, previousEmail, farm) {
   const batch = writeBatch(db);
   batch.update(doc(db, 'clients', clientId), {
     ...sanitize(patch),
+    ...(patch.status !== undefined ? { statusLog: arrayUnion(statusEntry(patch.status)) } : {}),
     ...placed,
     ...(patchEmail ? { email } : {}),
     updatedAt: serverTimestamp(),
@@ -342,7 +378,12 @@ export async function setPaidThrough(clientId, paidThrough) {
 }
 
 export async function setClientStatus(clientId, status) {
-  await saved(updateDoc(doc(db, 'clients', clientId), { status, updatedAt: serverTimestamp() }));
+  await saved(updateDoc(doc(db, 'clients', clientId), {
+    status,
+    // Appended without reading the client first, so it works with no internet.
+    statusLog: arrayUnion(statusEntry(status)),
+    updatedAt: serverTimestamp(),
+  }));
 }
 
 export async function deleteClient(clientId, email) {
@@ -499,7 +540,7 @@ export function tagsInUse(clients, field = 'tags') {
 const NUMERIC = new Set(['mealsPerDay', 'graceDays', 'payEvery']);
 
 /** Fields a worker never sets for themselves — they belong to the farm. */
-const NOT_WRITABLE = new Set(['id', 'farmId', 'farmName', 'locationId', 'locationName', 'email']);
+const NOT_WRITABLE = new Set(['id', 'farmId', 'farmName', 'locationId', 'locationName', 'email', 'statusLog']);
 
 /** Coerces form strings into the types Firestore should hold. */
 function sanitize(data) {

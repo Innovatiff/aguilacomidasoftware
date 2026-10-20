@@ -29,7 +29,7 @@ import {
   today, addDays, daysBetween, formatRange, formatDay, weekdayName,
 } from '../lib/dates.js';
 import { money } from '../lib/format.js';
-import { servingSince } from './clients.js';
+import { servingSince, onPlanOn } from './clients.js';
 
 /**
  * How many periods back a payment looks for food served and never billed —
@@ -515,12 +515,12 @@ export function payableRows(payer, bills, pricing, { day = today(), setCycle = f
     });
   }
 
-  // Fortnights nobody billed are only worked out for somebody being served. A
-  // paused or retired worker is not billed by the cycle, so a fortnight with
-  // no bill is one they did not eat: what they pay goes to the bills they do
+  // Fortnights nobody billed are only worked out for one the person was on the
+  // plan for when it began — the cycle's rule (`onPlanOn`). One that began
+  // with them paused they did not eat: what they pay goes to the bills they do
   // have, and the rest waits on the receipt.
   const charge = periodCharge(payer, pricing);
-  if (beingServed(payer) && charge.priced && charge.amount > 0) {
+  if (charge.priced && charge.amount > 0) {
     const known = new Set(bills.map((bill) => bill.id));
     const since = servingSince(payer);
     const current = periodOf(payer, day);
@@ -535,6 +535,7 @@ export function payableRows(payer, bills, pricing, { day = today(), setCycle = f
       latest = false;
       const id = invoiceId(payer.id, period.start);
       if (known.has(id)) continue;
+      if (!onPlanOn(payer, period.start)) continue;
       if (isCovered(period, payer.paidThrough)) continue;
       if (payer.endsOn && period.start > payer.endsOn) continue;
       if (since && period.start < since

@@ -24,7 +24,7 @@
 
 import { getDocs, query, where, collection, db, listData } from '../firebase.js';
 import { issueInvoice } from './invoices.js';
-import { servingSince } from './clients.js';
+import { servingSince, onPlanOn } from './clients.js';
 import {
   periodOf, periodOfIndex, invoiceId, isCovered, isPayable, paidThroughOn,
 } from '../lib/billing.js';
@@ -72,7 +72,13 @@ export async function pendingBilling(clients, pricing, day = today()) {
    * date down was for. What their last day does is close the *periods* after
    * it, which is the check further down.
    */
-  const billable = clients.filter((client) => client.status === 'active');
+  //
+  // And somebody paused or gone now is still asked about the fortnights before
+  // that: one they ate and that nobody billed before they were paused is still
+  // theirs. Which fortnights those are comes from their record of pauses
+  // (`onPlanOn`), checked for each period further down.
+  const billable = clients.filter((client) => client.status === 'active'
+    || (Array.isArray(client.statusLog) && client.statusLog.length));
   if (!billable.length) return empty();
 
   // Group by the period, not the client: everybody on the same anchor shares
@@ -92,7 +98,7 @@ export async function pendingBilling(clients, pricing, day = today()) {
 
   const rows = [];
   const unpriced = [];
-  const skipped = { paid: 0, notYet: 0, ended: 0 };
+  const skipped = { paid: 0, notYet: 0, ended: 0, off: 0 };
 
   /*
    * Every period's read at once, rather than one after another.
@@ -117,6 +123,14 @@ export async function pendingBilling(clients, pricing, day = today()) {
 
     for (const client of group) {
       if (issued.has(invoiceId(client.id, period.start))) continue;
+
+      // Paused, or not coming any more, when it began: a fortnight like that
+      // they did not eat — the same "on the first day" rule as when they
+      // started and when they stopped.
+      if (!onPlanOn(client, period.start)) {
+        skipped.off += 1;
+        continue;
+      }
 
       // Covered by what they have paid: `paidThrough` is the last day paid
       // for, so a fortnight is covered when it ends by then. The same test
@@ -277,7 +291,7 @@ async function issuedIn(periodStart) {
 
 const empty = () => ({
   rows: [], total: 0, periods: 0, unpriced: [],
-  skipped: { paid: 0, notYet: 0, ended: 0 },
+  skipped: { paid: 0, notYet: 0, ended: 0, off: 0 },
 });
 
 const dedupe = (clients) => [...new Map(clients.map((c) => [c.id, c])).values()];
