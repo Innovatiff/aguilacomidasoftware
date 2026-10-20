@@ -872,6 +872,13 @@
   background: var(--warn-500); color: #fff; padding: 3px 10px; border-radius: var(--r-full);
 }
 .pkline__badge.is-done { background: var(--ok-600); }
+/* The libreta the manager gave whoever is at this computer. */
+.pkline__yours {
+  font-size: var(--fs-xs); font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--brand-600); border: 2px solid var(--brand-500);
+  padding: 1px 9px; border-radius: var(--r-full);
+  margin-right: auto;   /* beside the name; the morning's badge stays at the end */
+}
 
 .pkline__farms { font-size: var(--fs-md); color: var(--text-soft); }
 
@@ -1491,6 +1498,14 @@
   font-size: var(--fs-xs); font-weight: 800;
 }
 .pkpool__item .pkpool__meta svg { width: 13px; height: 13px; color: var(--text-soft); }
+/* A location no libreta has yet — Organizar libreta, in the kitchen. Taking it
+   puts it in this one, so it is told apart from the libreta's own. */
+.pkpool__free {
+  padding: 1px 7px;
+  border-radius: var(--r-full);
+  background: var(--brand-500); color: #ffffff;
+  font-size: var(--fs-xs); font-weight: 800; letter-spacing: 0.02em;
+}
 
 @media (min-width: 900px) {
   .pkord { flex: 1; min-height: 0; }

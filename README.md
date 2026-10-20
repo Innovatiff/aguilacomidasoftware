@@ -533,7 +533,12 @@ Cada persona que trabaja en la cocina tiene su usuario: su **nombre**, su
    entrar en cuanto lo escrito es un número, y el corto abriría antes de
    teclear el largo. El panel no deja guardarlo y dice con quién choca. Si ya
    había dos así de antes, el corto entra tras una pausa de un segundo.
-3. **Qué puede hacer**: un interruptor por cada botón del menú de la cocina.
+3. **Su libreta**: la que le toca. Con libreta, *Empacar* la lleva directo a
+   ella, sin escoger, y *Organizar libreta* abre esa misma. *Ninguna* le deja
+   escoger cada vez. Dos personas pueden tener la misma —la de la mañana y la
+   de la tarde—: el panel lo dice. La tarjeta de cada libreta dice quién la
+   empaca, y en la lista de libretas de la cocina la suya dice *Tu libreta*.
+4. **Qué puede hacer**: un interruptor por cada botón del menú de la cocina.
    *Todo* y *Nada* los prenden o apagan juntos.
 
 | Permiso | Qué abre |
@@ -543,6 +548,7 @@ Cada persona que trabaja en la cocina tiene su usuario: su **nombre**, su
 | Calendario semanal | Cambiar qué días tiene pedido una persona |
 | Cantidad de pedidos | Cambiar cuántos pedidos lleva al día (1 ó 2) |
 | No puede comer | Cambiar lo que una persona no puede comer: no pollo, no puerco… |
+| Organizar libreta | Acomodar el orden de su libreta y meterle las ubicaciones nuevas que no están en ninguna |
 | Nuevo cliente | Dar de alta a una persona en una farma |
 | Pausar o reactivar | Poner a alguien en pausa, o volverlo a activar |
 | Último día de pedido | Poner hasta qué día recibe pedido una persona |
@@ -555,14 +561,14 @@ Los cambios llegan solos. Si el encargado le apaga un permiso a alguien que
 está trabajando, el botón desaparece de su pantalla en ese momento; si lo
 desactiva, la pantalla regresa al teclado y su PIN deja de servir. La lista del
 panel nunca enseña los PIN: dice cuánto puede hacer cada quien —«Puede hacer
-todo», «Solo empacar», «5 de 8 permisos»— y nada más.
+todo», «Solo empacar», «5 de 9 permisos»—, su libreta si tiene, y nada más.
 
 **Quien ya existía puede hacer todo.** Los usuarios dados de alta antes de los
 permisos no tienen ninguno guardado y ven todos los botones, como hasta hoy.
 La primera vez que alguien los edite y guarde, quedan escritos uno por uno.
 
-**Un botón nuevo** —como *No puede comer*— le aparece solo a quien podía hacer
-todo. A quien el encargado le había recortado el menú no se le agrega: se lo
+**Un botón nuevo** —como *No puede comer* u *Organizar libreta*— le aparece solo
+a quien podía hacer todo. A quien el encargado le había recortado el menú no se le agrega: se lo
 tiene que prender en su usuario.
 
 Lo que se hace desde el menú de la cocina queda **firmado con el nombre de
@@ -587,9 +593,22 @@ todas— y revisar.
 - Lo demás —contacto, teléfono, horario, ciclo de cobro— queda con los valores
   de siempre (pedidos de lunes a sábado) y se completa después desde el panel,
   en *Ranchos*. Desde ese momento ya aparece en *Nuevo cliente*.
-- Una farma nueva todavía no está en ninguna libreta. En cuanto alguien se
-  registre ahí, el aviso de ubicaciones sin libreta lo dice, y se asigna en
-  *Empaque → Configurar*.
+- Una farma nueva todavía no está en ninguna libreta. Sus ubicaciones salen en
+  *Organizar libreta* marcadas *Nueva*, para meterlas en la libreta donde van
+  —también se puede desde *Empaque → Configurar*—. Mientras no estén en
+  ninguna, el aviso de ubicaciones sin libreta lo dice.
+
+#### Organizar libreta
+
+Es el mismo *Orden de empaque* del panel, desde el menú de la cocina. Abre la
+libreta de quien lo toca —o pregunta cuál, si no tiene— con **El orden** a la
+izquierda y **Por acomodar** a la derecha. En *Por acomodar* también salen,
+marcadas **Nueva**, las ubicaciones que no están en ninguna libreta: una casa
+recién dada de alta, la de una farma nueva. Tocarla la mete en esta libreta,
+al final del orden, y desde ahí se manda a su lugar con el número, las flechas
+o la manija. Las nuevas que no se toquen se quedan sin libreta. Nada se guarda
+hasta *Guardar orden*, y la otra libreta no se toca: si mientras tanto alguien
+metió esa misma casa en la otra, se queda en la otra.
 
 #### Las etiquetas que salen solas
 
@@ -765,9 +784,11 @@ propio nombre y nada del panel adentro: abre directo en «¿Quién eres?» y, co
 el PIN, en el menú de esa persona —sólo con lo que tiene permitido—:
 
 - **Empacar**, arriba y de lado a lado: es lo que se hace todas las mañanas.
+  A quien tiene libreta asignada lo lleva directo a ella, y lo dice: *Tu
+  libreta: Claudia*.
 - Debajo, dos columnas: *Nueva farma*, *Calendario semanal*, *Cantidad de
-  pedidos* y *No puede comer*; *Nuevo cliente*, *Pausar o reactivar* y *Último
-  día de pedido*.
+  pedidos* y *No puede comer*; *Organizar libreta*, *Nuevo cliente*, *Pausar o
+  reactivar* y *Último día de pedido*.
 
 **No puede comer** — escoges a la persona y ves lo que ya tiene, en rojo. Tocar
 uno lo quita; para agregar, se escribe como se dice en la cocina —*No puerco*,
@@ -780,8 +801,9 @@ agrega y qué se quita. Es la misma lista que **No puede comer** en la ficha
 del panel, la pantalla de empaque y el tablero de hoy — y, como siempre,
 **nunca sale en la etiqueta**.
 
-Cobrar, la caja y lo cobrado hoy no están: son del mostrador, y la *Acción
-rápida* del panel sigue igual que siempre.
+Cobrar, la caja y lo cobrado hoy no están: son del mostrador. La *Acción
+rápida* del panel tiene también *No puede comer*, junto a *Cambiar días* y
+*Cambiar periodo*.
 
 **Tablero de hoy** — el botón al lado del saludo. Es lo que dicen los dos
 pizarrones de la pared, MEDIAS y COMPLETAS, pero contado por la computadora,

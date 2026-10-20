@@ -22,7 +22,7 @@
 
 import {
   db, doc, collection, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot,
-  query, where, orderBy, serverTimestamp, arrayUnion, docData, listData,
+  query, where, orderBy, serverTimestamp, arrayUnion, docData, listData, saved,
 } from '../firebase.js';
 import {
   normalizePacking, ABILITIES, pinTakenBy,
@@ -54,11 +54,13 @@ export async function savePacking(lines, author) {
   // Only the libretas. Writing the whole normalized object would spread
   // `autoPrint: true` over a kitchen that had deliberately turned it off,
   // every time somebody moved a farm from one libreta to the other.
-  await setDoc(packingRef(), {
+  // Bounded: from the kitchen, with no internet, the change stays on this
+  // computer and goes up by itself instead of leaving the sheet spinning.
+  await saved(setDoc(packingRef(), {
     lines: clean.lines,
     updatedAt: serverTimestamp(),
     updatedByName: author?.name || '',
-  }, { merge: true });
+  }, { merge: true }));
   return clean;
 }
 
@@ -88,9 +90,12 @@ export function watchPackers(onData, onError) {
  *
  * @param {object} user
  * @param {object} [user.can]  `{ pack: true, newFarm: false, … }`
+ * @param {string} [user.lineId]  the libreta Empacar opens for them, or none
  * @param {object[]} [others]  everyone else, to refuse a number already in use
  */
-export async function savePacker({ id, name, pin, active = true, can = {} }, author, others = []) {
+export async function savePacker({
+  id, name, pin, active = true, can = {}, lineId = '',
+}, author, others = []) {
   const clean = String(name || '').trim().replace(/\s+/g, ' ');
   const number = String(pin || '').replace(/\D/g, '');
   if (!clean) throw new Error('Escribe el nombre de la persona.');
@@ -114,11 +119,15 @@ export async function savePacker({ id, name, pin, active = true, can = {} }, aut
     pin: number,
     active: !!active,
     can: permissions,
+    // The libreta Empacar takes them straight to; '' to choose each time.
+    lineId: String(lineId || ''),
     updatedAt: serverTimestamp(),
     updatedByName: author?.name || '',
     ...(id ? {} : { createdAt: serverTimestamp() }),
   }, { merge: true });
-  return { id: ref.id, name: clean, pin: number, active: !!active, can: permissions };
+  return {
+    id: ref.id, name: clean, pin: number, active: !!active, can: permissions, lineId: String(lineId || ''),
+  };
 }
 
 export const removePacker = (id) => deleteDoc(doc(db, 'packers', id));

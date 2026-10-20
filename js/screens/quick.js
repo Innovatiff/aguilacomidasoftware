@@ -46,8 +46,13 @@ import {
 import { periodCharge, tierFor } from '../lib/pricing.js';
 import { money, plural } from '../lib/format.js';
 import { kitchen } from '../lib/mode.js';
-import { seatedPacker, sitDown, watchPackers } from '../data/packing.js';
-import { abilitiesOf } from '../lib/packing.js';
+import {
+  seatedPacker, sitDown, watchPackers, watchPacking, savePacking,
+} from '../data/packing.js';
+import { abilitiesOf, lineOf, arrangeLine, orderedPlaces } from '../lib/packing.js';
+import { arrangeSheet } from '../ui/libreta-order.js';
+import { sheet, toastOk, toastBad } from '../ui/overlay.js';
+import { errorText } from '../firebase.js';
 import { createFarm, newLocationId } from '../data/farms.js';
 import { openDayBoard } from '../ui/day-board.js';
 import { openAdvanceSheet } from '../ui/advance-sheet.js';
@@ -122,6 +127,7 @@ export function renderQuick() {
    */
   const me = seatedPacker();
   let allowed = null;
+  let mine = null;           // their record: what they may do, and their libreta
   const stopUsers = kitchen()
     ? watchPackers((rows) => {
       // An empty list is the cache answering before the server has; a real
@@ -133,10 +139,20 @@ export function renderQuick() {
         go('/empaque');
         return;
       }
+      mine = found;
       allowed = abilitiesOf(found);
       paintTiles();
     }, () => {})
     : null;
+
+  // The libretas, for the one assigned to whoever is sitting here.
+  let packingSetup = null;
+  const stopSetup = kitchen()
+    ? watchPacking((found) => { packingSetup = found; paintTiles(); }, () => {})
+    : null;
+
+  /** Their libreta, when the manager gave them one and it still exists. */
+  const myLine = () => (mine?.lineId ? lineOf(packingSetup?.lines, mine.lineId) : null);
 
   /** Panel wording at the counter, kitchen wording in the kitchen. */
   const w = (panelWords, kitchenWords) => (kitchen() ? kitchenWords : panelWords);
@@ -285,19 +301,14 @@ export function renderQuick() {
           sub: 'Semanal o quincenal',
           onClick: () => ready && flowCycle(),
         }),
-        // The two money corrections next to each other, and the three that
-        // change who is eating next to each other. Four across, so the row
-        // break falls between the two groups rather than through one.
         posTile({
-          icon: 'plus', title: 'Agregar deuda', family: 'money',
-          sub: 'Un cargo aparte',
-          onClick: () => ready && flowDebt(),
+          icon: 'noEat', title: 'No puede comer', family: 'plan',
+          sub: 'No pollo, no puerco…',
+          onClick: () => ready && flowDiet(),
         }),
-        posTile({
-          icon: 'edit', title: 'Corregir saldo', family: 'money',
-          sub: 'Dejarlo en lo correcto',
-          onClick: () => ready && flowBalance(),
-        }),
+        // Each family together: what they eat, then who is eating, then the
+        // two money corrections side by side at the end. Four across, so the
+        // money pair always shares a row.
         posTile({
           icon: 'userPlus', title: 'Nuevo cliente', family: 'who',
           sub: 'Dar de alta',
@@ -312,6 +323,16 @@ export function renderQuick() {
           icon: 'ban', title: 'Último día', family: 'who',
           sub: 'Hasta cuándo come',
           onClick: () => ready && flowLastDay(),
+        }),
+        posTile({
+          icon: 'plus', title: 'Agregar deuda', family: 'money',
+          sub: 'Un cargo aparte',
+          onClick: () => ready && flowDebt(),
+        }),
+        posTile({
+          icon: 'edit', title: 'Corregir saldo', family: 'money',
+          sub: 'Dejarlo en lo correcto',
+          onClick: () => ready && flowBalance(),
         })),
 
       tillStrip());
@@ -339,11 +360,18 @@ export function renderQuick() {
    */
   function kitchenBoard(ready) {
     const tile = {
+      // Straight into their libreta when they have one; otherwise the two to
+      // choose from.
       pack: () => posTile({
         icon: 'box', title: 'Empacar',
-        sub: 'La comida de hoy, en el orden de su libreta',
+        sub: myLine() ? `Tu libreta: ${myLine().name}` : 'La comida de hoy, en el orden de su libreta',
         hero: true, band: true,
-        onClick: () => go('/empaque'),
+        onClick: () => go(myLine() ? `/empaque/${myLine().id}` : '/empaque'),
+      }),
+      organize: () => posTile({
+        icon: 'sort', title: 'Organizar libreta', family: 'plan',
+        sub: 'El orden y las ubicaciones nuevas',
+        onClick: () => ready && organize(),
       }),
       newFarm: () => posTile({
         icon: 'farm', title: 'Nueva farma', family: 'plan',
@@ -388,7 +416,7 @@ export function renderQuick() {
 
     const ok = (key) => allowed[key] === true;
     const left = ['newFarm', 'week', 'meals', 'diet'].filter(ok);
-    const right = ['newClient', 'status', 'lastDay'].filter(ok);
+    const right = ['organize', 'newClient', 'status', 'lastDay'].filter(ok);
 
     // Counted over the same people as the number beside it: a farm whose
     // people have all stopped ordering is not one the kitchen packs for.
@@ -1611,12 +1639,59 @@ export function renderQuick() {
       picks);
   }
 
+  /* --- Organizar libreta ------------------------------------------------- */
+
+  /**
+   * The order of a libreta, from the kitchen — and the locations no libreta
+   * has, to put in it where they go (see js/ui/libreta-order.js).
+   *
+   * Their own libreta, when they have one; otherwise they say which. Saved
+   * against the libretas as they are at that moment, not as they were when
+   * the sheet opened: the other computer may have changed its own meanwhile.
+   */
+  async function organize() {
+    if (!packingSetup?.lines) {
+      toastBad('Todavía no cargan las libretas. Intenta en un momento.');
+      return;
+    }
+    const line = myLine() || await whichLibreta(packingSetup.lines);
+    if (!line) return;
+    const picked = await arrangeSheet({
+      lines: packingSetup.lines, line, farms: store.farms, clients: store.clients,
+      takeFree: true, title: `Organizar ${line.name}`,
+    });
+    if (!picked) return;
+    const next = arrangeLine(packingSetup.lines, line.id, picked, store.farms, store.clients);
+    try {
+      await savePacking(next, { name: me?.name || '' });
+      toastOk(picked.added.length
+        ? `${plural(picked.added.length, 'ubicación nueva', 'ubicaciones nuevas')} en ${line.name}`
+        : 'Orden guardado');
+    } catch (error) { toastBad(errorText(error)); }
+  }
+
+  /** "¿Cuál libreta?" — for somebody the manager has not given one. */
+  function whichLibreta(lines) {
+    return sheet({
+      title: 'Organizar libreta',
+      build: (close) => h('div.stack.stack-3',
+        h('p.t-sm.c-soft', '¿Cuál vas a organizar?'),
+        lines.map((line) => {
+          const count = orderedPlaces(lines, line.id, store.farms, store.clients).length;
+          return button(`${line.name} · ${plural(count, 'ubicación', 'ubicaciones')}`, {
+            variant: 'soft', size: 'lg', block: true, icon: 'sort', onClick: () => close(line),
+          });
+        })),
+    });
+  }
+
   return () => {
     window.removeEventListener('resize', onResize);
     clearTimeout(resizeTimer);
     stop();
     stopTill?.();
     stopUsers?.();
+    stopSetup?.();
     unmountPos();
   };
 }

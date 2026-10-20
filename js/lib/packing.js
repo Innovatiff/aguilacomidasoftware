@@ -247,6 +247,44 @@ export function orderedPlaces(lines, lineId, farms, clients) {
  * it is counted and said out loud rather than left to be noticed. Locations
  * with nobody in them are not mentioned: an empty house is not a problem.
  */
+/**
+ * Every location no libreta packs: new houses, a new farm's, ones taken out
+ * of a libreta. With nobody in them too — a house added this morning has its
+ * people registered after — which is what `unassignedPlaces` leaves out.
+ */
+export const freePlaces = (lines, farms, clients = []) => allPlaces(farms, clients)
+  .filter((entry) => !lineOfPlace(lines, entry.farm.id, entry.place.id));
+
+/**
+ * Both libretas after one of them is put in a new order, with any free
+ * locations it took on the way.
+ *
+ * Written out in full, as the location picker writes them: both libretas as
+ * explicit locations, and `farmIds` emptied. Only `lineId` changes — what it
+ * packs grows by `added`, and its order becomes `order` — and the other keeps
+ * exactly what it had. A location the other libreta took in the meantime is
+ * never written into this one, whatever the sheet said.
+ *
+ * @param {string[]} order  the keys in the order chosen, this libreta's own
+ *   and the free ones taken, mixed
+ * @param {string[]} added  which of those were free
+ */
+export function arrangeLine(lines, lineId, { order = [], added = [] }, farms, clients = []) {
+  return (lines || []).map((row) => {
+    const own = orderedPlaces(lines, row.id, farms, clients).map((entry) => entry.key);
+    if (row.id !== lineId) return { ...row, farmIds: [], placeIds: own };
+    const free = new Set(freePlaces(lines, farms, clients).map((entry) => entry.key));
+    const taken = added.filter((key) => free.has(key));
+    const placeIds = [...own, ...taken.filter((key) => !own.includes(key))];
+    const allowed = new Set(placeIds);
+    const chosen = [...new Set(order)].filter((key) => allowed.has(key));
+    // Anything of its own the order left out goes at the end, in the order it
+    // already had: never out of the libreta.
+    const rest = placeIds.filter((key) => !chosen.includes(key));
+    return { ...row, farmIds: [], placeIds, order: [...chosen, ...rest] };
+  });
+}
+
 export function unassignedPlaces(lines, farms, clients = []) {
   const known = new Set((farms || []).flatMap((farm) =>
     (farm.locations || []).map((place) => `${farm.id}:${place.id}`)));
@@ -523,6 +561,9 @@ export const ABILITIES = [
     hint: 'Cambiar cuántos pedidos lleva al día.' },
   { key: 'diet', title: 'No puede comer',
     hint: 'Cambiar lo que una persona no puede comer: no pollo, no puerco…' },
+  { key: 'organize', title: 'Organizar libreta',
+    hint: 'Acomodar el orden de su libreta y meterle las ubicaciones nuevas que no '
+      + 'están en ninguna.' },
   { key: 'newClient', title: 'Nuevo cliente',
     hint: 'Dar de alta a una persona en una farma.' },
   { key: 'status', title: 'Pausar o reactivar',

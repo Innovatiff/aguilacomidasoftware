@@ -221,7 +221,8 @@ export function renderPacking() {
         ? alert(`${plural(orphans.length, 'ubicación no está', 'ubicaciones no están')} en `
           + 'ninguna libreta: '
           + `${orphans.map((one) => `${one.farm.name} · ${one.place.name}`).join(', ')}. `
-          + 'Su comida no se va a empacar hasta que el encargado las agregue.', 'warn', 'alert')
+          + 'Su comida no se va a empacar hasta que alguien las meta en una libreta, desde '
+          + 'Organizar libreta en el menú.', 'warn', 'alert')
         : null,
 
       runs.length ? doneToday() : null);
@@ -251,6 +252,8 @@ export function renderPacking() {
     const run = runs.find((row) => row.lineId === line.id);
     const mine = run && run.packerId === packer.id;
     const state = !run ? 'libre' : (run.done ? 'lista' : 'empezada');
+    // The one the manager gave this person, said on the card.
+    const yours = packers.find((one) => one.id === packer.id)?.lineId === line.id;
 
     // In the order the morning goes. A farm the order comes back to later is
     // named again where it comes back — that is the route, not a repeat.
@@ -263,6 +266,7 @@ export function renderPacking() {
     },
       h('div.pkline__head',
         h('div.pkline__name', line.name),
+        yours ? h('span.pkline__yours', 'Tu libreta') : null,
         run
           ? h(`span.pkline__badge${run.done ? '.is-done' : ''}`,
               run.done ? 'Terminada' : 'Empezada')
