@@ -23,7 +23,7 @@ import {
   store, subscribe, billingFor, farmById, periodPrice, clientState, forgetPendingBills,
 } from '../data/store.js';
 import {
-  watchClient, updateClient, moveClient, servingSince, setEndsOn, servingStatus, daysLeft,
+  watchClient, updateClient, moveClient, servingSince, setEndsOn, daysLeft,
   cycleIsSet, setDayNote,
 } from '../data/clients.js';
 import { watchClientInvoices, issueInvoice } from '../data/invoices.js';
@@ -124,13 +124,14 @@ export function renderClientDetail(context) {
               clientStatusMeta(model.status).icon)))),
 
       model.endsOn
-        ? alert(servingStatus(model) === 'inactive'
-          ? `Terminó el ${formatDayLong(model.endsOn)}. Ya no aparece en la libreta ni se le `
-            + 'factura.'
+        ? alert(model.endsOn < today()
+          ? `Su último día fue el ${formatDayLong(model.endsOn)}. `
+            + `${model.status === 'paused' ? `Desde el ${formatDayLong(addDays(model.endsOn, 1))} está en pausa: `
+              : ''}ya no aparece en la libreta ni se le factura. Para que vuelva, reactívalo.`
           : `Último día: ${formatDayLong(model.endsOn)} `
-            + `(${plural(Math.max(0, daysLeft(model)), 'día', 'días')}). Después deja de `
-            + 'aparecer en la libreta.',
-        servingStatus(model) === 'inactive' ? 'bad' : 'warn')
+            + `(${plural(Math.max(0, daysLeft(model)), 'día', 'días')}). Ese día se le empaca; `
+            + 'al día siguiente queda en pausa solo y sale de la libreta.',
+        model.endsOn < today() ? 'bad' : 'warn')
         : null,
 
       (model.tags || []).length

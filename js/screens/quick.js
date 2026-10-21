@@ -1519,7 +1519,7 @@ export function renderQuick() {
               : null),
         },
       ],
-      commit: (s) => setClientStatus(s.client.id, s.status),
+      commit: (s) => setClientStatus(s.client.id, s.status, s.client),
       done: (s) => ({ what: capitalize(statusWord(s.status)), who: s.client.name }),
     });
   }
@@ -1535,7 +1535,8 @@ export function renderQuick() {
         {
           id: 'day',
           title: w('¿Hasta qué día come?', '¿Hasta qué día tiene pedido?'),
-          hint: 'Al día siguiente sale solo de la libreta. No se le borra lo que deba.',
+          hint: 'Ese día todavía se le empaca. Al día siguiente queda en pausa solo y sale de la '
+            + 'libreta. No se le borra lo que deba.',
           ready: (st) => !!st.endsOn,
           build: (st, api) => posPick({
             columns: 3,
@@ -1561,8 +1562,13 @@ export function renderQuick() {
               ...whoRows(st.client),
               ['Último día', capitalize(formatDayLong(st.endsOn)), { total: true }],
             ]),
-            posNote(`Las ${periodWordPlural(st.client)} hasta ese día se le siguen cobrando. `
-              + 'Las que empiecen después, no.', 'ok')),
+            posNote(`Se le empaca hasta ese día. Al día siguiente queda en pausa solo. Las `
+              + `${periodWordPlural(st.client)} hasta ese día se le siguen cobrando; las que `
+              + 'empiecen después, no.', 'ok'),
+            st.client.status !== 'active'
+              ? posNote(`Ahora está ${statusWord(st.client.status)}: para que vuelva a comer, `
+                + 'reactívalo en Pausar o reactivar.', 'warn')
+              : null),
         },
       ],
       commit: (s) => setEndsOn(s.client.id, s.endsOn),

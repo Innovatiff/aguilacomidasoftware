@@ -245,6 +245,17 @@ en su cuenta para cuando venga a pagar, y desde ese momento sale de la libreta
 de empaque. Marcar inactivo sí pregunta: termina la relación, aunque lo que
 deba sigue registrado y su historial se conserva.
 
+**«Hasta cuándo come» pone la pausa solo.** Con un último día —desde *Último
+día* en la Acción rápida, *Último día de pedido* en la cocina, o la ficha—, ese
+día todavía se le empaca, y **al día siguiente queda en pausa solo**: sale de
+la libreta y su ficha lo dice («Su último día fue el viernes 23 de octubre.
+Desde el sábado 24 está en pausa»). Lo hace la primera computadora que se abra
+esa mañana —o la que esté abierta cuando cambie el día—, y la pausa queda
+anotada desde el día siguiente al último, aunque nadie abra el sistema ese día.
+Se le cobra la quincena en la que estaba su último día, y ninguna después. Para
+que vuelva, se le reactiva: eso le quita la fecha que ya pasó y entra a la
+libreta a la mañana siguiente.
+
 **Dos cosas pasan solas.** La pantalla no espera a que alguien se acuerde:
 
 1. **Quincenas cerradas sin facturar.** Al abrir Clientes, el panel busca los

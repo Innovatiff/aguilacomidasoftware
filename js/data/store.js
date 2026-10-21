@@ -13,6 +13,7 @@
 
 import {
   watchClients, servingStatus, isServing, daysLeft, cycleIsSet,
+  pauseAfterLastDay,
 } from './clients.js';
 import { watchFarms } from './farms.js';
 import { watchPricing } from './pricing.js';
@@ -74,7 +75,23 @@ function checkDay() {
   if (now === state.day) return;
   state.day = now;
   forgetPendingBills();
+  pauseFinished();
   emit();
+}
+
+/*
+ * "Hasta cuándo come", carried out: the morning after somebody's last day they
+ * are put in pause (`pauseAfterLastDay`). Asked once per person per session —
+ * the write comes back through the same listener, by then as paused.
+ */
+const pausing = new Set();
+function pauseFinished() {
+  for (const client of state.clients) {
+    if (client.status !== 'active' || !client.endsOn || client.endsOn >= state.day) continue;
+    if (pausing.has(client.id)) continue;
+    pausing.add(client.id);
+    pauseAfterLastDay(client).catch(() => { pausing.delete(client.id); });
+  }
 }
 if (typeof document !== 'undefined') {
   setInterval(checkDay, 60 * 1000);
@@ -126,6 +143,7 @@ export function startStore() {
     watchClients((rows) => {
       state.clients = rows;
       state.loaded.clients = true;
+      pauseFinished();
       emit();
     }, failed('clients')),
 

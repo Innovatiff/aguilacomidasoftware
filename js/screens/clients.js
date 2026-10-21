@@ -310,7 +310,12 @@ export function renderClients(context) {
     if (row.serving === 'inactive') {
       return row.endsOn ? `Terminó el ${formatDay(row.endsOn)}` : 'Ya no recibe comida';
     }
-    if (row.serving === 'paused') return 'Sin entregas por ahora';
+    if (row.serving === 'paused') {
+      // Paused by their last day: when it was is what anybody asks.
+      return row.endsOn && row.endsOn < today()
+        ? `Terminó el ${formatDay(row.endsOn)} · en pausa`
+        : 'Sin entregas por ahora';
+    }
     if (row.advance) return 'Pago por adelantado · por corregir';
     return `Paga el ${formatDay(row.payDay)}`;
   }
@@ -631,7 +636,7 @@ export function renderClients(context) {
 
   async function setStatus(client, status, message) {
     try {
-      await setClientStatus(client.id, status);
+      await setClientStatus(client.id, status, client);
       toastOk(message);
     } catch (error) { toastBad(errorText(error)); }
   }

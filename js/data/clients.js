@@ -29,7 +29,7 @@ import {
   onSnapshot, query, where, orderBy, limit, serverTimestamp,
   writeBatch, arrayUnion, docData, listData, toDate, saved,
 } from '../firebase.js';
-import { today, dayKey, daysBetween } from '../lib/dates.js';
+import { today, dayKey, daysBetween, addDays } from '../lib/dates.js';
 import {
   DEFAULT_DELIVERY_DAYS, DEFAULT_GRACE_DAYS, DEFAULT_PAY_EVERY, payDayOnOrAfter,
 } from '../lib/billing.js';
@@ -159,10 +159,14 @@ export function onPlanOn(client, day) {
 }
 
 /**
- * The record of a change of status, made today. See `onPlanOn`. The moment is
- * what keeps two identical changes on one day from being taken for one.
+ * The record of a change of status, made today. See `onPlanOn`. The moment —
+ * and a tag of its own, for two in the same millisecond — is what keeps two
+ * identical changes on one day from being taken for one: Firestore adds a
+ * value to a list only if the same value is not there already.
  */
-const statusEntry = (status, day = today()) => ({ on: day, status, at: Date.now() });
+const statusEntry = (status, day = today()) => ({
+  on: day, status, at: Date.now(), tag: Math.random().toString(36).slice(2, 8),
+});
 
 /** Days left before their service ends, or null when there is no end date. */
 export function daysLeft(client, day = today()) {
@@ -377,11 +381,38 @@ export async function setPaidThrough(clientId, paidThrough) {
   await saved(updateDoc(doc(db, 'clients', clientId), { paidThrough, updatedAt: serverTimestamp() }));
 }
 
-export async function setClientStatus(clientId, status) {
+export async function setClientStatus(clientId, status, client = null) {
   await saved(updateDoc(doc(db, 'clients', clientId), {
     status,
     // Appended without reading the client first, so it works with no internet.
     statusLog: arrayUnion(statusEntry(status)),
+    // Brought back after their last day went by: that day is over, and left
+    // in place it would keep them out of the libreta however active they are.
+    ...(status === 'active' && lastDayGone(client) ? { endsOn: '' } : {}),
+    updatedAt: serverTimestamp(),
+  }));
+}
+
+/** Their last day ("Hasta cuándo come") is behind them. */
+export const lastDayGone = (client, day = today()) => !!client?.endsOn && client.endsOn < day;
+
+/**
+ * Puts somebody whose last day has gone by in pause — on the morning after it.
+ *
+ * Nothing runs at midnight here: whichever computer of the kitchen opens
+ * first that morning (or is open when the date turns) does it. The pause is
+ * written down as of the day after their last one, not the day it happened to
+ * be noticed, so billing reads the same thing either way: the fortnight their
+ * last day was in is theirs, the ones after it are not.
+ *
+ * Two computers doing it at once write the same thing: the record of it has
+ * no moment of its own, so it is one entry, not two.
+ */
+export async function pauseAfterLastDay(client) {
+  if (!client?.id || client.status !== 'active' || !lastDayGone(client)) return;
+  await saved(updateDoc(doc(db, 'clients', client.id), {
+    status: 'paused',
+    statusLog: arrayUnion({ on: addDays(client.endsOn, 1), status: 'paused', auto: true }),
     updatedAt: serverTimestamp(),
   }));
 }

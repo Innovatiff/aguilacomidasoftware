@@ -26,7 +26,7 @@ import { go, back, currentPath } from '../lib/router.js';
 import { session } from '../data/session.js';
 import {
   createClient, updateClient, getClient, emptyClient, deleteClient, setClientStatus,
-  isValidEmail, termsOf, cleanTag, normalizeTags, tagsInUse, hasTag, servingSince,
+  isValidEmail, termsOf, cleanTag, normalizeTags, tagsInUse, hasTag, servingSince, lastDayGone,
 } from '../data/clients.js';
 import { ensureConversation } from '../data/chat.js';
 import { store, farmById, clientsOfFarm, whenReady, isReady } from '../data/store.js';
@@ -186,6 +186,13 @@ export async function renderClientForm(context) {
         if (changed.has('deliveryDays') || changed.has('extras')) {
           changed.add('deliveryDays');
           changed.add('extras');
+        }
+        // Back to active after their last day went by: that day is over, and
+        // left in place it would keep them out of the libreta.
+        if (changed.has('status') && model.status === 'active' && !changed.has('endsOn')
+          && lastDayGone(model)) {
+          model.endsOn = '';
+          changed.add('endsOn');
         }
         if (changed.size) {
           await updateClient(clientId, Object.fromEntries([...changed].map((key) => [key, model[key]])),
@@ -713,7 +720,7 @@ export async function renderClientForm(context) {
                 confirmLabel: 'Poner en pausa', icon: 'pause',
               })) return;
               try {
-                await setClientStatus(clientId, 'paused');
+                await setClientStatus(clientId, 'paused', model);
                 toastOk('Cliente en pausa');
                 go(`/clients/${clientId}`);
               } catch (error) { toastBad(errorText(error)); }
@@ -723,7 +730,7 @@ export async function renderClientForm(context) {
             variant: 'ok', block: true, icon: 'play',
             onClick: async () => {
               try {
-                await setClientStatus(clientId, 'active');
+                await setClientStatus(clientId, 'active', model);
                 toastOk('Cliente reactivado');
                 go(`/clients/${clientId}`);
               } catch (error) { toastBad(errorText(error)); }
