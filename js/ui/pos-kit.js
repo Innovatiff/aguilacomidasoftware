@@ -16,7 +16,9 @@ import { h, mount } from '../lib/dom.js';
 import { icon } from '../lib/icons.js';
 import { money, fold } from '../lib/format.js';
 import { matchesSearch } from '../data/clients.js';
-import { WEEKDAYS_SHORT, today as todayKey } from '../lib/dates.js';
+import {
+  WEEKDAYS_SHORT, today as todayKey, addDays, addMonths, weekdayOf, formatMonth, formatDayLong,
+} from '../lib/dates.js';
 
 /* --- Tiles ----------------------------------------------------------------- */
 
@@ -271,6 +273,98 @@ export function posDays({ days, onChange }) {
 
   paint();
   return wrap;
+}
+
+/* --- A day on the calendar ------------------------------------------------- */
+
+/**
+ * A month, for "until which day".
+ *
+ * Six tiles of fixed days could not say "Thursday week", and the browser's
+ * date input is the cramped picker this screen exists to avoid. So a month on
+ * screen, Monday first like the calendar on the kitchen wall, every day a big
+ * square.
+ *
+ * Always six weeks, so the footer does not jump when the month changes; the
+ * neighbouring months' days fill the edges, dimmed, and can be picked too.
+ * Days before `min` cannot. The chosen day is filled and says what it is
+ * (`onTag`), the day after it says what happens then (`afterTag`), and the
+ * days between `min` and it are shaded — what was picked reads as "from today
+ * to here" before a word of it is read.
+ *
+ * @param {object} options
+ * @param {string} [options.value]   the chosen day, "YYYY-MM-DD"
+ * @param {Function} options.onPick  (day) => void
+ * @param {string} [options.min]     the first day that can be chosen
+ * @param {number} [options.months]  how many months ahead can be shown
+ * @param {Function} [options.note]  (day|undefined) => [line, line]: what the
+ *   choice means, in words, beside the month's name
+ */
+export function posCalendar({
+  value, onPick, min = todayKey(), months = 12, onTag = 'último', afterTag = 'pausa', note,
+}) {
+  const now = todayKey();
+  const firstMonth = addMonths(min, 0);
+  const lastMonth = addMonths(min, months - 1);
+  let view = addMonths(value && value >= min ? value : min, 0);
+
+  const prev = h('button.poscal__nav', {
+    type: 'button', 'aria-label': 'Mes anterior', onclick: () => turn(-1),
+  }, icon('chevronL'));
+  const next = h('button.poscal__nav', {
+    type: 'button', 'aria-label': 'Mes siguiente', onclick: () => turn(1),
+  }, icon('chevronR'));
+  const title = h('span.poscal__month', { 'aria-live': 'polite' });
+  const said = h('div.poscal__said');
+  const grid = h('div.poscal__grid', { role: 'grid' });
+
+  function turn(by) {
+    const to = addMonths(view, by);
+    if (to < firstMonth || to > lastMonth) return;
+    view = to;
+    paint();
+  }
+
+  function paint() {
+    title.textContent = formatMonth(view);
+    prev.disabled = view <= firstMonth;
+    next.disabled = view >= lastMonth;
+
+    const lines = note ? note(value) : null;
+    said.hidden = !lines;
+    if (lines) mount(said, h('strong', lines[0]), lines[1] ? h('span', lines[1]) : null);
+
+    const start = addDays(view, -((weekdayOf(view) + 6) % 7));
+    const after = value ? addDays(value, 1) : null;
+    const month = view.slice(0, 7);
+
+    mount(grid,
+      ...[1, 2, 3, 4, 5, 6, 0].map((d) => h('span.poscal__wd', WEEKDAYS_SHORT[d])),
+      ...Array.from({ length: 42 }, (_, i) => {
+        const day = addDays(start, i);
+        const on = day === value;
+        const tag = on ? onTag : day === after ? afterTag : day === now ? 'hoy' : '';
+        return h(`button.poscal__day${day.slice(0, 7) !== month ? '.is-out' : ''}`
+          + `${day === now ? '.is-today' : ''}${on ? '.is-on' : ''}`
+          + `${day === after ? '.is-after' : ''}`
+          + `${value && day >= min && day < value ? '.is-span' : ''}`,
+        {
+          type: 'button',
+          disabled: day < min,
+          'aria-pressed': on ? 'true' : 'false',
+          'aria-label': formatDayLong(day),
+          'data-day': day,
+          onclick: () => { value = day; onPick(day); paint(); },
+        },
+        h('span.poscal__n', String(Number(day.slice(8)))),
+        tag ? h('span.poscal__tag', tag) : null);
+      }));
+  }
+
+  paint();
+  return h('div.poscal',
+    h('div.poscal__head', prev, title, next, said),
+    grid);
 }
 
 /* --- Saying what will happen ----------------------------------------------- */

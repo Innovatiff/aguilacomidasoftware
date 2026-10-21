@@ -67,6 +67,18 @@ export function formatDayLong(key) {
   return `${WEEKDAYS[d.getDay()]} ${d.getDate()} de ${MONTHS[d.getMonth()]} de ${d.getFullYear()}`;
 }
 
+/** "Octubre 2026" — a calendar's heading. */
+export function formatMonth(key) {
+  const d = parseDay(key);
+  return `${capitalize(MONTHS[d.getMonth()])} ${d.getFullYear()}`;
+}
+
+/** The first day of the month `amount` months from the one `key` is in. */
+export function addMonths(key, amount) {
+  const d = parseDay(key);
+  return dayKey(new Date(d.getFullYear(), d.getMonth() + amount, 1));
+}
+
 /** "12 mar – 25 mar", collapsing the month when both ends share it. */
 export function formatRange(start, end) {
   const a = parseDay(start), b = parseDay(end);

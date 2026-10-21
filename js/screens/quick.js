@@ -25,7 +25,8 @@ import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
 import { runFlow } from '../ui/flow.js';
 import {
-  posTile, posPick, posFind, posMoney, posDays, posSummary, posNote, posField, posText, posLabel,
+  posTile, posPick, posFind, posMoney, posDays, posCalendar, posSummary, posNote, posField, posText,
+  posLabel,
 } from '../ui/pos-kit.js';
 import {
   store, subscribe, billingFor, farmById, printContext, activeClients,
@@ -1535,23 +1536,22 @@ export function renderQuick() {
         {
           id: 'day',
           title: w('¿Hasta qué día come?', '¿Hasta qué día tiene pedido?'),
-          hint: 'Ese día todavía se le empaca. Al día siguiente queda en pausa solo y sale de la '
-            + 'libreta. No se le borra lo que deba.',
-          ready: (st) => !!st.endsOn,
-          build: (st, api) => posPick({
-            columns: 3,
-            value: st.endsOn,
-            onPick: (v) => { st.endsOn = v; api.revalidate(); },
-            advance: api.next,
-            options: [
-              ['Hoy', 0], ['Mañana', 1], ['En 2 días', 2],
-              ['En 3 días', 3], ['En 5 días', 5], ['En una semana', 7],
-            ].map(([label, days]) => ({
-              value: addDays(today(), days),
-              label,
-              sub: formatDay(addDays(today(), days)),
-            })),
-          }),
+          hint: 'Toca su último día en el calendario. Ese día todavía se le empaca; al día '
+            + 'siguiente queda en pausa solo y sale de la libreta. No se le borra lo que deba.',
+          ready: (st) => !!st.endsOn && st.endsOn >= today(),
+          build: (st, api) => {
+            // A last day already set and still to come is where the calendar
+            // opens, chosen: changing it is then one tap, not a hunt for it.
+            if (st.endsOn === undefined && st.client?.endsOn >= today()) st.endsOn = st.client.endsOn;
+            return posCalendar({
+              value: st.endsOn,
+              onPick: (v) => { st.endsOn = v; api.revalidate(); },
+              note: (v) => (v
+                ? [`Último día: ${weekdayName(v)} ${formatDay(v)}`,
+                  `El ${weekdayName(addDays(v, 1))} ${formatDay(addDays(v, 1))} queda en pausa`]
+                : ['Toca un día', 'Desde hoy hasta un año']),
+            });
+          },
         },
         {
           id: 'confirm',
@@ -1560,7 +1560,11 @@ export function renderQuick() {
           build: (st) => h('div',
             posSummary([
               ...whoRows(st.client),
+              st.client.endsOn && st.client.endsOn !== st.endsOn
+                ? ['Antes', capitalize(formatDayLong(st.client.endsOn))]
+                : null,
               ['Último día', capitalize(formatDayLong(st.endsOn)), { total: true }],
+              ['En pausa desde', capitalize(formatDayLong(addDays(st.endsOn, 1)))],
             ]),
             posNote(`Se le empaca hasta ese día. Al día siguiente queda en pausa solo. Las `
               + `${periodWordPlural(st.client)} hasta ese día se le siguen cobrando; las que `

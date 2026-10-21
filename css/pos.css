@@ -567,6 +567,82 @@
 .posday:focus-visible { outline: 4px solid var(--pos-brand); outline-offset: 3px; }
 .posday.is-on { background: var(--pos-brand); color: #ffffff; border-color: var(--pos-brand-dark); }
 
+/* --- A month to pick a day from -------------------------------------------
+   Every day a square you can hit with a mouse without aiming, the chosen one
+   filled *and* tagged in words, the day after it tagged with what happens
+   then. Six rows always, so changing the month never moves the footer. */
+
+.poscal { display: flex; flex-direction: column; gap: 10px; }
+.poscal__head { display: flex; align-items: center; gap: 10px; }
+.poscal__nav {
+  flex: none;
+  display: grid; place-items: center;
+  width: 56px; height: 52px;
+  font: inherit;
+  background: var(--pos-fill); color: var(--pos-text);
+  border: 3px solid var(--pos-line); border-radius: var(--pos-r);
+  box-shadow: 0 var(--pos-key) 0 var(--pos-line);
+  cursor: pointer;
+}
+.poscal__nav svg { width: 28px; height: 28px; stroke-width: 2.6; }
+.poscal__nav:active { transform: translateY(var(--pos-key)); box-shadow: 0 0 0 var(--pos-line); }
+.poscal__nav:focus-visible { outline: 4px solid var(--pos-brand); outline-offset: 3px; }
+.poscal__nav:disabled {
+  cursor: not-allowed; color: #9aa2ac;
+  border-color: var(--pos-line-soft); box-shadow: none; transform: none;
+  background: repeating-linear-gradient(135deg, #e6e9ed 0 8px, #dce0e5 8px 16px);
+}
+.poscal__month { min-width: 230px; text-align: center; font-size: 26px; font-weight: 800; }
+.poscal__said {
+  margin-left: auto; min-width: 0;
+  display: flex; flex-direction: column; align-items: flex-end; text-align: right;
+  line-height: 1.2;
+}
+.poscal__said strong { font-size: 20px; font-weight: 800; }
+.poscal__said span { font-size: 16px; color: var(--pos-soft); }
+
+.poscal__grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.poscal__wd {
+  text-align: center;
+  font-size: 15px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--pos-soft);
+}
+.poscal__day {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: 56px; padding: 2px;
+  font: inherit; line-height: 1.05;
+  background: var(--pos-fill); color: var(--pos-text);
+  border: 3px solid var(--pos-line); border-radius: 8px;
+  cursor: pointer;
+}
+.poscal__day:hover { background: var(--pos-brand-wash); }
+.poscal__day:focus-visible { outline: 4px solid var(--pos-brand); outline-offset: 2px; z-index: 1; }
+.poscal__n { font-size: 22px; font-weight: 800; }
+.poscal__tag { font-size: 12px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+
+/* The other months' days: there, and pickable, but quieter. */
+.poscal__day.is-out { border-color: var(--pos-line-soft); color: #5b6673; }
+/* Before today: not a choice, and it says so with more than a tint. */
+.poscal__day:disabled {
+  cursor: not-allowed;
+  color: #9aa2ac; border-color: transparent;
+  background: transparent;
+}
+.poscal__day.is-today { border-color: var(--pos-brand); }
+.poscal__day.is-today .poscal__tag { color: var(--pos-brand-dark); }
+.poscal__day.is-span { background: var(--pos-brand-wash); }
+.poscal__day.is-on {
+  background: var(--pos-brand); color: #ffffff;
+  border-color: var(--pos-brand-dark);
+  box-shadow: 0 3px 0 var(--pos-brand-dark);
+}
+.poscal__day.is-after {
+  border-style: dashed; border-color: var(--pos-who);
+  background: repeating-linear-gradient(135deg, #f2f4f6 0 8px, #e6e9ed 8px 16px);
+}
+.poscal__day.is-after .poscal__tag { color: var(--pos-who); }
+
 /* --- Summary and messages ------------------------------------------------- */
 
 .possum {
@@ -712,6 +788,24 @@
   .posperson { min-height: 66px; }
   .posbtn { min-height: 62px; font-size: 20px; }
   .pos__foot { padding: 10px 18px; }
+
+  .poscal { gap: 8px; }
+  .poscal__nav { height: 46px; }
+  .poscal__month { font-size: 23px; }
+  .poscal__grid { gap: 5px; }
+  .poscal__day { min-height: 47px; }
+  .poscal__n { font-size: 20px; }
+  .poscal__tag { font-size: 11px; }
+}
+
+/* A 720px panel, or 768 with the browser's own bars: the month gives up the
+   last few pixels per row so its sixth week stays above the footer. */
+@media (max-height: 740px) {
+  .poscal { gap: 6px; }
+  .poscal__grid { gap: 4px; }
+  .poscal__nav { height: 42px; }
+  .poscal__day { min-height: 42px; }
+  .poscal__n { font-size: 19px; }
 }
 
 /* Very short — a netbook panel, or a browser carrying three toolbars. */

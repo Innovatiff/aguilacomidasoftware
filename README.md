@@ -256,6 +256,15 @@ Se le cobra la quincena en la que estaba su último día, y ninguna después. Pa
 que vuelva, se le reactiva: eso le quita la fecha que ya pasó y entra a la
 libreta a la mañana siguiente.
 
+El día se escoge **en un calendario**, no entre unos cuantos botones: un mes en
+pantalla, lunes primero, cada día un cuadro grande. Cualquier día sirve —en 4
+días, en 6, el mes que viene—, con las flechas para cambiar de mes (hasta un año
+adelante). Los días antes de hoy no se pueden tocar. El escogido dice
+**«último»**, el siguiente dice **«pausa»**, los de en medio se sombrean, y
+arriba lo dice en palabras: *«Último día: viernes 23 de octubre · El sábado 24 de
+octubre queda en pausa»*. Si la persona ya tenía un último día, el calendario
+abre con ese escogido, y al cambiarlo la confirmación dice el de antes.
+
 **Dos cosas pasan solas.** La pantalla no espera a que alguien se acuerde:
 
 1. **Quincenas cerradas sin facturar.** Al abrir Clientes, el panel busca los
