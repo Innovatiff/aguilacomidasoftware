@@ -17,6 +17,7 @@ import { toastOk } from '../ui/overlay.js';
 import { signIn, resetPassword, session } from '../data/session.js';
 import { isClaimed, claimFirstAdmin } from '../data/staff.js';
 import { authMessage, errorText } from '../firebase.js';
+import { versionLabel } from '../version.js';
 
 export function renderAuth(host) {
   let mode = 'signin';   // 'signin' | 'reset'
@@ -98,7 +99,8 @@ export function renderAuth(host) {
 
         h('p.t-xs.c-faint.center', { style: { marginTop: '20px', lineHeight: '1.5' } },
           'Las cuentas del equipo las agrega un administrador desde el panel. '
-          + 'Si necesitas acceso, pídeselo.')));
+          + 'Si necesitas acceso, pídeselo.'),
+        h('p.t-xs.c-faint.center', { style: { marginTop: '8px' } }, versionLabel())));
   }
 
   draw();

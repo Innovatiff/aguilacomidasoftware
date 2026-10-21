@@ -62,6 +62,7 @@ import {
   dietKey, sameDiet, kitchenSpelling, dietChanges,
 } from '../lib/diet.js';
 import { paymentMethodMeta } from '../lib/model.js';
+import { versionShort } from '../version.js';
 import {
   today, addDays, formatDay, formatDayLong, weekdayName, capitalize, WEEKDAYS_SHORT,
 } from '../lib/dates.js';
@@ -212,7 +213,8 @@ export function renderQuick() {
           icon('chevronL'), h('span', 'Salir')),
         h('span.pos__mark', icon('eagle')),
         h('span.pos__title', cocina ? 'Empaque' : 'Acción rápida'),
-        h('span.pos__day', capitalize(formatDayLong(today())))),
+        h('span.pos__day', capitalize(formatDayLong(today()))),
+        h('span.pos__ver', versionShort())),
       h('div.pos__body', h('div.pos__inner', { id: 'quick-tiles' })));
 
     document.body.append(panel);

@@ -28,7 +28,8 @@ import { copyTagsToPreferences } from '../data/clients.js';
 import { printReceipt } from '../ui/print.js';
 import { store, subscribe, activeClients, moneyStats, unpriced } from '../data/store.js';
 import { money, number, plural } from '../lib/format.js';
-import { formatStamp, today } from '../lib/dates.js';
+import { formatStamp, today, formatDayLong } from '../lib/dates.js';
+import { VERSION } from '../version.js';
 import { PAY_EVERY, payEveryOf } from '../lib/billing.js';
 import { errorText, toDate } from '../firebase.js';
 
@@ -318,7 +319,8 @@ export function renderSettings() {
       sectionLabel('Acerca de'),
       card(defList([
         defRow('Aplicación', 'El Águila Cocina · Administración'),
-        defRow('Versión', '1.0.0'),
+        defRow('Versión', `${VERSION.n} · ${formatDayLong(VERSION.day)}`),
+        defRow('Qué trae', VERSION.what),
         defRow('Moneda', 'CAD'),
         defRow('Ciclo de cobro', 'Semanal o quincenal, por cliente'),
       ])));

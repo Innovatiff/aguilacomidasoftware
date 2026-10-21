@@ -917,6 +917,20 @@ Al conectar el repositorio en Netlify:
 | Build command | *(vacío)* |
 | Publish directory | `.` |
 
+**¿Ya se publicó? Mira el número de versión.** Cada actualización sube el
+número en uno (`js/version.js`), y se ve en cada computadora: al pie del menú
+de la izquierda en el panel, en la barra de Acción rápida y del menú de la
+cocina, debajo del teclado del número, en la pantalla de entrar, y completo en
+**Ajustes → Acerca de**, con el día y qué trajo esa actualización. Si una
+computadora dice un número más bajo que el de la última actualización, el cambio
+está bien: es esa computadora, o Netlify, la que va atrás.
+
+1. En Netlify → **Deploys**, el de hasta arriba debe ser el último push y decir
+   *Published*. Si no, revisa que **Branch to deploy** sea la rama de arriba y
+   que los builds no estén detenidos, y usa **Trigger deploy → Deploy site**.
+2. En la computadora, **Ctrl+Shift+R** una vez; en las de la cocina en modo
+   kiosco, cierra Chrome y ábrelo otra vez.
+
 **Autoriza el dominio en Firebase.** Sin esto el inicio de sesión falla con
 `auth/unauthorized-domain`: consola de Firebase → **Authentication → Settings →
 Authorized domains → Add domain**, y agrega el dominio de Netlify

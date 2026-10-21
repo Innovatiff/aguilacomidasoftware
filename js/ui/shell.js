@@ -22,6 +22,7 @@
 import { h, mount, $ } from '../lib/dom.js';
 import { icon } from '../lib/icons.js';
 import { back, currentPath, go } from '../lib/router.js';
+import { versionShort, versionDay, versionLabel } from '../version.js';
 
 let root, topbar, page, tabbar;
 let tabs = [];
@@ -109,7 +110,11 @@ function renderTabs() {
         h('div.tabbar__name.truncate',
           brandName.name,
           h('span', brandName.sub))),
-      tabs.map((config) => tabNodes.get(config.id)));
+      tabs.map((config) => tabNodes.get(config.id)),
+      // Which update this computer is on, at the foot of the rail: where
+      // somebody looks when asked "does it say 75?", and nowhere in the way.
+      h('div.tabbar__ver', { title: versionLabel() },
+        versionShort(), h('span', ` · ${versionDay()}`)));
   }
 
   const here = currentPath();

@@ -94,6 +94,12 @@
   font-size: 17px; font-weight: 700; color: #cfd5dd;
   white-space: nowrap;
 }
+/* Which update this is: small, after the date, never in the way. */
+.pos__ver {
+  margin-left: 14px;
+  font-size: 13px; font-weight: 700; color: #9aa3ad;
+  white-space: nowrap;
+}
 .pos__step {
   margin-left: 14px;
   font-size: 18px; font-weight: 800;
@@ -886,6 +892,7 @@
 /* --- The number ------------------------------------------------------------ */
 
 .pk__pin { display: flex; flex-direction: column; gap: var(--s4); align-items: center; }
+.pk__ver { margin: 0; font-size: var(--fs-xs); color: var(--text-faint); }
 
 /* The keypad is the first thing a kitchen computer shows and, for most of the
    morning, the only thing. Sitting in the top third of a 768px screen it read

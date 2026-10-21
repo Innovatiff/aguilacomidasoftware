@@ -153,6 +153,7 @@ img, svg { display: block; max-width: 100%; }
 
 /* Hidden until the tab bar becomes a rail — see the desktop section. */
 .tabbar__brand { display: none; }
+.tabbar__ver { display: none; }
 
 .tab {
   position: relative;
@@ -347,7 +348,7 @@ img, svg { display: block; max-width: 100%; }
 
   .tabbar {
     grid-area: rail;
-    position: static;
+    position: relative;
     transform: none;
     left: auto; bottom: auto;
     width: auto; max-width: none;
@@ -376,6 +377,17 @@ img, svg { display: block; max-width: 100%; }
     line-height: 1.15; display: none;
   }
   .tabbar__name span { display: block; font-size: var(--fs-xs); font-weight: 500; color: var(--nav-fg); }
+
+  /* Which update this is, at the foot of the rail. The day joins it once the
+     rail is wide enough to carry words. */
+  .tabbar__ver {
+    display: block;
+    position: absolute; left: 0; right: 0; bottom: var(--s3);
+    text-align: center;
+    font-size: 11px; font-weight: 600; letter-spacing: .02em;
+    color: var(--nav-fg);
+  }
+  .tabbar__ver span { display: none; }
 
   .tab {
     height: 62px;
@@ -438,6 +450,7 @@ img, svg { display: block; max-width: 100%; }
 
   .tabbar { padding-inline: var(--s3); }
   .tabbar__name { display: block; }
+  .tabbar__ver span { display: inline; }
 
   .tab {
     flex-direction: row;

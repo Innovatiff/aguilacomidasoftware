@@ -26,6 +26,7 @@ import {
   packingSequence, packerByPin, longerPinFrom, unassignedPlaces, canDo, spotIndex,
 } from '../lib/packing.js';
 import { today, formatDayLong, formatTime, capitalize } from '../lib/dates.js';
+import { versionLabel } from '../version.js';
 import { kitchen } from '../lib/mode.js';
 import { plural, number } from '../lib/format.js';
 
@@ -184,7 +185,8 @@ export function renderPacking() {
         [1, 2, 3, 4, 5, 6, 7, 8, 9].map((digit) => key(String(digit), () => press(digit))),
         key('', () => {}, '.is-blank'),
         key('0', () => press(0)),
-        key('←', rub, '.pk__key--rub')));
+        key('←', rub, '.pk__key--rub')),
+      h('p.pk__ver', versionLabel()));
   }
 
   /* --- Which libreta ------------------------------------------------------- */
