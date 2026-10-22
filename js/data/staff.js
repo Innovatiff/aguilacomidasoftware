@@ -44,19 +44,33 @@ export function watchStaff(onData, onError) {
  * The person does not need an account yet — the entry is what matters. When
  * they sign in with that address, the panel opens.
  */
-export async function addStaff(email, name, author) {
+export async function addStaff(email, name, author, role = 'panel') {
   const key = normalizeEmail(email);
   if (!isValidEmail(key)) throw new Error('Ese correo no tiene un formato válido.');
 
   await setDoc(doc(db, 'staff', key), {
     email: key,
     name: String(name || '').trim(),
+    role: role === 'cocina' ? 'cocina' : 'panel',
     addedByName: author?.name || '',
     addedAt: serverTimestamp(),
   }, { merge: true });
 
   return key;
 }
+
+/**
+ * Panel completo, or «Solo cocina».
+ *
+ * A kitchen account is for the computers where they pack: signed in with it,
+ * the panel's address sends the machine to the kitchen's page, so nobody at
+ * that computer can reach the money, the clients' files or the team. It is a
+ * fence in the app, not in the database — the kitchen still reads and writes
+ * what its own screens need.
+ */
+export const setStaffRole = (email, role) => setDoc(doc(db, 'staff', normalizeEmail(email)), {
+  role: role === 'cocina' ? 'cocina' : 'panel',
+}, { merge: true });
 
 /** Removes access. The Auth account survives; it just cannot enter any more. */
 export const removeStaff = (email) => deleteDoc(doc(db, 'staff', normalizeEmail(email)));

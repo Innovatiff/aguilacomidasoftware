@@ -38,7 +38,7 @@ import {
   watchPacking, savePacking, setAutoPrint, watchPackers, savePacker, removePacker,
 } from '../data/packing.js';
 import {
-  lineOfPlace, lineOf, allPlaces, orderedPlaces, unassignedPlaces, duplicatePins,
+  lineOfPlace, lineOf, allPlaces, orderedPlaces, placementProblems, duplicatePins, readPlaceKey,
   ABILITIES, abilitiesOf, abilitiesInWords,
 } from '../lib/packing.js';
 import { lifetime } from '../ui/shell.js';
@@ -100,15 +100,26 @@ export function renderPackingSetup() {
     if (failure) return dataErrorCard(failure, { onRetry: () => go('/empaque/ajustes') });
     if (!setup || !packers || !isReady()) return skeletonRows(5);
 
-    const orphans = unassignedPlaces(setup.lines, store.farms, store.clients);
+    // Everybody not marked inactive: somebody on pause comes back, and the
+    // house they come back to should already be in a libreta.
+    const { unplaced, adopted } = placementProblems({
+      lines: setup.lines, farms: store.farms,
+      clients: store.clients.filter((client) => client.status !== 'inactive'),
+    });
     const clashes = duplicatePins(packers);
 
     return h('div.stack.stack-5',
-      orphans.length
-        ? alert(`${plural(orphans.length, 'ubicación no está', 'ubicaciones no están')} en `
-          + 'ninguna libreta. Su comida no se va a empacar: '
-          + `${orphans.map((one) => `${one.farm.name} · ${one.place.name}`).join(', ')}.`,
-        'warn', 'alert')
+      unplaced.length
+        ? alert(`${plural(unplaced.length, 'ubicación no está', 'ubicaciones no están')} en `
+          + 'ninguna libreta. Nadie va a empacar a su gente: '
+          + `${unplaced.map((one) => `${one.farm.name} · ${one.place.name}`).join(', ')}.`,
+        'bad', 'alert')
+        : null,
+      adopted.length
+        ? alert(`${plural(adopted.length, 'ubicación nueva se empaca', 'ubicaciones nuevas se empacan')} `
+          + 'por ahora con el resto de su farma: '
+          + `${adopted.map((one) => `${one.farm.name} · ${one.place.name} en ${one.line.name}`).join(', ')}. `
+          + 'Escógelas en su libreta, o ponlas en orden, y quedan para siempre.', 'warn', 'pin')
         : null,
 
       clashes.length
@@ -191,7 +202,7 @@ export function renderPackingSetup() {
   function lineCard(line) {
     // In the order the libreta is packed, because that is the other thing
     // this card is for.
-    const mine = orderedPlaces(setup.lines, line.id, store.farms, store.clients);
+    const mine = orderedPlaces(setup.lines, line.id, store.farms, store.clients, { adopt: true });
     const farms = new Set(mine.map((one) => one.farm.id));
     const people = mine.reduce((sum, one) => sum + peopleAt(one), 0);
 
@@ -222,7 +233,8 @@ export function renderPackingSetup() {
         // nothing on a screen where three farms have a Casa 1. Numbered,
         // because the order they are in is the order they are packed in.
         ? h('div.pkchips', mine.map((one, at) =>
-          h('span.pkchip', h('b.pkchip__n', String(at + 1)), `${one.farm.name} · ${one.place.name}`)))
+          h('span.pkchip', h('b.pkchip__n', String(at + 1)), `${one.farm.name} · ${one.place.name}`,
+            one.adopted ? h('span.pkpool__free', 'Nueva') : null)))
         : h('p.t-sm.c-soft', 'Todavía no le has puesto ubicaciones.'),
 
       h('div.pkline-actions',
@@ -434,9 +446,16 @@ export function renderPackingSetup() {
     });
     if (!picked) return;
 
-    // Only this libreta's order changes. Which locations it has, and anything
-    // about the other one, is left exactly as it was.
-    const next = setup.lines.map((row) => (row.id === line.id ? { ...row, order: picked.order } : row));
+    // Only this libreta's order changes — and any new location it was packing
+    // with the rest of its farm is written in, since it was just put in order.
+    // The other libreta is left exactly as it was.
+    const adoptedKeys = picked.order.filter((key) => {
+      const { farmId, locationId } = readPlaceKey(key);
+      return !lineOfPlace(setup.lines, farmId, locationId);
+    });
+    const next = setup.lines.map((row) => (row.id === line.id
+      ? { ...row, order: picked.order, placeIds: [...new Set([...(row.placeIds || []), ...adoptedKeys])] }
+      : row));
     try {
       await savePacking(next, author());
       toastOk('Orden guardado');

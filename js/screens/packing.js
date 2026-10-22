@@ -23,7 +23,7 @@ import {
   watchPacking, watchPackers, watchPackRuns, seatedPacker, sitDown, savedSpot,
 } from '../data/packing.js';
 import {
-  packingSequence, packerByPin, longerPinFrom, unassignedPlaces, canDo, spotIndex,
+  packingSequence, packerByPin, longerPinFrom, placementProblems, canDo, spotIndex,
 } from '../lib/packing.js';
 import { today, formatDayLong, formatTime, capitalize } from '../lib/dates.js';
 import { versionLabel } from '../version.js';
@@ -203,7 +203,9 @@ export function renderPacking() {
     if (!canDo(record, 'pack')) return notAllowed();
 
     const roster = activeClients();
-    const orphans = unassignedPlaces(setup.lines, store.farms, store.clients);
+    const { unplaced, adopted, homeless } = placementProblems({
+      lines: setup.lines, farms: store.farms, clients: roster,
+    });
 
     return h('div.stack.stack-5',
       h('div.pk__who',
@@ -219,12 +221,22 @@ export function renderPacking() {
 
       h('div.pk__lines', setup.lines.map((line) => lineCard(line, roster))),
 
-      orphans.length
-        ? alert(`${plural(orphans.length, 'ubicación no está', 'ubicaciones no están')} en `
+      unplaced.length
+        ? alert(`${plural(unplaced.length, 'ubicación no está', 'ubicaciones no están')} en `
           + 'ninguna libreta: '
-          + `${orphans.map((one) => `${one.farm.name} · ${one.place.name}`).join(', ')}. `
-          + 'Su comida no se va a empacar hasta que alguien las meta en una libreta, desde '
-          + 'Organizar libreta en el menú.', 'warn', 'alert')
+          + `${unplaced.map((one) => `${one.farm.name} · ${one.place.name}`).join(', ')}. `
+          + 'Nadie va a empacar a su gente hasta que alguien las meta en una libreta, desde '
+          + 'Avisos u Organizar libreta en el menú.', 'bad', 'alert')
+        : null,
+      homeless.length
+        ? alert(`${homeless.map((one) => one.name).join(', ')}: sin farma, así que ninguna libreta `
+          + 'los puede empacar. Que la oficina les ponga su farma.', 'bad', 'alert')
+        : null,
+      adopted.length
+        ? alert(`${plural(adopted.length, 'ubicación nueva se empaca', 'ubicaciones nuevas se empacan')} `
+          + 'con el resto de su farma: '
+          + `${adopted.map((one) => `${one.farm.name} · ${one.place.name} en ${one.line.name}`).join(', ')}. `
+          + 'Confírmalas o muévelas desde Avisos en el menú.', 'warn', 'pin')
         : null,
 
       runs.length ? doneToday() : null);

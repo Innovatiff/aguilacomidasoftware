@@ -36,6 +36,7 @@ import { renderChat } from './screens/chat.js';
 import { renderSettings } from './screens/settings.js';
 import { emptyState, button } from './ui/kit.js';
 import { kitchen } from './lib/mode.js';
+import { seatedPacker } from './data/packing.js';
 
 const TABS = [
   { id: 'home',     path: '/',         label: 'Inicio',   icon: 'home' },
@@ -64,6 +65,12 @@ watchSession(() => {
   if (!session.ready) return;
 
   if (!session.user) return enter('auth');
+  // A «Solo cocina» account is sent to the kitchen's page from the panel's,
+  // whatever address was typed or whatever the back button found.
+  if (session.isAdmin && session.kitchenOnly && !kitchen()) {
+    location.replace('./empaque.html');
+    return undefined;
+  }
   if (session.isAdmin) return enter('app');
 
   // Signed in, but this address is not on the team. The holding screen decides
@@ -142,7 +149,28 @@ function enter(next) {
   }
 }
 
+/**
+ * The kitchen's page knows the kitchen's screens and no others.
+ *
+ * It used to register the whole panel and simply not show the rail, so the
+ * back button — or any address that slipped in — drew the panel's Inicio, with
+ * the money owed and the takings, on the computer where they pack. Now every
+ * other address goes back to the kitchen: the menu for whoever is sitting
+ * there, or the keypad. Configurar el empaque too: the libretas, the users and
+ * their PINs are the manager's, from the panel.
+ */
+function registerKitchenRoutes() {
+  const home = () => { go(seatedPacker() ? '/rapido' : '/empaque', { replace: true }); };
+  register('/empaque', renderPacking);
+  // Before ':id', so it is never read as the name of a libreta.
+  register('/empaque/ajustes', home);
+  register('/empaque/:id', renderPackingRun);
+  register('/rapido', renderQuick);
+  setNotFound(home);
+}
+
 function registerRoutes() {
+  if (kitchen()) { registerKitchenRoutes(); return; }
   register('/', renderDashboard);
   register('/libreta', renderNotebook);
 
@@ -179,20 +207,13 @@ function registerRoutes() {
   register('/settings', renderSettings);
 
   setNotFound(() => {
-    // On a kitchen computer "el inicio" is the keypad, not the panel: that
-    // machine has no rail to climb back out with, so a button that lands on
-    // the dashboard would leave somebody stuck on a screen they never meant
-    // to open.
-    const homeHref = kitchen() ? '/empaque' : '/';
     screen({
       title: 'No encontrado',
       body: emptyState({
         icon: 'search',
         title: 'Esta pantalla no existe',
         text: 'El enlace puede estar mal escrito o la pantalla ya no está disponible.',
-        action: button(kitchen() ? 'Ir a Empaque' : 'Ir al inicio', {
-          onClick: () => go(homeHref),
-        }),
+        action: button('Ir al inicio', { onClick: () => go('/') }),
       }),
     });
   });

@@ -50,7 +50,13 @@ import { kitchen } from '../lib/mode.js';
 import {
   seatedPacker, sitDown, watchPackers, watchPacking, savePacking,
 } from '../data/packing.js';
-import { abilitiesOf, lineOf, arrangeLine, orderedPlaces } from '../lib/packing.js';
+import {
+  abilitiesOf, lineOf, arrangeLine, orderedPlaces, placementProblems, boardChanges, confirmPlace,
+  lineOfPlace, adoptingLine,
+} from '../lib/packing.js';
+import { dayBoard } from '../lib/board.js';
+import { novedades, unseenToday } from '../lib/notices.js';
+import { avisosFrom, avisosStrip, openAvisos, openNovedades } from '../ui/kitchen-news.js';
 import { arrangeSheet } from '../ui/libreta-order.js';
 import { sheet, toastOk, toastBad } from '../ui/overlay.js';
 import { errorText } from '../firebase.js';
@@ -147,11 +153,18 @@ export function renderQuick() {
     }, () => {})
     : null;
 
-  // The libretas, for the one assigned to whoever is sitting here.
+  // The libretas: in the kitchen for the one assigned to whoever is sitting
+  // here and for the avisos; at the counter to say where somebody new is
+  // packed.
   let packingSetup = null;
-  const stopSetup = kitchen()
-    ? watchPacking((found) => { packingSetup = found; paintTiles(); }, () => {})
-    : null;
+  const stopSetup = watchPacking((found) => {
+    packingSetup = found;
+    if (kitchen()) { paintTiles(); news?.refresh(); }
+  }, () => {});
+
+  // The Avisos or Novedades page open over the menu, if any: it redraws when
+  // a client or the libretas change, like the board does.
+  let news = null;
 
   /** Their libreta, when the manager gave them one and it still exists. */
   const myLine = () => (mine?.lineId ? lineOf(packingSetup?.lines, mine.lineId) : null);
@@ -164,6 +177,7 @@ export function renderQuick() {
     // Only the tile grid depends on the store; a flow running on top owns its
     // own copy of what it needs and must not be torn out from under a hand.
     if (panel && !document.querySelector('.pos--flow')) paintTiles();
+    news?.refresh();
   });
 
   /**
@@ -378,7 +392,7 @@ export function renderQuick() {
         icon: 'box', title: 'Empacar',
         sub: myLine() ? `Tu libreta: ${myLine().name}` : 'La comida de hoy, en el orden de su libreta',
         hero: true, band: true,
-        onClick: () => go(myLine() ? `/empaque/${myLine().id}` : '/empaque'),
+        onClick: () => startPacking(ready),
       }),
       organize: () => posTile({
         icon: 'sort', title: 'Organizar libreta', family: 'plan',
@@ -441,20 +455,36 @@ export function renderQuick() {
      * here, whatever they are allowed to change: reading how many plates go
      * without chicken changes nothing.
      */
+    const unseen = ready ? unseenToday(newsGroups(), today(), newsSeenAt()) : 0;
     const heading = (title, hint) => h('div.poshead',
       h('div.poshead__text',
         h('h2.pos__q', title),
         hint ? h('p.pos__hint', hint) : null),
-      h('button.posinfo', {
-        type: 'button',
-        disabled: !ready,
-        onclick: () => openDayBoard(),
-      }, icon('clipboard'), h('span', 'Tablero de hoy')));
+      h('div.poshead__btns',
+        // Who started, paused or came back — with a count of what is new
+        // since this computer last opened it.
+        h('button.posinfo', {
+          type: 'button',
+          disabled: !ready,
+          onclick: () => showNews(),
+        }, icon('bell'), h('span', 'Novedades'),
+        unseen ? h('span.posinfo__n', { 'aria-label': `${unseen} sin ver` }, String(unseen)) : null),
+        h('button.posinfo', {
+          type: 'button',
+          disabled: !ready,
+          onclick: () => openBoard(),
+        }, icon('clipboard'), h('span', 'Tablero de hoy'))));
+
+    // What has to be acted on, one strip across the menu, the most urgent
+    // first. Shown to everybody: whoever cannot fix it can still tell
+    // somebody who can.
+    const strip = ready ? avisosStrip(avisosFrom(kitchenFound()), () => showAvisos()) : null;
 
     const nothing = !ok('pack') && !left.length && !right.length;
     if (nothing) {
       return [
         heading(`Hola, ${firstName(me)}`),
+        strip,
         h('div.posnote.posnote--warn', icon('alert'),
           h('div', 'Todavía no tienes nada asignado. Pídele al encargado que te dé '
             + 'permisos desde el panel.')),
@@ -472,6 +502,8 @@ export function renderQuick() {
         ? `${plural(eating.length, 'cliente', 'clientes')} en `
           + `${plural(farmsCount, 'farma', 'farmas')}`
         : 'Cargando…'),
+
+      strip,
 
       ok('pack')
         ? h('div.postiles.postiles--1', { style: { marginBottom: '14px' } }, tile.pack())
@@ -1117,8 +1149,28 @@ export function renderQuick() {
       commit: (s) => createClient(
         { ...emptyClient(farmById(s.farmId)), name: s.name.trim(), locationId: s.locationId, mealsPerDay: s.meals },
         farmById(s.farmId), author()),
-      done: (s) => ({ what: 'Cliente dado de alta', who: s.name.trim() }),
+      done: (s) => ({
+        what: 'Cliente dado de alta', who: s.name.trim(), note: whereNote(s.farmId, s.locationId),
+      }),
     });
+  }
+
+  /**
+   * Where somebody new is packed, said on the screen that registered them —
+   * and when nobody packs them yet, that the kitchen has been told.
+   */
+  function whereNote(farmId, locationId) {
+    const lines = packingSetup?.lines;
+    if (!lines || !farmId) return null;
+    const named = lineOfPlace(lines, farmId, locationId);
+    if (named) return `Se empaca en la libreta ${named.name}.`;
+    const home = adoptingLine(lines, farmId);
+    if (home) {
+      return `Su ubicación es nueva: se empaca en la libreta ${home.name}, con el resto de su farma. `
+        + 'La cocina lo ve en Avisos para confirmar el lugar.';
+    }
+    return 'Su ubicación no está en ninguna libreta: la cocina lo ve en rojo en Avisos para '
+      + 'acomodarla. Su comida ya cuenta en el tablero de hoy.';
   }
 
   /* --- Nueva farma -------------------------------------------------------- */
@@ -1325,15 +1377,28 @@ export function renderQuick() {
               ['Ya tiene', (farmOf(st)?.locations || []).map((one) => one.name).join(' · ') || 'Ninguna'],
               [st.places.length > 1 ? 'Nuevas' : 'Nueva', st.places.join(' · '), { total: true }],
             ]),
-            posNote('Todavía no está en ninguna libreta: se mete en la suya desde Organizar '
-              + 'libreta o Empaque → Configurar. Ya se puede dar de alta gente ahí.', 'ok')),
+            (() => {
+              const home = packingSetup?.lines ? adoptingLine(packingSetup.lines, st.farmId) : null;
+              return posNote(home
+                ? `Se va a empacar en la libreta ${home.name}, con el resto de la farma, después de `
+                  + 'sus otras ubicaciones. La cocina confirma el lugar o lo cambia desde Avisos.'
+                : 'Todavía no está en ninguna libreta: la cocina la mete en la suya desde Avisos u '
+                  + 'Organizar libreta. Ya se puede dar de alta gente ahí.', 'ok');
+            })()),
         },
       ],
       commit: (s) => addLocations(farmOf(s), s.places),
-      done: (s) => ({
-        what: s.places.length > 1 ? 'Ubicaciones agregadas' : 'Ubicación agregada',
-        who: `${farmOf(s)?.name || ''} · ${s.places.join(' · ')}`,
-      }),
+      done: (s) => {
+        const home = packingSetup?.lines ? adoptingLine(packingSetup.lines, s.farmId) : null;
+        return {
+          what: s.places.length > 1 ? 'Ubicaciones agregadas' : 'Ubicación agregada',
+          who: `${farmOf(s)?.name || ''} · ${s.places.join(' · ')}`,
+          note: home
+            ? `Quien se dé de alta ahí se empaca en la libreta ${home.name}, con el resto de la farma. `
+              + 'La cocina confirma el lugar en Avisos.'
+            : 'En cuanto alguien se dé de alta ahí, la cocina lo ve en Avisos para meterla en una libreta.',
+        };
+      },
     });
   }
 
@@ -1753,16 +1818,17 @@ export function renderQuick() {
    * against the libretas as they are at that moment, not as they were when
    * the sheet opened: the other computer may have changed its own meanwhile.
    */
-  async function organize() {
+  async function organize({ lineId = null, bring = null } = {}) {
     if (!packingSetup?.lines) {
       toastBad('Todavía no cargan las libretas. Intenta en un momento.');
       return;
     }
-    const line = myLine() || await whichLibreta(packingSetup.lines);
+    const line = (lineId && lineOf(packingSetup.lines, lineId))
+      || myLine() || await whichLibreta(packingSetup.lines);
     if (!line) return;
     const picked = await arrangeSheet({
       lines: packingSetup.lines, line, farms: store.farms, clients: store.clients,
-      takeFree: true, title: `Organizar ${line.name}`,
+      takeFree: true, title: `Organizar ${line.name}`, bring,
     });
     if (!picked) return;
     const next = arrangeLine(packingSetup.lines, line.id, picked, store.farms, store.clients);
@@ -1772,6 +1838,103 @@ export function renderQuick() {
         ? `${plural(picked.added.length, 'ubicación nueva', 'ubicaciones nuevas')} en ${line.name}`
         : 'Orden guardado');
     } catch (error) { toastBad(errorText(error)); }
+  }
+
+  /**
+   * "Está bien ahí": a location the system put in a libreta with the rest of
+   * its farm, written in for good where it already was.
+   */
+  async function confirmSpot(lineId, key) {
+    const line = lineOf(packingSetup?.lines, lineId);
+    if (!line) return;
+    const next = confirmPlace(packingSetup.lines, line.id, key, store.farms, store.clients);
+    try {
+      await savePacking(next, { name: me?.name || '' });
+      toastOk(`Quedó en ${line.name}`);
+    } catch (error) { toastBad(errorText(error)); }
+  }
+
+  /* --- Avisos, Novedades and the board ---------------------------------- */
+
+  /**
+   * Everything the avisos are made of, from what is on screen now: who is in
+   * no libreta, which new locations went in by themselves, and what changed
+   * on the board since somebody looked at it.
+   */
+  function kitchenFound() {
+    if (!packingSetup?.lines || !store.loaded.clients || !store.loaded.farms) return null;
+    const day = today();
+    const serving = activeClients();
+    const lines = packingSetup.lines;
+    const problems = placementProblems({ lines, farms: store.farms, clients: serving });
+    const board = dayBoard({ lines, farms: store.farms, clients: serving, day });
+    const names = Object.fromEntries(store.clients.map((client) => [client.id, client.name]));
+    const change = boardChanges(packingSetup.boardSeen,
+      { day, plates: board.plates.total, plan: board.plan, names });
+    return { ...problems, change };
+  }
+
+  // Declarations rather than consts: the menu is first drawn before this
+  // part of the function has run.
+  function newsGroups() {
+    return novedades({ clients: store.clients, lines: packingSetup?.lines || [], day: today() });
+  }
+
+  // When this computer last opened Novedades, for the count on its button. On
+  // the machine, not shared: the count is "new to whoever sits here".
+  function newsSeenAt() {
+    try { return Number(localStorage.getItem('aguila.novedades.vistas')) || 0; } catch { return 0; }
+  }
+
+  function showNews() {
+    news?.close();
+    news = openNovedades({ read: newsGroups });
+    try { localStorage.setItem('aguila.novedades.vistas', String(Date.now())); } catch { /* the count just stays */ }
+    paintTiles();
+  }
+
+  function showAvisos() {
+    news?.close();
+    news = openAvisos({
+      read: () => avisosFrom(kitchenFound()),
+      canArrange: allowed?.organize === true,
+      lines: packingSetup?.lines || [],
+      actions: {
+        place: (lineId, key) => organize({ lineId, bring: key }),
+        move: (lineId, key) => organize({ lineId, bring: key }),
+        confirm: (lineId, key) => confirmSpot(lineId, key),
+        board: () => openBoard(),
+      },
+    });
+  }
+
+  /** The day's board, written down as seen by whoever is sitting here. */
+  function openBoard() { openDayBoard({ by: me?.name || '' }); }
+
+  /**
+   * Empacar — but not past people nobody is going to pack without saying so.
+   * The packer goes on if they choose: the plates of everybody in a libreta
+   * still have to go out. They just do it knowing.
+   */
+  async function startPacking(ready) {
+    const where = myLine() ? `/empaque/${myLine().id}` : '/empaque';
+    const red = ready ? avisosFrom(kitchenFound()).filter((aviso) => aviso.tone === 'bad') : [];
+    if (!red.length) { go(where); return; }
+    const choice = await sheet({
+      title: 'Antes de empacar',
+      build: (close) => h('div.stack.stack-4',
+        h('div.posnote.posnote--bad', icon('alert'), h('div',
+          'Hay gente que come y no está en ninguna libreta: nadie la va a empacar.')),
+        h('ul.stack.stack-2', red.map((aviso) => h('li.t-md', aviso.text))),
+        button('Ver avisos', {
+          variant: 'primary', size: 'lg', block: true, icon: 'alert', onClick: () => close('avisos'),
+        }),
+        button('Empacar de todos modos', {
+          variant: 'soft', size: 'lg', block: true, icon: 'box', onClick: () => close('pack'),
+        })),
+    });
+    if (choice === 'avisos') showAvisos();
+    else if (choice === 'pack') go(where);
   }
 
   /** "¿Cuál libreta?" — for somebody the manager has not given one. */
@@ -1796,6 +1959,7 @@ export function renderQuick() {
     stopTill?.();
     stopUsers?.();
     stopSetup?.();
+    news?.close();
     unmountPos();
   };
 }

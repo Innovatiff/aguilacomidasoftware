@@ -1235,6 +1235,15 @@
   color: var(--text);
   letter-spacing: .06em;
 }
+/* A location the libreta took on with its farm, not yet confirmed. */
+.pkperson__new {
+  display: inline-block;
+  margin-left: var(--s3);
+  padding: 1px var(--s2);
+  border-radius: var(--r-sm);
+  color: #ffffff; background: #b87c07;
+  letter-spacing: .06em;
+}
 
 /* The name and the count are one thought, so they are one row. The name is
    larger — it is what goes on the container — and the count is the only orange
@@ -1667,6 +1676,8 @@
 .dot--1 { background: var(--pos-brand); }
 .dot--2 { background: var(--pos-plan); }
 .dot--3 { background: var(--pos-who); }
+/* «Sin libreta»: people whose food is counted but nobody is packing yet. */
+.dot--none { background: var(--pos-bad); }
 
 /* "● Libreta 1: 2" — a name and its number, never one without the other. */
 .dcount { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
@@ -1845,3 +1856,106 @@
 .posdiet__tag:focus-visible { outline: 4px solid var(--pos-brand); outline-offset: 3px; }
 .posdiet__add { margin-top: 18px; }
 .posdiet__more { margin-top: 16px; }
+
+/* --- Avisos: one strip across the kitchen's menu ------------------------------
+   The most urgent thing first, in the colour of how urgent it is, and the
+   whole strip is the button. One line tall, because the menu has to keep
+   fitting a 768px screen with it. */
+
+.poshead__btns { flex: none; display: flex; gap: 10px; }
+.posinfo__n {
+  min-width: 26px; height: 26px; padding: 0 7px;
+  display: inline-grid; place-items: center;
+  font-size: 15px; font-weight: 900; color: #ffffff;
+  background: var(--pos-brand); border-radius: 999px;
+}
+
+.posaviso {
+  width: 100%;
+  display: flex; align-items: center; gap: 12px;
+  min-height: 54px; margin: 0 0 12px; padding: 8px 16px;
+  font: inherit; font-size: 18px; font-weight: 700; text-align: left;
+  color: var(--pos-text);
+  border: 3px solid var(--pos-line); border-radius: var(--pos-r);
+  cursor: pointer;
+}
+.posaviso svg { flex: none; width: 26px; height: 26px; }
+.posaviso:focus-visible { outline: 4px solid var(--pos-brand); outline-offset: 3px; }
+.posaviso__text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.posaviso__more { font-weight: 600; color: var(--pos-soft); }
+.posaviso__go {
+  flex: none; display: inline-flex; align-items: center; gap: 4px;
+  font-weight: 800; white-space: nowrap;
+}
+.posaviso__go svg { width: 22px; height: 22px; }
+.posaviso--bad  { border-color: var(--pos-bad); background: #fdecec; }
+.posaviso--bad > svg { color: var(--pos-bad); }
+.posaviso--warn { border-color: #b87c07; background: #fff8e8; }
+.posaviso--warn > svg { color: #b87c07; }
+.posaviso--info { border-color: var(--pos-plan); background: #e7f4f5; }
+.posaviso--info > svg { color: var(--pos-plan); }
+
+/* --- Avisos and Novedades, full screen --------------------------------------- */
+
+.knews { max-width: 980px; }
+.knews__list { display: flex; flex-direction: column; gap: 12px; }
+.knews__card {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 16px 18px;
+  background: var(--pos-fill);
+  border: 3px solid var(--pos-line); border-left-width: 10px; border-radius: var(--pos-r);
+}
+.knews__card--bad  { border-color: var(--pos-bad); }
+.knews__card--warn { border-color: #b87c07; }
+.knews__card--info { border-color: var(--pos-plan); }
+.knews__title { display: flex; align-items: center; gap: 10px; font-size: 22px; font-weight: 800; }
+.knews__title svg { flex: none; width: 26px; height: 26px; }
+.knews__card--bad .knews__title svg { color: var(--pos-bad); }
+.knews__card--warn .knews__title svg { color: #b87c07; }
+.knews__card--info .knews__title svg { color: var(--pos-plan); }
+.knews__tag {
+  font-size: 13px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 6px; color: #ffffff; background: #b87c07;
+}
+.knews__text { margin: 0; font-size: 18px; line-height: 1.4; }
+.knews__ask { margin: 0; font-size: 17px; font-weight: 700; color: var(--pos-soft); }
+.knews__actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.knews__btn { min-height: 56px; font-size: 19px; flex: 0 1 auto; }
+.knews__whos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 18px; }
+.knews__who { display: flex; align-items: baseline; gap: 10px; }
+.knews__n { min-width: 44px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.knews__n--up { color: var(--pos-ok); }
+.knews__n--down { color: var(--pos-bad); }
+.knews__soft { color: var(--pos-soft); font-size: 16px; }
+
+.knews__day { margin-top: 18px; }
+.knews__dayname { margin: 0 0 10px; font-size: 20px; font-weight: 800; letter-spacing: .02em; }
+.knews__row {
+  display: grid; grid-template-columns: 150px minmax(0, 1fr) auto; align-items: center; gap: 14px;
+  padding: 12px 16px;
+  background: var(--pos-fill);
+  border: 3px solid var(--pos-line-soft); border-radius: var(--pos-r);
+}
+.knews__badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 15px; font-weight: 900; letter-spacing: .04em; text-transform: uppercase;
+}
+.knews__badge svg { width: 22px; height: 22px; }
+.knews__row--ok .knews__badge { color: var(--pos-ok); }
+.knews__row--warn .knews__badge { color: #9a6604; }
+.knews__row--bad .knews__badge { color: var(--pos-bad); }
+.knews__row--info .knews__badge { color: var(--pos-plan); }
+.knews__body { display: flex; flex-direction: column; min-width: 0; }
+.knews__name { font-size: 19px; font-weight: 800; }
+.knews__where { font-size: 16px; color: var(--pos-soft); }
+.knews__side { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; text-align: right; }
+.knews__time { font-size: 15px; font-weight: 700; color: var(--pos-soft); }
+.knews__alarm {
+  grid-column: 1 / -1;
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 16px; font-weight: 800; color: var(--pos-bad);
+}
+.knews__alarm svg { width: 20px; height: 20px; }
+@media (max-width: 1100px) {
+  .knews__row { grid-template-columns: 130px minmax(0, 1fr) auto; }
+}

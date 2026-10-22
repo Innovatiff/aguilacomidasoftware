@@ -103,6 +103,10 @@ Si alguien entra con un correo que no está en el equipo, ve **Sin acceso al
 panel** — no un error — y la pantalla se convierte en el panel sola en cuanto lo
 agregues.
 
+Al agregar se escoge el acceso: **Panel completo**, o **Solo cocina** para la
+cuenta de las computadoras donde se empaca (ver *La cocina sólo ve la
+cocina*). Tocar a alguien en la lista lo cambia.
+
 > **Por qué no basta con crear la cuenta en Authentication.** La `apiKey` de
 > este proyecto es pública (tiene que serlo, va en el navegador) y la app de los
 > ranchos necesita registro abierto por correo. Cualquiera puede crear una
@@ -859,14 +863,93 @@ Lo que no pueden comer sale de la ficha de cada persona: todo lo de *No puede
 comer*, y lo de sus *Preferencias* que empieza con «sin» o «no» («doble
 tortilla» no cuenta). «Sin pollo», «No Pollo» y «pollo» son la misma línea, con
 acento o sin él, y cada persona cuenta una vez aunque lo tenga escrito en las
-dos listas. Si alguien come hoy pero su ubicación no está en ninguna libreta,
-sale un aviso arriba con su nombre: no se empaca, así que no entra en las
-cuentas.
+dos listas.
+
+**El tablero cuenta a todos los que comen hoy, exacto.** Si alguien come hoy y
+su ubicación no está en ninguna libreta, su comida **sí** entra en todas las
+cuentas, en una columna roja **«Sin libreta»**, y arriba sale en rojo con su
+nombre: así se cocina para esa persona aunque todavía nadie la empaque. (Antes
+quedaba fuera de las cuentas y sólo se avisaba abajo: se cocinaba para el
+tablero, el tablero se quedaba corto, y a mediodía faltaban comidas.) El total
+de comidas es siempre lo que empacan las libretas más lo de «Sin libreta», ni
+una más ni una menos.
 
 Las columnas llevan el nombre de cada libreta. Si se prefiere ver ahí el
 nombre de quien la empaca («Monse», «Clau»), basta con ponérselo a la libreta
 en *Configurar → Nombre*. El tablero se actualiza solo si un cliente cambia
-mientras está abierto, y no cambia nada: es para leer.
+mientras está abierto, y no cambia nada: es para leer. Lo único que guarda es
+**qué decía cuando alguien lo vio** —quién, a qué hora, y las comidas de cada
+persona—, para que el menú avise si cambia después (ver *Avisos*).
+
+#### Avisos: nadie se queda sin empacar
+
+Lo que la cocina tiene que hacer sale en una **franja de colores** arriba del
+menú, lo más urgente primero; tocarla abre **Avisos**, con un botón para cada
+cosa. Le sale a todos, tengan o no permiso de arreglarlo: quien no puede, avisa.
+
+- **Ubicación nueva de una farma que ya está en una libreta** (amarillo). Si la
+  oficina da de alta a alguien en una casa que nadie metió en ninguna libreta,
+  y el resto de esa farma está en una sola libreta, **se empaca ahí sola**,
+  justo después de las otras casas de su farma, y en la pantalla de empaque
+  sale con la marca *Ubicación nueva*. El aviso dice dónde quedó —«Georgia ·
+  Casa 7 se empaca en Claudia, después de Casa 2»— con **Está bien ahí** (la
+  deja escrita en ese lugar, sin mover nada) o **Cambiar de lugar** (abre
+  *Organizar libreta* con ella encendida).
+- **Ubicación en ninguna libreta** (rojo). Cuando no hay a dónde mandarla sola
+  —una farma nueva que ninguna libreta tiene, o una farma repartida entre las
+  dos libretas— nadie la empaca. Su comida sí está contada en el tablero, en
+  «Sin libreta», y el aviso trae **Acomodar en Claudia / Acomodar en Lucía**,
+  que abre esa libreta con la casa ya puesta para escoger su lugar. **Empacar**
+  también pregunta antes de empezar: *Ver avisos* o *Empacar de todos modos*.
+- **Gente sin farma** (rojo): ninguna libreta la puede empacar; la oficina le
+  pone su farma en la ficha.
+- **El tablero cambió** (azul). Si después de que alguien vio el tablero entra
+  alguien nuevo, vuelve alguien o alguien se va a pausa, dice cuántas comidas
+  más o menos y quiénes: «Cuando Lucía lo vio a las 9:12 eran 296 comidas; ahora
+  son 299 (+3): +2 Nora, +1 Ciro». Se quita al volver a ver el tablero. Funciona
+  en las dos computadoras: lo que se vio se guarda con las libretas.
+
+La oficina también se entera: al dar de alta a alguien en *Acción rápida*, la
+pantalla final dice en qué libreta se empaca, o que la cocina lo va a ver en
+Avisos. **Empaque → Configurar** muestra los mismos avisos rojos y amarillos.
+
+#### Novedades
+
+El botón **Novedades**, al lado de *Tablero de hoy*, enseña lo que cambió entre
+los clientes en la última semana, por día y lo más nuevo primero: **quién
+entró**, **quién se fue a pausa** (y quién terminó solo por su último día),
+**quién volvió**, quién ya no pide, y **a quién le toca su último día** hoy o
+mañana. Lo de hoy dice cuántas comidas cambia hoy (*+2 comidas hoy*) y en qué
+libreta se empaca, o que no está en ninguna. El número rojo del botón es lo
+nuevo desde la última vez que se abrió en esa computadora.
+
+#### La cocina sólo ve la cocina
+
+En **`/empaque`** no existe ninguna pantalla del panel. Si algo la manda a
+otra dirección —el botón de atrás, un enlace, `#/` escrito a mano, o
+*Configurar el empaque*—, regresa a su menú (o al teclado del número si nadie
+ha entrado). Antes, el botón de atrás podía abrir el *Inicio* del panel, con lo
+que se debe y lo cobrado, en la computadora de la cocina.
+
+Para que esas computadoras **no puedan abrir el panel ni escribiendo su
+dirección**, entra en ellas con una cuenta **Solo cocina**:
+
+1. En la consola de Firebase, **Authentication → Users → Add user**: un correo
+   para la cocina (por ejemplo `cocina@tudominio.com`) y una contraseña.
+2. En el panel, **Ajustes → Equipo → Agregar**, escoge **Solo cocina
+   (Empaque)**, escribe ese correo y un nombre.
+3. En cada computadora de la cocina: abre el panel (la dirección de siempre),
+   **Ajustes → Cerrar sesión**; luego abre Empaque y entra con la cuenta de la
+   cocina. (La pantalla de la cocina no tiene *Cerrar sesión* a propósito: un
+   toque por error dejaría la cocina sin entrar a las seis de la mañana.)
+
+Con esa cuenta, abrir el panel manda la computadora a Empaque. A alguien que
+ya está en el equipo se le cambia tocándolo en la lista: *Panel completo* o
+*Solo cocina*. Para volver a usar una de esas computadoras con otra cuenta,
+cambia la de la cocina a *Panel completo* desde otra computadora, y en ella
+abre el panel y *Cerrar sesión*. No hay reglas que pegar: es un campo más en `staff/{correo}`.
+Es una cerca de la app, no de la base de datos: la cocina sigue leyendo y
+escribiendo lo que sus propias pantallas necesitan.
 
 En cada computadora, una sola vez:
 
@@ -1099,6 +1182,8 @@ hasta que vuelve la conexión.
 ```
 staff/{correo}                   -- quién puede entrar al panel
   email, name, addedByName, addedAt, lastSeenAt
+  role                           -- 'panel' (o nada) | 'cocina': Solo cocina,
+                                    que el panel manda a /empaque
 
 clientEmails/{correo}            -- a qué cliente pertenece ese correo
   clientId, clientName
@@ -1183,7 +1268,13 @@ config/packing                   -- cómo se reparte el empaque
                                     leyendo, y el primer guardado del selector
                                     la convierte en placeIds
   autoPrint                      -- si la etiqueta sale sola al avanzar
+  boardSeen { day, at, by,       -- lo que decía el tablero la última vez que
+    plates, plan ['id:comidas'] }   alguien lo vio, para avisar qué cambió
   updatedAt, updatedByName
+
+  Una ubicación que no está en ninguna libreta, de una farma que está en una
+  sola, se empaca en esa (después de las otras de su farma) sin estar escrita
+  aquí; «Está bien ahí» u ordenar la libreta la escriben.
 
 packers/{packerId}               -- cada persona que trabaja en la cocina
   name, pin, active              -- el PIN es una etiqueta, no una contraseña

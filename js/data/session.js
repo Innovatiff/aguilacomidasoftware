@@ -33,6 +33,11 @@ export const session = {
   get staff() { return state.staff; },
   get profile() { return state.profile; },
   get isAdmin() { return !!state.staff; },
+  /**
+   * An account added to the team as «Solo cocina»: it opens the kitchen's
+   * page and nothing else. The panel sends it there; see js/app.js.
+   */
+  get kitchenOnly() { return state.staff?.role === 'cocina'; },
   get displayName() {
     return state.profile?.name || state.staff?.name || state.user?.displayName || state.user?.email || '';
   },

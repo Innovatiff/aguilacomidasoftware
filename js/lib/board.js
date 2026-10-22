@@ -10,11 +10,14 @@
  *
  * What counts:
  *
- *   **Whoever is packed today.** The same people the packing screen walks,
- *   libreta by libreta — so a number on this board is a number of containers
- *   somebody is about to fill. Somebody who eats today but is in no libreta is
- *   not packed, so they are not on the board; they are listed apart instead,
- *   because a person nobody packs for is the thing to fix first.
+ *   **Everybody who eats today, exactly.** The same people the packing screen
+ *   walks, libreta by libreta — so a number on this board is a number of
+ *   containers somebody is about to fill — and anybody who eats today but is
+ *   in no libreta too, in a column of their own, «Sin libreta». They used to
+ *   be left out of the numbers and only listed underneath: the kitchen cooked
+ *   for the board, the board was short by them, and the food ran out at noon.
+ *   Whatever is cooked from this board now covers every plate that has to go
+ *   out; the column says which ones nobody is packing yet.
  *
  *   **Medias count everybody; completas only two comidas.** Everybody packed
  *   today takes a media — the people on one comida and the people on two — so
@@ -86,15 +89,22 @@ export function restrictionsOf(client) {
  * @param {string}   [input.day]
  *
  * @returns {object}
- *   lines    `[{ id, name }]` — one column each
+ *   lines    `[{ id, name, none? }]` — one column each, and «Sin libreta»
+ *            (`none: true`, id `NO_LINE`) when anybody eats today in none
  *   people   `{ total, byLine }` and plates the same, for the whole day
  *   kinds    `[{ id, title, note, people, plates, more, rows }]` — medias
  *            (everybody packed today) and completas (two comidas or more);
  *            `rows` is `[{ key, label, total, byLine, names }]`, alphabetical,
  *            with `names` the people behind each number by libreta; `more` is
  *            how many of the group take three or more
- *   outside  who eats today but is in no libreta
+ *   outside  who eats today but is in no libreta, with their plates — they
+ *            are in every number above too, under «Sin libreta»
+ *   plan     `{ clientId: plates }` for everybody on the board, to tell later
+ *            what changed (see `boardChanges`)
  */
+/** The column for people who eat today and are in no libreta. */
+export const NO_LINE = '_none';
+
 export function dayBoard({ lines = [], farms = [], clients = [], day = todayKey() }) {
   const weekday = weekdayOf(day);
   const columns = lines.map((line) => ({ id: line.id, name: line.name }));
@@ -109,9 +119,19 @@ export function dayBoard({ lines = [], farms = [], clients = [], day = todayKey(
     }
   }
   const inLine = new Set(packed.map((one) => one.client.id));
-  const outside = clients
+  const adrift = clients
     .filter((client) => mealsOn(client, weekday) > 0 && !inLine.has(client.id))
-    .map((client) => ({ id: client.id, name: client.name, farmName: client.farmName || '' }));
+    .sort((a, b) => String(a.name).localeCompare(String(b.name), 'es'));
+  const outside = adrift.map((client) => ({
+    id: client.id, name: client.name, farmName: client.farmName || '',
+    locationName: client.locationName || '', plates: mealsOn(client, weekday),
+  }));
+  // Counted, in a column of their own: their food has to be cooked like
+  // everybody else's, and the column is what says nobody is packing it yet.
+  if (adrift.length) {
+    columns.push({ id: NO_LINE, name: 'Sin libreta', none: true });
+    for (const client of adrift) packed.push({ client, line: NO_LINE, plates: mealsOn(client, weekday) });
+  }
 
   /*
    * "Huevo" and "huevos" are one line. Only merged when both are actually
@@ -201,5 +221,6 @@ export function dayBoard({ lines = [], farms = [], clients = [], day = todayKey(
     add(plates, one.line, one.plates);
   }
 
-  return { day, lines: columns, people, plates, kinds, outside };
+  const plan = Object.fromEntries(packed.map((one) => [one.client.id, one.plates]));
+  return { day, lines: columns, people, plates, kinds, outside, plan };
 }

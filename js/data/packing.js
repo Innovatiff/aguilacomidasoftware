@@ -64,6 +64,26 @@ export async function savePacking(lines, author) {
   return clean;
 }
 
+/**
+ * Writes down what the board said when somebody looked at it.
+ *
+ * Every plate on it, by person, so the kitchen's menu can say exactly what
+ * changed afterwards — on either computer, which is why it is stored with the
+ * setup and not on the machine. Bounded like every kitchen write; failing it
+ * only means the next change is measured from an earlier look.
+ */
+export async function noteBoardSeen({ day, plates, plan }, by = '') {
+  await saved(setDoc(packingRef(), {
+    boardSeen: {
+      day,
+      at: Date.now(),
+      by: String(by || ''),
+      plates: Number(plates) || 0,
+      plan: Object.entries(plan || {}).map(([id, n]) => `${id}:${n}`),
+    },
+  }, { merge: true }));
+}
+
 /** Whether a label prints by itself as each person comes up. */
 export async function setAutoPrint(on, author) {
   await setDoc(packingRef(), {

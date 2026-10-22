@@ -589,7 +589,10 @@ export function renderPackingRun(context) {
         [slide.farm.name, slide.place?.name].filter(Boolean).join(' · '),
         // Which of the farm's bags their food goes in, when it has more than
         // one: the bag on the counter has the same number on its sticker.
-        bag?.of > 1 ? h('span.pkperson__bag', `Bolsa ${bag.number} de ${bag.of}`) : null),
+        bag?.of > 1 ? h('span.pkperson__bag', `Bolsa ${bag.number} de ${bag.of}`) : null,
+        // A location nobody has put in this libreta yet, packed here with its
+        // farm: said, so the packer knows why a house they did not have is here.
+        slide.newPlace ? h('span.pkperson__new', 'Ubicación nueva') : null),
 
       // Who, and how many, on one line.
       h('div.pkperson__head',

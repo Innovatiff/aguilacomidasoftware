@@ -29,6 +29,12 @@
  * has — a new farm's houses, one somebody took out — marked *Nueva*. Tapping
  * one puts it in this libreta at the end of the order; left on the shelf it
  * stays in none.
+ *
+ * A new location this libreta is already packing because it packs the rest of
+ * its farm (see `adoptingLine`) is in the order where it is packed, marked
+ * *Nueva* too; saving writes it in for good. `bring` opens the sheet with one
+ * location ready: taken into the order if it was on the shelf, and lit up
+ * where it is.
  */
 
 import { h, mount } from '../lib/dom.js';
@@ -46,13 +52,14 @@ import { allPlaces, orderedPlaces, freePlaces } from '../lib/packing.js';
  * @param {object[]} options.farms
  * @param {object[]} options.clients  everybody, to say how many live at each place
  * @param {boolean}  [options.takeFree]  offer the locations no libreta has
+ * @param {string}   [options.bring]  a location to open with, ready and lit
  * @param {string}   [options.title]
  * @returns {Promise<{ order: string[], added: string[] } | null>} the keys in
  *   order — every one of its own, the shelf's at the end — and which of them
  *   were free; null when nothing was saved
  */
 export async function arrangeSheet({
-  lines, line, farms, clients, takeFree = false, title = '',
+  lines, line, farms, clients, takeFree = false, bring = null, title = '',
 }) {
   /** How many people live at one location. */
   const peopleAt = (entry) => {
@@ -65,14 +72,20 @@ export async function arrangeSheet({
     }).length;
   };
 
-  const members = orderedPlaces(lines, line.id, farms, clients);
+  // What it packs, including new locations it took on with their farm.
+  const members = orderedPlaces(lines, line.id, farms, clients, { adopt: true });
+  const memberKeys = new Set(members.map((one) => one.key));
   // The paper book's order: the same libreta with no order of its own.
   const book = () => orderedPlaces(
     lines.map((row) => (row.id === line.id ? { ...row, order: [] } : row)),
-    line.id, farms, clients);
+    line.id, farms, clients, { adopt: true });
   // Locations no libreta has — offered to the kitchen, so a new house goes
   // straight into its place in the order instead of waiting for the manager.
-  const free = takeFree ? freePlaces(lines, farms, clients) : [];
+  // Not the ones this libreta already packs with their farm: those are in
+  // its order.
+  const free = takeFree
+    ? freePlaces(lines, farms, clients).filter((one) => !memberKeys.has(one.key))
+    : [];
   const freeKeys = new Set(free.map((one) => one.key));
   const byKey = new Map([...members, ...free].map((one) => [one.key, one]));
   // Where each location sits among all of them: farm by name, then the
@@ -84,6 +97,12 @@ export async function arrangeSheet({
   let editing = null;   // the row whose number is being typed
   let focus = null;     // where the cursor goes back to after a redraw
   let fresh = null;     // the row that just arrived, lit up for a moment
+
+  // Opened for one location: in the order and lit, wherever it is.
+  if (bring && byKey.has(bring)) {
+    if (!order.some((one) => one.key === bring)) order = [...order, byKey.get(bring)];
+    fresh = bring;
+  }
 
   const fold = (text) => String(text || '').toLowerCase()
     .normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -200,7 +219,8 @@ export async function arrangeSheet({
           onclick: () => { editing = one.key; paint(); },
         }, String(at + 1)),
       h('span.pkorder__text',
-        h('span.pkorder__place', one.place.name),
+        h('span.pkorder__place', one.place.name,
+          one.adopted || freeKeys.has(one.key) ? h('span.pkpool__free', 'Nueva') : null),
         h('span.pkorder__farm', `${one.farm.name} · `
           + `${count ? plural(count, 'cliente', 'clientes') : 'sin clientes'}`)),
       whole

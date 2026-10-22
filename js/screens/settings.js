@@ -16,12 +16,14 @@ import { screen } from '../ui/shell.js';
 import { icon } from '../lib/icons.js';
 import {
   card, button, badge, avatar, itemRow, list, defList, defRow, sectionLabel,
-  alert, emptyState, field, input, moneyInput, statGrid, stat, asyncButton,
+  alert, emptyState, field, fieldGroup, input, moneyInput, statGrid, stat, asyncButton,
 } from '../ui/kit.js';
 import { toastOk, toastBad, confirm, sheet } from '../ui/overlay.js';
 import { go } from '../lib/router.js';
 import { session, signOutNow, updateOwnProfile } from '../data/session.js';
-import { watchStaff, addStaff, removeStaff, isValidEmail, normalizeEmail } from '../data/staff.js';
+import {
+  watchStaff, addStaff, removeStaff, setStaffRole, isValidEmail, normalizeEmail,
+} from '../data/staff.js';
 import { savePricing } from '../data/pricing.js';
 import { saveBusiness, DEFAULT_BUSINESS } from '../data/business.js';
 import { copyTagsToPreferences } from '../data/clients.js';
@@ -243,19 +245,25 @@ export function renderSettings() {
         : emptyState({ icon: 'users', title: 'Sólo tú', text: 'Nadie más puede entrar al panel.' }),
 
       h('p.t-xs.c-faint',
-        'Quien esté en esta lista ve todos los ranchos, sus datos de contacto, '
-        + 'sus entregas y todos los pagos. Basta con que entre con ese correo.'));
+        'Quien esté en esta lista con «Panel completo» ve todos los ranchos, sus datos de '
+        + 'contacto, sus entregas y todos los pagos. Una cuenta «Solo cocina» abre únicamente '
+        + 'Empaque: es la que va en las computadoras de la cocina. Toca a alguien para cambiarlo.'));
   }
 
   function memberRow(person) {
     const isMe = normalizeEmail(person.email) === session.email;
     const seen = toDate(person.lastSeenAt);
 
+    const cocina = person.role === 'cocina';
     return itemRow({
       lead: avatar(person.name || person.email),
       title: person.name || person.email,
-      meta: [person.email, seen ? `visto ${formatStamp(seen)}` : 'nunca ha entrado']
+      meta: [cocina ? 'Solo cocina' : 'Panel completo', person.email,
+        seen ? `visto ${formatStamp(seen)}` : 'nunca ha entrado']
         .filter(Boolean).join(' · '),
+      // Not yourself: an account that turns itself into a kitchen one is
+      // sent out of the panel on the spot, with nobody left to undo it.
+      onClick: isMe ? undefined : () => changeAccess(person),
       end: isMe
         ? badge('Tú', 'brand')
         : h('button.btn.btn--sm.btn--ghost', {
@@ -486,15 +494,58 @@ export function renderSettings() {
     } catch (error) { toastBad(errorText(error)); }
   }
 
+  /** Panel completo or Solo cocina, for somebody already on the team. */
+  async function changeAccess(person) {
+    const cocina = person.role === 'cocina';
+    const role = await sheet({
+      title: `Acceso de ${person.name || person.email}`,
+      build: (close) => h('div.stack.stack-3',
+        h('p.t-sm.c-soft', cocina
+          ? 'Ahora solo abre Empaque.'
+          : 'Ahora tiene el panel completo.'),
+        button('Panel completo', {
+          variant: cocina ? 'primary' : 'soft', block: true, icon: 'home',
+          onClick: () => close('panel'),
+        }),
+        button('Solo cocina (Empaque)', {
+          variant: cocina ? 'soft' : 'primary', block: true, icon: 'box',
+          onClick: () => close('cocina'),
+        }),
+        h('p.t-xs.c-faint', 'Solo cocina: al entrar con esta cuenta, el panel manda la computadora '
+          + 'a Empaque. No ve cobros, clientes ni el equipo.')),
+    });
+    if (!role || role === (cocina ? 'cocina' : 'panel')) return;
+    try {
+      await setStaffRole(person.email, role);
+      toastOk(role === 'cocina' ? 'Ahora solo abre Empaque' : 'Ahora tiene el panel completo');
+    } catch (error) { toastBad(errorText(error)); }
+  }
+
   async function addMember() {
     const result = await sheet({
       title: 'Agregar al equipo',
       build: (close) => {
         let email = '';
         let name = '';
+        let role = 'panel';
+        const warning = h('div');
+        const paintWarning = () => mount(warning, role === 'cocina'
+          ? alert('Solo abre Empaque: es la cuenta para las computadoras de la cocina. No verá '
+            + 'cobros, clientes ni el equipo.', 'info')
+          : alert('Tendrá acceso completo: todos los ranchos, sus datos de contacto, '
+            + 'sus entregas y todos los pagos.', 'warn'));
+        paintWarning();
+        const choice = h('div.row.row--wrap', { style: { gap: '8px' } });
+        const paintChoice = () => mount(choice,
+          ['panel', 'cocina'].map((value) => h(`button.btn.btn--sm${role === value ? '.btn--primary' : '.btn--soft'}`, {
+            type: 'button',
+            'aria-pressed': role === value ? 'true' : 'false',
+            onclick: () => { role = value; paintChoice(); paintWarning(); },
+          }, value === 'cocina' ? 'Solo cocina (Empaque)' : 'Panel completo')));
+        paintChoice();
         return h('div.stack.stack-4',
-          alert('Tendrá acceso completo: todos los ranchos, sus datos de contacto, '
-            + 'sus entregas y todos los pagos.', 'warn'),
+          fieldGroup({ label: 'Acceso', control: choice }),
+          warning,
           field({
             label: 'Correo',
             hint: 'Con ese correo entra al panel. No necesita nada más.',
@@ -513,7 +564,7 @@ export function renderSettings() {
           }),
           button('Agregar', {
             variant: 'primary', block: true,
-            onClick: () => close({ email: email.trim(), name: name.trim() }),
+            onClick: () => close({ email: email.trim(), name: name.trim(), role }),
           }));
       },
     });
@@ -529,7 +580,7 @@ export function renderSettings() {
     }
 
     try {
-      await addStaff(result.email, result.name, { name: session.displayName });
+      await addStaff(result.email, result.name, { name: session.displayName }, result.role);
       toastOk('Agregado al equipo');
     } catch (error) { toastBad(errorText(error)); }
   }

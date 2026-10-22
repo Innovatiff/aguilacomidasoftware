@@ -30,17 +30,30 @@ import { h, mount } from '../lib/dom.js';
 import { icon } from '../lib/icons.js';
 import { posNote } from './pos-kit.js';
 import { store, subscribe, activeClients, isReady, firstError } from '../data/store.js';
-import { watchPacking } from '../data/packing.js';
-import { dayBoard } from '../lib/board.js';
+import { watchPacking, noteBoardSeen } from '../data/packing.js';
+import { dayBoard, NO_LINE } from '../lib/board.js';
 import { today, formatDayLong, capitalize } from '../lib/dates.js';
 import { number, plural } from '../lib/format.js';
 import { errorText } from '../firebase.js';
 
-export function openDayBoard() {
+/**
+ * @param {object} [options]
+ * @param {string} [options.by]  who is looking — written down with what the
+ *   board said, so the menu can later say "desde que Lucía vio el tablero".
+ */
+export function openDayBoard({ by = '' } = {}) {
   const day = today();
   let setup = null;
   let failure = null;
   let open = true;
+  // What was on screen, to write down as seen: once when the numbers first
+  // show, and again on closing, since the board redraws while it is open.
+  let shown = null;
+  let noted = false;
+  const note = () => {
+    if (!shown) return;
+    noteBoardSeen({ day, plates: shown.plates.total, plan: shown.plan }, by).catch(() => {});
+  };
   // Lines somebody opened to see who is in them. Kept across redraws: the
   // board redraws when a client changes, and a line should not snap shut
   // under the finger that opened it.
@@ -83,6 +96,7 @@ export function openDayBoard() {
   function close() {
     if (!open) return;
     open = false;
+    note();
     stops.forEach((stop) => stop?.());
     document.removeEventListener('keydown', onKey);
     window.removeEventListener('hashchange', onLeave);
@@ -109,13 +123,22 @@ export function openDayBoard() {
       lines: setup.lines, farms: store.farms, clients: activeClients(), day,
     });
     const [medias, completas] = board.kinds;
+    shown = board;
+    if (!noted) { noted = true; note(); }
+
+    const adrift = board.outside;
+    const adriftPlates = adrift.reduce((n, one) => n + one.plates, 0);
 
     return [
-      board.outside.length
-        ? posNote(`${plural(board.outside.length, 'persona come', 'personas comen')} hoy y no `
-          + `${board.outside.length === 1 ? 'está' : 'están'} en ninguna libreta, así que no `
-          + `${board.outside.length === 1 ? 'sale' : 'salen'} en estas cuentas: `
-          + `${board.outside.map((one) => one.name).join(', ')}. Avísale al encargado.`, 'warn')
+      // Counted, and said in red: their food is in every number below, so it
+      // gets cooked — but nobody packs it until their location is in a libreta.
+      adrift.length
+        ? posNote(`${plural(adrift.length, 'persona come', 'personas comen')} hoy y no `
+          + `${adrift.length === 1 ? 'está' : 'están'} en ninguna libreta: `
+          + `${adrift.map((one) => `${one.name} (${[one.farmName, one.locationName].filter(Boolean).join(' · ') || 'sin farma'})`).join(', ')}. `
+          + `Sus ${plural(adriftPlates, 'comida', 'comidas')} ya están en estas cuentas, en «Sin libreta», `
+          + 'para que se cocinen — pero nadie las va a empacar hasta que su ubicación entre a una '
+          + 'libreta, desde Organizar libreta.', 'bad')
         : null,
 
       h('div.dboard__stats',
@@ -142,7 +165,8 @@ export function openDayBoard() {
       board.kinds.map((kind) => whiteboard(kind, board.lines, opened)),
 
       h('p.dboard__foot',
-        'Cuenta a cada persona que se empaca hoy, en su libreta. Las medias son todos —los de '
+        'Cuenta a cada persona que come hoy, en su libreta —y en «Sin libreta» a quien todavía '
+        + 'no está en ninguna—. Las medias son todos —los de '
         + 'una comida y los de dos—; las completas, solo los de dos comidas (o más). Por eso '
         + 'siempre hay más medias que completas. Lo que no pueden comer sale de su ficha: '
         + '«No puede comer», y lo de sus preferencias que dice «sin».'),
@@ -157,7 +181,9 @@ export function openDayBoard() {
  * the cards and on every line — so after the first look the eye goes to its
  * own libreta's numbers without reading the name.
  */
-const tone = (lines, id) => `dot--${Math.max(0, lines.findIndex((line) => line.id === id)) + 1}`;
+const tone = (lines, id) => (id === NO_LINE
+  ? 'dot--none'
+  : `dot--${Math.max(0, lines.findIndex((line) => line.id === id)) + 1}`);
 
 /** "● Libreta 1: 2" — the libreta's name right beside its number. */
 function perLine(lines, line, n) {

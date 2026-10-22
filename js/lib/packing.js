@@ -82,6 +82,27 @@ export function normalizePacking(data) {
      */
     autoPrint: data?.autoPrint !== false,
 
+    /*
+     * What the board said the last time somebody looked at it today — who and
+     * how many plates each — so the kitchen's menu can say, on either
+     * computer, exactly what changed since: "3 comidas más desde las 9:12:
+     * Juan Pérez (2), Ana López (1)". See `boardChanges`.
+     */
+    boardSeen: data?.boardSeen?.day
+      ? {
+        day: String(data.boardSeen.day),
+        at: Number(data.boardSeen.at) || 0,
+        by: String(data.boardSeen.by || ''),
+        plates: Number(data.boardSeen.plates) || 0,
+        // Stored as "id:plates" strings: a list is replaced whole on every
+        // write, where a map would be merged and keep people who left.
+        plan: Object.fromEntries((Array.isArray(data.boardSeen.plan) ? data.boardSeen.plan : [])
+          .map((pair) => String(pair).split(':'))
+          .filter(([id, n]) => id && Number(n) > 0)
+          .map(([id, n]) => [id, Number(n)])),
+      }
+      : null,
+
     lines: DEFAULT_LINES.map((fallback, i) => {
       const line = stored[i] || {};
       return {
@@ -138,6 +159,32 @@ export function lineOfPlace(lines, farmId, locationId) {
   if (named) return named;
   return lineOfFarm(lines, farmId);
 }
+
+/**
+ * The libreta that packs a location nobody put in one: the one that already
+ * packs the rest of its farm, when there is exactly one.
+ *
+ * This is what stops a new house from going hungry. Somebody registers a
+ * client at a location created this morning; nobody has put that location in
+ * a libreta yet. Before, those people were in no libreta, so nobody packed
+ * them and the board did not count them — ten plates short at noon, cooked
+ * late. Now the location goes with its farm: packed in the libreta the farm's
+ * other houses are in, right after them (see `orderedPlaces`), and the kitchen
+ * is told so it can confirm the spot or move it (see `placementProblems`).
+ *
+ * Only when the answer is not a guess. A farm split across both libretas, or
+ * a farm no libreta has yet, has no single home — those stay in no libreta and
+ * are the loud warning instead.
+ */
+export function adoptingLine(lines, farmId) {
+  const homes = (lines || []).filter((line) => (line.farmIds || []).includes(farmId)
+    || (line.placeIds || []).some((key) => readPlaceKey(key).farmId === farmId));
+  return homes.length === 1 ? homes[0] : null;
+}
+
+/** The libreta that packs a location: its own, or else its farm's. */
+export const packingLineOf = (lines, farmId, locationId) =>
+  lineOfPlace(lines, farmId, locationId) || adoptingLine(lines, farmId);
 
 /**
  * Every location that exists, plus the "no location" bucket for any farm that
@@ -198,9 +245,17 @@ export const placesOf = (lines, lineId, farms, clients) =>
  *
  * @returns {{ key: string, farm: object, place: object }[]}
  */
-export function orderedPlaces(lines, lineId, farms, clients) {
+export function orderedPlaces(lines, lineId, farms, clients, { adopt = false } = {}) {
   const line = lineOf(lines, lineId);
-  const members = placesOf(lines, lineId, farms, clients);
+  // With `adopt`, also the locations nobody put anywhere that this libreta
+  // packs because it packs the rest of their farm — marked, so a screen can
+  // say they are new. Packing always asks with it; the manager's place picker
+  // asks without, because what it shows is what was chosen.
+  const members = adopt
+    ? allPlaces(farms, clients)
+      .filter((entry) => packingLineOf(lines, entry.farm.id, entry.place.id)?.id === lineId)
+      .map((entry) => (lineOfPlace(lines, entry.farm.id, entry.place.id) ? entry : { ...entry, adopted: true }))
+    : placesOf(lines, lineId, farms, clients);
 
   // The book's order: farms by first appearance, then each farm's own list.
   // `placesOf` already has each farm's locations in its own order, so a
@@ -271,7 +326,11 @@ export const freePlaces = (lines, farms, clients = []) => allPlaces(farms, clien
  */
 export function arrangeLine(lines, lineId, { order = [], added = [] }, farms, clients = []) {
   return (lines || []).map((row) => {
-    const own = orderedPlaces(lines, row.id, farms, clients).map((entry) => entry.key);
+    // The libreta being arranged keeps what it was packing, including any new
+    // location it had taken on with its farm — saving writes those in for
+    // good. The other one is written exactly as it was chosen.
+    const own = orderedPlaces(lines, row.id, farms, clients, { adopt: row.id === lineId })
+      .map((entry) => entry.key);
     if (row.id !== lineId) return { ...row, farmIds: [], placeIds: own };
     const free = new Set(freePlaces(lines, farms, clients).map((entry) => entry.key));
     const taken = added.filter((key) => free.has(key));
@@ -297,6 +356,107 @@ export function unassignedPlaces(lines, farms, clients = []) {
         ? client.locationId === entry.place.id
         : !known.has(`${client.farmId}:${client.locationId}`);
     }));
+}
+
+/**
+ * Who could go without food because of where they are, in three lists.
+ *
+ *   unplaced  locations with people that no libreta packs — a farm split
+ *             across both libretas, or one no libreta has yet. Nobody packs
+ *             them until somebody puts them in one. The loud one.
+ *   adopted   locations nobody put in a libreta, packed anyway in the one
+ *             that has the rest of their farm (`adoptingLine`). Fed, but the
+ *             spot was chosen by the system, so the kitchen is asked to
+ *             confirm it or move it. `after` is the location packed just
+ *             before it, to say where it went.
+ *   homeless  people with no farm, or a farm that no longer exists. No
+ *             libreta can have them; the office has to give them one.
+ *
+ * Over the people passed in — the kitchen passes everybody still being served,
+ * not only today's, so a house whose people start on Monday is placed before
+ * Monday morning.
+ *
+ * @returns {{ unplaced: object[], adopted: object[], homeless: object[] }}
+ */
+export function placementProblems({ lines = [], farms = [], clients = [] }) {
+  const byId = new Map(farms.map((farm) => [farm.id, farm]));
+  const homeless = clients.filter((client) => !client.farmId || !byId.has(client.farmId))
+    .sort(byName);
+
+  const unplaced = [];
+  const adopted = [];
+  for (const entry of allPlaces(farms, clients)) {
+    if (lineOfPlace(lines, entry.farm.id, entry.place.id)) continue;
+    const known = new Set((entry.farm.locations || []).map((place) => place.id));
+    const people = clients.filter((client) => client.farmId === entry.farm.id
+      && (entry.place.id ? client.locationId === entry.place.id : !known.has(client.locationId)))
+      .sort(byName);
+    if (!people.length) continue;
+
+    const home = adoptingLine(lines, entry.farm.id);
+    if (!home) { unplaced.push({ ...entry, people }); continue; }
+
+    const walk = orderedPlaces(lines, home.id, farms, clients, { adopt: true });
+    const at = walk.findIndex((one) => one.key === entry.key);
+    adopted.push({ ...entry, people, line: home, after: at > 0 ? walk[at - 1] : null });
+  }
+  return { unplaced, adopted, homeless };
+}
+
+/**
+ * Both libretas after the kitchen says "yes, there" to one location the system
+ * put in a libreta by itself (`adoptingLine`).
+ *
+ * It is written in where it already was being packed — in the libreta's order
+ * right after the location packed before it — so confirming moves nothing.
+ * Only that one location: another new one in the same libreta is its own
+ * question.
+ */
+export function confirmPlace(lines, lineId, key, farms, clients = []) {
+  const walk = orderedPlaces(lines, lineId, farms, clients, { adopt: true }).map((one) => one.key);
+  const at = walk.indexOf(key);
+  return (lines || []).map((row) => {
+    if (row.id !== lineId || at === -1 || (row.placeIds || []).includes(key)) return row;
+    const placeIds = [...(row.placeIds || []), key];
+    // No order of its own: the book's order already puts it with its farm.
+    if (!row.order?.length) return { ...row, placeIds };
+    const order = row.order.filter((one) => one !== key);
+    const before = walk.slice(0, at).reverse().find((one) => order.includes(one));
+    order.splice(before ? order.indexOf(before) + 1 : 0, 0, key);
+    return { ...row, placeIds, order };
+  });
+}
+
+/**
+ * What changed on the board since somebody last looked at it.
+ *
+ * `seen` is what was stored when the board was opened — each person on it and
+ * their plates — and `now` is the board as it is. Somebody new, somebody
+ * back, somebody with a plate more: each is a line, with the plates it adds
+ * or takes away. Only for the same day: yesterday's look says nothing about
+ * today's food.
+ *
+ * @param {object} seen   `{ day, at, by, plates, plan: { clientId: plates } }`
+ * @param {object} now    `{ day, plates, plan, names: { clientId: name } }`
+ * @returns {null | { at, by, plates, delta, more: object[], less: object[] }}
+ */
+export function boardChanges(seen, now) {
+  if (!seen || !now || seen.day !== now.day) return null;
+  const more = [];
+  const less = [];
+  for (const [id, plates] of Object.entries(now.plan || {})) {
+    const before = Number(seen.plan?.[id]) || 0;
+    if (plates > before) more.push({ id, name: now.names?.[id] || '', plates: plates - before, was: before });
+  }
+  for (const [id, before] of Object.entries(seen.plan || {})) {
+    const plates = Number(now.plan?.[id]) || 0;
+    if (plates < before) less.push({ id, name: now.names?.[id] || seen.names?.[id] || '', plates: before - plates, now: plates });
+  }
+  const delta = more.reduce((n, one) => n + one.plates, 0) - less.reduce((n, one) => n + one.plates, 0);
+  if (!more.length && !less.length) return null;
+  more.sort(byName);
+  less.sort(byName);
+  return { at: seen.at, by: seen.by, plates: now.plates, was: seen.plates, delta, more, less };
 }
 
 /* --- The order of the morning ---------------------------------------------- */
@@ -346,7 +506,7 @@ export function packingSequence({
    * short.
    */
   const out = [];
-  for (const entry of orderedPlaces(all, line?.id, farms, roster)) {
+  for (const entry of orderedPlaces(all, line?.id, farms, roster, { adopt: true })) {
     const known = new Set((entry.farm.locations || []).map((place) => place.id));
     const here = roster
       .filter((client) => client.farmId === entry.farm.id)
@@ -360,9 +520,9 @@ export function packingSequence({
 
     const last = out[out.length - 1];
     if (last && last.farm.id === entry.farm.id) {
-      last.groups.push({ place: entry.place, clients: here });
+      last.groups.push({ place: entry.place, clients: here, adopted: !!entry.adopted });
     } else {
-      out.push({ farm: entry.farm, groups: [{ place: entry.place, clients: here }] });
+      out.push({ farm: entry.farm, groups: [{ place: entry.place, clients: here, adopted: !!entry.adopted }] });
     }
   }
   for (const stretch of out) {
@@ -393,6 +553,9 @@ export function packingSequence({
           farm: entry.farm,
           place: group.place,
           plates: mealsOn(client, weekday),
+          // A location nobody has put in the libreta yet, packed here with its
+          // farm: the screen says so, so the packer sees it is new.
+          newPlace: group.adopted,
         });
       }
     }
