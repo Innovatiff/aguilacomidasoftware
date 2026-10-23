@@ -282,6 +282,19 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    /* --- scheduled ---------------------------------------------------------- */
+
+    // The Programador: changes the office leaves for a future day — two comidas
+    // from Monday, a new location from the 28th, a payment on Friday — that the
+    // first computer open on that day carries out. Written and read by the
+    // team only; a worker never sees what is planned for anybody, themselves
+    // included. Cancelled, not deleted: it is the record of who planned what.
+    match /scheduled/{setId} {
+      allow read: if isAdmin();
+      allow create, update: if isAdmin();
+      allow delete: if false;
+    }
+
     /* --- packRuns --------------------------------------------------------------- */
 
     // One document per libreta per morning: who packed it, when they started,

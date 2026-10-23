@@ -311,6 +311,8 @@ export function renderClients(context) {
       return row.endsOn ? `Terminó el ${formatDay(row.endsOn)}` : 'Ya no recibe comida';
     }
     if (row.serving === 'paused') {
+      // Registered ahead (Programador): the day they start is what anybody asks.
+      if (row.startsOn && row.startsOn > today()) return `Empieza el ${formatDay(row.startsOn)}`;
       // Paused by their last day: when it was is what anybody asks.
       return row.endsOn && row.endsOn < today()
         ? `Terminó el ${formatDay(row.endsOn)} · en pausa`

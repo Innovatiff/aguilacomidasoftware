@@ -176,6 +176,7 @@ export function posFind({ clients, value, onPick, balanceOf }) {
 
 function personRow(client, { on, owes, onClick }) {
   const flag = client.status === 'inactive' ? 'inactivo'
+    : client.status === 'paused' && client.startsOn > todayKey() ? `empieza ${client.startsOn.slice(8)}/${client.startsOn.slice(5, 7)}`
     : client.status === 'paused' ? 'en pausa'
       : (client.endsOn && client.endsOn < todayKey()) ? 'terminó' : null;
 
@@ -299,9 +300,12 @@ export function posDays({ days, onChange }) {
  * @param {number} [options.months]  how many months ahead can be shown
  * @param {Function} [options.note]  (day|undefined) => [line, line]: what the
  *   choice means, in words, beside the month's name
+ * @param {boolean} [options.span]       shade the days from `min` to the choice
+ * @param {boolean} [options.markAfter]  mark the day after it (`afterTag`)
  */
 export function posCalendar({
   value, onPick, min = todayKey(), months = 12, onTag = 'último', afterTag = 'pausa', note,
+  span = true, markAfter = true,
 }) {
   const now = todayKey();
   const firstMonth = addMonths(min, 0);
@@ -335,7 +339,7 @@ export function posCalendar({
     if (lines) mount(said, h('strong', lines[0]), lines[1] ? h('span', lines[1]) : null);
 
     const start = addDays(view, -((weekdayOf(view) + 6) % 7));
-    const after = value ? addDays(value, 1) : null;
+    const after = value && markAfter ? addDays(value, 1) : null;
     const month = view.slice(0, 7);
 
     mount(grid,
@@ -347,7 +351,7 @@ export function posCalendar({
         return h(`button.poscal__day${day.slice(0, 7) !== month ? '.is-out' : ''}`
           + `${day === now ? '.is-today' : ''}${on ? '.is-on' : ''}`
           + `${day === after ? '.is-after' : ''}`
-          + `${value && day >= min && day < value ? '.is-span' : ''}`,
+          + `${span && value && day >= min && day < value ? '.is-span' : ''}`,
         {
           type: 'button',
           disabled: day < min,

@@ -968,6 +968,75 @@ la izquierda.
 El panel se sigue instalando desde la dirección de siempre y no cambia en nada:
 son dos accesos directos distintos, cada uno con su icono.
 
+### El Programador: cambios que se hacen solos en su día
+
+Para lo que un cliente pide *desde* otro día: «dos comidas desde el lunes»,
+«me cambio a Casa 3 el 28», «sin pasta del 1 al 10», «pago el viernes». Se
+escribe una vez, con su día, y ese día **se hace solo**: lo aplica la primera
+computadora del equipo que se abra —la de la oficina o la de la cocina, a las
+seis de la mañana—, o la que esté abierta cuando cambie el día. Nadie tiene que
+acordarse, y está hecho antes de empacar.
+
+Está en el menú de la izquierda del panel, **Programador** (sólo la oficina),
+y en la ficha de cada cliente, en la tarjeta **Programado**. Al entrar enseña
+lo que ya está programado:
+
+- **Para revisar** — un recordatorio que llegó a su día, o algo que no se pudo
+  hacer, con el porqué y *Intentar otra vez*.
+- **Próximos** — todo lo que espera su día, por día, lo más cercano primero.
+- **Aplicados, con fecha de regreso** — lo que tiene «hasta», y el día que
+  regresa (*Regresarlo ya* lo regresa hoy).
+- **Hechos** y **Cancelados** — quién lo programó, quién lo aplicó y qué pasó.
+
+**Programar un cambio** son las mismas pantallas de Acción rápida, una pregunta
+a la vez: **qué** → **de quién** → **el cambio** → **desde qué día** (en un
+calendario) → **hasta cuándo** («Se queda así», o un último día) → **revisa** →
+*Programar*. Se puede programar:
+
+| Qué | Lo que hace ese día |
+|---|---|
+| Comidas al día | Le pone 1, 2 o 3 |
+| Días que come | Su calendario semanal |
+| Cambio de ubicación | A otra casa, u otra farma (con el horario de esa farma) |
+| No puede comer | Agrega («No pasta») o quita («ya puede pollo») |
+| Teléfono o notas | Sus datos |
+| Pausar o reactivar | En pausa, activo, o ya no pide |
+| Cliente nuevo | Ver abajo |
+| Farma nueva | La da de alta con sus ubicaciones |
+| Ubicación nueva | La agrega a una farma |
+| Agregar deuda | Un cargo con su motivo, con fecha de ese día |
+| Registrar un pago | El pago con su recibo, ese día, sin que nadie cobre: para dinero que llega solo, como un descuento de nómina |
+| Corregir saldo | Lo deja en lo que se escriba, con su motivo |
+| Recordatorio | Un aviso en Inicio ese día («dijo que paga $140 hoy») hasta que alguien toca *Hecho* |
+
+**«Hasta»: regresa solo.** Los cambios de una persona pueden tener un último
+día; al día siguiente regresa a como estaba —pero **sólo lo que nadie cambió a
+mano mientras tanto**: si alguien le puso 3 comidas en medio, eso se respeta y
+el Programador lo dice («No se regresó las comidas: alguien lo cambió antes»).
+Una pausa del 26 al 30 queda anotada el 26 y la vuelta el 31 aunque la
+computadora se abra tarde, así que la cuenta de cada quincena lo lee bien.
+
+**Cliente nuevo que empieza otro día.** Se da de alta **hoy, en pausa**, con el
+día que empieza: sale en Clientes como **«Empieza el 28»**, la cocina ya puede
+acomodar su ubicación en Avisos, y su app dice «Empiezas el …». No se empaca ni
+se cobra antes. Ese día se activa solo; si tiene «hasta», ese es su último día
+y al siguiente queda en pausa como con *Hasta cuándo come*.
+
+**Una sola vez, pase lo que pase.** Cada cambio se hace junto con su registro,
+de una vez: dos computadoras que despiertan juntas no lo hacen dos veces, y una
+que se apaga a la mitad no deja nada a medias. Sin internet, espera y lo
+intenta otra vez a los pocos minutos. Antes de su día no cambia nada, y se
+puede **cancelar** tocándolo en la lista.
+
+**La cocina se entera.** En **Novedades** sale lo que viene en la semana
+(«Mañana · Programado · Luis Peña pasa a 1 comida al día») y lo que se aplicó
+hoy, con cuántas comidas cambia; si alguien va a empezar o a cambiarse a una
+casa que no está en ninguna libreta, sale en **Avisos** antes de su día.
+
+**Hay que pegar las reglas** (ver *Publicar las reglas*): el Programador guarda
+lo suyo en un lugar nuevo de la base. Mientras no estén, su página dice
+«Falta publicar las reglas del Programador» y el resto del sistema sigue igual.
+
 ### 11. Correr en local
 
 No hay dependencias ni build. Cualquier servidor estático sirve:
@@ -1031,8 +1100,8 @@ Las reglas se publican desde la consola, sin instalar nada:
 2. Pega el contenido de `firestore.rules` y **Publicar**.
 
 **Cuándo volver a pegarlas.** Cada vez que cambia `firestore.rules`. La última
-vez fue para que un cliente no pueda firmar un mensaje como si fuera la cocina,
-ni siquiera en su propio chat.
+vez fue para **el Programador** (`scheduled`): sólo el equipo lo lee y lo
+escribe, y lo programado se cancela pero nunca se borra.
 
 **Los índices.** Hacen falta dos, y no se pegan: se crean con un clic. La
 primera vez que abras la ficha de un cliente o su lista de recibos, si falta
@@ -1275,6 +1344,21 @@ config/packing                   -- cómo se reparte el empaque
   Una ubicación que no está en ninguna libreta, de una farma que está en una
   sola, se empaca en esa (después de las otras de su farma) sin estar escrita
   aquí; «Está bien ahí» u ordenar la libreta la escriben.
+
+scheduled/{id}                   -- el Programador: un cambio para su día
+  kind                           -- meals | days | location | diet | info |
+                                    status | start | farm | place | charge |
+                                    payment | balance | reminder
+  on, until                      -- el día que se hace; el último día con el
+                                    cambio (opcional), regresa al siguiente
+  clientId, clientName, farmId, farmName
+  value { … }                    -- lo que pone
+  state                          -- pending → active (espera su «hasta») →
+                                    done; o cancelled, failed, remind
+  before, applied                -- lo que había y lo que puso, para regresar
+                                    sólo lo que nadie tocó
+  result { text, skipped }, error
+  createdAt, createdByName, appliedAt, appliedByName, doneAt
 
 packers/{packerId}               -- cada persona que trabaja en la cocina
   name, pin, active              -- el PIN es una etiqueta, no una contraseña

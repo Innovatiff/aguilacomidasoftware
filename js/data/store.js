@@ -22,6 +22,8 @@ import { watchOutstanding, summarizeInvoices, groupByClient } from './invoices.j
 import { watchRecentReceipts, cancelledIds, RECENT_RECEIPTS } from './receipts.js';
 import { watchConversations, totalUnread } from './chat.js';
 import { pendingBilling } from './cycles.js';
+import { watchSchedule, watchScheduleSince, runSchedule } from './schedule.js';
+import { session } from './session.js';
 import { forgetPeriods } from './reports.js';
 import { today, addDays } from '../lib/dates.js';
 import {
@@ -43,9 +45,17 @@ const state = {
   outstanding: [],
   receipts: [],
   conversations: [],
+  // The Programador's sets still to happen or waiting for somebody. Kept
+  // apart from `errors`: before its rules are published the read is refused,
+  // and that must not turn every other screen into an error card.
+  schedule: [],
+  // The last week of them and everything ahead, done or not: what Novedades
+  // tells the kitchen ("Programado: Juan pasa a 2 comidas").
+  scheduleRecent: [],
+  scheduleError: null,
   loaded: {
     pricing: false, farms: false, clients: false,
-    outstanding: false, receipts: false, conversations: false,
+    outstanding: false, receipts: false, conversations: false, schedule: false,
   },
   errors: {},
 };
@@ -76,7 +86,22 @@ function checkDay() {
   state.day = now;
   forgetPendingBills();
   pauseFinished();
+  runDue();
   emit();
+}
+
+/*
+ * El Programador, carried out: every computer of the team runs the sets whose
+ * day has come (see js/data/schedule.js). Once the clients, the farms and the
+ * sets are all in — a change is worked out from what they are now.
+ */
+function runDue() {
+  const { loaded } = state;
+  if (!loaded.clients || !loaded.farms || !loaded.schedule || !loaded.pricing) return;
+  runSchedule({
+    sets: state.schedule, clients: state.clients, farms: state.farms, pricing: state.pricing,
+    day: state.day, by: session.displayName || session.email || '',
+  }).catch(() => {});
 }
 
 /*
@@ -94,7 +119,9 @@ function pauseFinished() {
   }
 }
 if (typeof document !== 'undefined') {
-  setInterval(checkDay, 60 * 1000);
+  // Once a minute: the date, and anything the Programador could not do the
+  // last time it tried (no internet) — it tries again by itself.
+  setInterval(() => { checkDay(); runDue(); }, 60 * 1000);
   document.addEventListener('visibilitychange', checkDay);
 }
 
@@ -144,8 +171,26 @@ export function startStore() {
       state.clients = rows;
       state.loaded.clients = true;
       pauseFinished();
+      runDue();
       emit();
     }, failed('clients')),
+
+    watchSchedule((rows) => {
+      state.schedule = rows;
+      state.loaded.schedule = true;
+      state.scheduleError = null;
+      runDue();
+      emit();
+    }, (error) => {
+      state.scheduleError = error;
+      state.loaded.schedule = true;
+      emit();
+    }),
+
+    watchScheduleSince(addDays(today(), -7), (rows) => {
+      state.scheduleRecent = rows;
+      emit();
+    }, () => {}),
 
     watchOutstanding((rows) => {
       state.outstanding = rows;
@@ -182,9 +227,10 @@ export function stopStore() {
     pricing: { ...DEFAULT_PRICING },
     business: { ...DEFAULT_BUSINESS },
     farms: [], clients: [], outstanding: [], receipts: [], conversations: [],
+    schedule: [], scheduleRecent: [], scheduleError: null,
     loaded: {
       pricing: false, farms: false, clients: false,
-      outstanding: false, receipts: false, conversations: false,
+      outstanding: false, receipts: false, conversations: false, schedule: false,
     },
     errors: {},
   });
@@ -314,6 +360,7 @@ export function clientState(client) {
     cycleSet: cycleIsSet(client),
     serving,
     endsOn: client.endsOn || null,
+    startsOn: client.startsOn || null,
     daysLeft: daysLeft(client, state.day),
     state: nameState(client, billing, advance, serving),
   };

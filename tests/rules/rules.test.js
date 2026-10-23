@@ -257,6 +257,27 @@ await check('an outsider cannot read somebody else\'s staff entry',
 await check('an account may check its own staff entry',
   getDoc(doc(outsider, `staff/${OUTSIDER}`)), true);
 
+/* --- Programador ------------------------------------------------------------ */
+
+console.log('\n--- Programador -------------------------------------------------');
+
+await check('the office leaves a change for a future day',
+  setDoc(doc(admin, 'scheduled/s1'), {
+    kind: 'meals', on: '2026-10-26', until: '', clientId: 'cA', value: { mealsPerDay: 2 }, state: 'pending',
+  }), true);
+await check('and reads the list back', getDocs(collection(admin, 'scheduled')), true);
+await check('and marks it done, or cancels it',
+  updateDoc(doc(admin, 'scheduled/s1'), { state: 'cancelled' }), true);
+await check('but never erases it: it is the record of who planned what',
+  deleteDoc(doc(admin, 'scheduled/s1')), false);
+await check('a worker cannot read what is planned, even about themselves',
+  getDoc(doc(rafa, 'scheduled/s1')), false);
+await check('nor list it', getDocs(collection(rafa, 'scheduled')), false);
+await check('nor plan anything', setDoc(doc(rafa, 'scheduled/s2'), {
+  kind: 'payment', on: '2026-10-26', clientId: 'cA', value: { amount: 999 }, state: 'pending',
+}), false);
+await check('anon neither', getDoc(doc(anon, 'scheduled/s1')), false);
+
 /* --- The first administrator ------------------------------------------------- */
 
 /* --- Empaque ----------------------------------------------------------------- */

@@ -244,6 +244,8 @@ const KINDS = {
   termino: { word: 'Terminó', icon: 'pause', tone: 'warn' },
   baja: { word: 'Ya no pide', icon: 'ban', tone: 'bad' },
   ultimo: { word: 'Último día', icon: 'calendar', tone: 'info' },
+  empieza: { word: 'Empieza', icon: 'play', tone: 'ok' },
+  programado: { word: 'Programado', icon: 'clock', tone: 'info' },
 };
 
 /**
@@ -288,8 +290,14 @@ function newsRow(item, day) {
   if (item.kind === 'ultimo') {
     extra.push(item.last === day ? 'hoy es su último día: se empaca hoy' : 'mañana es su último día');
   }
-  if (item.kind === 'nuevo' || item.kind === 'volvio') {
+  if (item.kind === 'nuevo' && client.startsOn > day) extra.push(`empieza el ${formatDay(client.startsOn)}`);
+  else if (item.kind === 'nuevo' || item.kind === 'volvio' || item.kind === 'empieza') {
     extra.push(item.line ? `se empaca en ${item.line}` : 'no está en ninguna libreta');
+  }
+  if (item.kind === 'programado') {
+    extra.unshift(item.text);
+    if (item.until) extra.push(`hasta el ${formatDay(item.until)}`);
+    if (item.line) extra.push(`se empaca en ${item.line}`);
   }
   return h(`div.knews__row.knews__row--${kind.tone}`,
     h('span.knews__badge', icon(kind.icon), kind.word),
@@ -304,7 +312,7 @@ function newsRow(item, day) {
       item.on === day && item.kind !== 'ultimo' && item.at
         ? h('span.knews__time', formatTime(item.at))
         : null),
-    item.kind === 'nuevo' && !item.line
+    item.kind === 'nuevo' && !item.line && !(client.startsOn > day)
       ? h('span.knews__alarm', icon('alert'), 'Sin libreta')
       : null);
 }

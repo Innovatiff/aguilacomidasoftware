@@ -1866,7 +1866,20 @@ export function renderQuick() {
     const day = today();
     const serving = activeClients();
     const lines = packingSetup.lines;
-    const problems = placementProblems({ lines, farms: store.farms, clients: serving });
+    // Who is about to eat too: people registered ahead who start in the next
+    // two weeks, and people the Programador is moving to another house — so a
+    // location is in a libreta before the morning it is needed.
+    const soon = addDays(day, 14);
+    const starting = store.clients.filter((client) => client.status === 'paused'
+      && client.startsOn > day && client.startsOn <= soon);
+    const moving = store.schedule
+      .filter((set) => set.state === 'pending' && set.kind === 'location' && set.on <= soon)
+      .map((set) => ({ ...(store.clients.find((one) => one.id === set.clientId) || {}),
+        id: `${set.clientId}@${set.id}`, farmId: set.value?.farmId, locationId: set.value?.locationId }))
+      .filter((one) => one.name);
+    const problems = placementProblems({
+      lines, farms: store.farms, clients: [...serving, ...starting, ...moving],
+    });
     const board = dayBoard({ lines, farms: store.farms, clients: serving, day });
     const names = Object.fromEntries(store.clients.map((client) => [client.id, client.name]));
     const change = boardChanges(packingSetup.boardSeen,
@@ -1877,7 +1890,11 @@ export function renderQuick() {
   // Declarations rather than consts: the menu is first drawn before this
   // part of the function has run.
   function newsGroups() {
-    return novedades({ clients: store.clients, lines: packingSetup?.lines || [], day: today() });
+    const byId = new Map([...store.scheduleRecent, ...store.schedule].map((set) => [set.id, set]));
+    return novedades({
+      clients: store.clients, lines: packingSetup?.lines || [], day: today(),
+      scheduled: [...byId.values()], farms: store.farms,
+    });
   }
 
   // When this computer last opened Novedades, for the count on its button. On

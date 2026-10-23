@@ -130,6 +130,13 @@ export function servingStatus(client, day = today()) {
 export const isServing = (client, day = today()) => servingStatus(client, day) === 'active';
 
 /**
+ * Registered ahead, starting on a later day (Programador → Cliente nuevo):
+ * on pause with the day they start, until that morning makes them active.
+ */
+export const startsLater = (client, day = today()) =>
+  client?.status === 'paused' && !!client.startsOn && client.startsOn > day;
+
+/**
  * Whether somebody was on the plan on a given day, by their record of pauses.
  *
  * `status` only says what they are today. Billing asks about days already

@@ -34,6 +34,7 @@ import { renderReceipt } from './screens/receipt.js';
 import { renderMessages } from './screens/messages.js';
 import { renderChat } from './screens/chat.js';
 import { renderSettings } from './screens/settings.js';
+import { renderSchedule } from './screens/schedule.js';
 import { emptyState, button } from './ui/kit.js';
 import { kitchen } from './lib/mode.js';
 import { seatedPacker } from './data/packing.js';
@@ -50,6 +51,8 @@ const TABS = [
   // who will read the label before pressing it.
   { id: 'reports',  path: '/reportes', label: 'Reportes', icon: 'chart' },
   { id: 'packing',  path: '/empaque',  label: 'Empaque',  icon: 'box' },
+  // Last, for the same reason: what is already there does not move.
+  { id: 'programador', path: '/programador', label: 'Programador', icon: 'clock' },
 ];
 
 const host = $('#app');
@@ -205,6 +208,7 @@ function registerRoutes() {
   register('/messages', renderMessages);
   register('/chat/:id', renderChat);
   register('/settings', renderSettings);
+  register('/programador', renderSchedule);
 
   setNotFound(() => {
     screen({

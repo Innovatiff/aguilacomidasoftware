@@ -1855,6 +1855,9 @@
 .posdiet__tag:hover { background: #fbdcdc; }
 .posdiet__tag:focus-visible { outline: 4px solid var(--pos-brand); outline-offset: 3px; }
 .posdiet__add { margin-top: 18px; }
+/* In the Programador: one of theirs marked to come off, and one to be added. */
+.posdiet__tag.is-out { background: #e8f7ee; color: var(--pos-ok); border-color: var(--pos-ok); }
+.posdiet__tag.is-new { background: var(--pos-bad); color: #ffffff; }
 .posdiet__more { margin-top: 16px; }
 
 /* --- Avisos: one strip across the kitchen's menu ------------------------------
@@ -1958,4 +1961,26 @@
 .knews__alarm svg { width: 20px; height: 20px; }
 @media (max-width: 1100px) {
   .knews__row { grid-template-columns: 130px minmax(0, 1fr) auto; }
+}
+
+/* --- Programar: what to schedule -------------------------------------------
+   Thirteen choices on one screen: each a short row — icon, name, and the line
+   under it — rather than the tall centred tile a three-way choice gets. */
+
+.poskinds .postile--pick {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto;
+  align-items: center; justify-content: stretch; text-align: left;
+  column-gap: 10px; row-gap: 2px;
+  min-height: 0; padding: 12px 14px;
+}
+.poskinds .postile--pick .postile__ico { grid-row: 1 / span 2; }
+.poskinds .postile--pick .postile__ico svg { width: 30px; height: 30px; }
+.poskinds .postile--pick .postile__name { font-size: 18px; line-height: 1.15; hyphens: auto; overflow-wrap: break-word; }
+.poskinds .postile--pick .postile__sub { font-size: 14px; line-height: 1.2; }
+.poskinds .postile.is-on::after { top: 4px; right: 8px; font-size: 18px; }
+@media (max-width: 1100px) {
+  .poskinds .postile--pick { padding: 10px; column-gap: 8px; }
+  .poskinds .postile--pick .postile__ico svg { width: 24px; height: 24px; }
+  .poskinds .postile--pick .postile__name { font-size: 16px; }
+  .poskinds .postile--pick .postile__sub { font-size: 13px; }
 }

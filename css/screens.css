@@ -1003,3 +1003,21 @@
 }
 .advrow s { text-decoration-thickness: 1.5px; }
 .advrow--stuck { border-color: var(--warn-500); background: var(--warn-50); }
+
+/* --- Programador -------------------------------------------------------------
+   The list of what is planned: a heading per day, an icon chip per kind in the
+   colour of what it changes — the plan, the person, something new, money. */
+
+.sched__intro { display: flex; align-items: center; justify-content: space-between; gap: var(--s4); flex-wrap: wrap; }
+.sched__intro p { margin: 0; max-width: 60ch; }
+.sched__day { font-size: var(--fs-md); font-weight: 700; padding: 0 var(--s1); }
+.sched__ico {
+  flex: none; display: grid; place-items: center;
+  width: 40px; height: 40px; border-radius: var(--r-md);
+  color: #ffffff; background: var(--ink-500);
+}
+.sched__ico svg { width: 22px; height: 22px; }
+.sched__ico--plan  { background: #0e6a72; }
+.sched__ico--who   { background: #4a5568; }
+.sched__ico--new   { background: #6b4fa0; }
+.sched__ico--money { background: var(--brand-500); }

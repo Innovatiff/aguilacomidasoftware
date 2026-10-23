@@ -24,8 +24,10 @@ import {
 } from '../data/store.js';
 import {
   watchClient, updateClient, moveClient, servingSince, setEndsOn, daysLeft,
-  cycleIsSet, setDayNote,
+  cycleIsSet, setDayNote, startsLater,
 } from '../data/clients.js';
+import { openScheduleFlow } from '../ui/schedule-flow.js';
+import { plannedFor, setTitle, setWhen } from './schedule.js';
 import { watchClientInvoices, issueInvoice } from '../data/invoices.js';
 import { watchClientReceipts, totalOf, cancelledIds } from '../data/receipts.js';
 import { openOpeningSheet } from '../ui/opening-sheet.js';
@@ -90,6 +92,7 @@ export function renderClientDetail(context) {
     return h('div.page__inner.page__inner--flow.stack.stack-4',
       welcomeEmail ? h('div.span-all', welcomeBanner(welcomeEmail)) : null,
       identityCard(client, openChat),
+      plannedCard(client),
       placeCard(client),
       billingCard(client, billing, invoices, loadedInvoices),
       paymentsCard(),
@@ -120,8 +123,17 @@ export function renderClientDetail(context) {
           h('div.t-lg.w-700', model.name),
           model.phone ? h('div.t-sm.c-soft', fmtPhone(model.phone)) : null,
           h('div', { style: { marginTop: '6px' } },
-            badge(clientStatusMeta(model.status).label, clientStatusMeta(model.status).tone,
-              clientStatusMeta(model.status).icon)))),
+            startsLater(model)
+              ? badge(`Empieza el ${formatDay(model.startsOn)}`, 'info', 'clock')
+              : badge(clientStatusMeta(model.status).label, clientStatusMeta(model.status).tone,
+                clientStatusMeta(model.status).icon)))),
+
+      // Registered ahead: on pause, and active by itself on that morning.
+      startsLater(model)
+        ? alert(`Empieza el ${formatDayLong(model.startsOn)}: ese día se activa solo (Programador). `
+          + 'Hasta entonces no se empaca ni se le cobra, pero la cocina ya puede acomodar su ubicación.',
+        'info', 'clock')
+        : null,
 
       model.endsOn
         ? alert(model.endsOn < today()
@@ -164,6 +176,31 @@ export function renderClientDetail(context) {
         button(model.endsOn ? 'Cambiar último día' : 'Poner último día', {
           variant: 'ghost', size: 'sm', icon: 'calendar', onClick: () => setLastDay(model),
         }))));
+  }
+
+  /**
+   * What the Programador has planned for this person, still to happen — and
+   * the way to plan something. Shown even when nothing is planned, because
+   * "two comidas from Monday" is asked about a person, in front of their file.
+   */
+  function plannedCard(model) {
+    const planned = plannedFor(model.id);
+    return card(h('div.stack.stack-3',
+      h('div.row.row--between',
+        h('div.card__title', 'Programado'),
+        button('Programar un cambio', {
+          variant: 'soft', size: 'sm', icon: 'clock',
+          onClick: () => openScheduleFlow({ client: model, author: { uid: session.uid, name: session.displayName } }),
+        })),
+      planned.length
+        ? list(planned.map((set) => itemRow({
+          title: capitalize(setTitle(set).replace(`${model.name} — `, '')),
+          meta: setWhen(set),
+          chevron: true,
+          onClick: () => go('/programador'),
+        })), { card: false })
+        : h('p.t-sm.c-soft', 'Nada programado. Para un cambio que empieza otro día —dos comidas '
+          + 'desde el lunes, otra casa desde el 28— tócale a «Programar un cambio».')));
   }
 
   /**

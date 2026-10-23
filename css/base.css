@@ -202,6 +202,11 @@ img, svg { display: block; max-width: 100%; }
 @media (max-width: 400px) {
   .tab { font-size: 10px; letter-spacing: 0; }
 }
+/* Eight tabs on a phone: a long word ("Programador") is cut rather than
+   pushing into its neighbours. */
+@media (max-width: 899px) {
+  .tab > span:not(.tab__dot) { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
 
 /* --- Utilities ------------------------------------------------------------ */
 

@@ -208,6 +208,27 @@ const heroStat = (value, label) =>
 function alerts({ cash, unread, gaps }) {
   const rows = [];
 
+  // The Programador: a reminder whose day came, or a change it could not make.
+  for (const set of store.schedule.filter((one) => one.state === 'remind')) {
+    const v = set.value || {};
+    rows.push(actionCard({
+      tone: 'info', icon: 'bell',
+      title: `Recordatorio: ${set.clientName || 'para hoy'}`,
+      text: [v.amount ? money(v.amount) : '', v.note].filter(Boolean).join(' · '),
+      cta: 'Ver', onClick: () => go('/programador'),
+    }));
+  }
+  const failed = store.schedule.filter((one) => one.state === 'failed');
+  if (failed.length) {
+    rows.push(actionCard({
+      tone: 'bad', icon: 'clock',
+      title: `${plural(failed.length, 'cambio programado no se pudo', 'cambios programados no se pudieron')} hacer`,
+      text: failed.map((one) => one.clientName || one.value?.name || '').filter(Boolean).slice(0, 3).join(', ')
+        || 'Revísalo en el Programador.',
+      cta: 'Revisar', onClick: () => go('/programador'),
+    }));
+  }
+
   if (cash.overdueCount) {
     rows.push(actionCard({
       tone: 'bad', icon: 'wallet',

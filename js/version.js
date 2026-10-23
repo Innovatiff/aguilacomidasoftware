@@ -13,7 +13,7 @@
 
 import { formatDayShort } from './lib/dates.js';
 
-export const VERSION = { n: 76, day: '2026-10-22', what: 'Avisos y Novedades en la cocina, tablero exacto, cocina sin panel' };
+export const VERSION = { n: 77, day: '2026-10-23', what: 'Programador: cambios que se hacen solos en su día' };
 
 /** "Versión 75" — for the corners with room for a word and a number. */
 export const versionShort = () => `Versión ${VERSION.n}`;
