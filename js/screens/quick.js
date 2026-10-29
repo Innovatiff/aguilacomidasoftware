@@ -297,10 +297,24 @@ export function renderQuick() {
     }
 
     mount(host,
-      h('h2.pos__q', '¿Qué vas a hacer?'),
-      h('p.pos__hint', ready
-        ? `${plural(store.clients.length, 'cliente', 'clientes')} · se cobra en ${payDaysInWords()}`
-        : 'Cargando…'),
+      // The question on the left; on the right, the Programador — a change a
+      // client asks for "from Monday" is asked at this counter. Beside the
+      // question rather than under it, so it costs the screen no height. Its
+      // number is what is waiting for somebody: a reminder for today, or a
+      // change that could not be made.
+      h('div.poshead',
+        h('div.poshead__text',
+          h('h2.pos__q', '¿Qué vas a hacer?'),
+          h('p.pos__hint', ready
+            ? `${plural(store.clients.length, 'cliente', 'clientes')} · se cobra en ${payDaysInWords()}`
+            : 'Cargando…')),
+        (() => {
+          const waiting = store.schedule.filter((set) => set.state === 'remind' || set.state === 'failed').length;
+          return h('div.poshead__btns',
+            h('button.posinfo', { type: 'button', onclick: () => go('/programador') },
+              icon('clock'), h('span', 'Programador'),
+              waiting ? h('span.posinfo__n', { 'aria-label': `${waiting} para revisar` }, String(waiting)) : null));
+        })()),
 
       // At the counter the top row is Cobrar, twice the size of anything else,
       // because at a counter that is most of the day.
