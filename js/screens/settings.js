@@ -489,7 +489,7 @@ export function renderSettings() {
     if (!result) return;
 
     try {
-      const saved = await savePricing(result, { name: session.displayName });
+      const saved = await savePricing(result, { name: session.displayName }, store.pricing);
       toastOk(`${plural(saved.tiers.length, 'plan guardado', 'planes guardados')}`);
     } catch (error) { toastBad(errorText(error)); }
   }

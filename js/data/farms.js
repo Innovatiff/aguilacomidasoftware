@@ -22,6 +22,7 @@ import {
   db, doc, collection, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot,
   query, where, orderBy, serverTimestamp, writeBatch, docData, listData, saved,
 } from '../firebase.js';
+import { logMovement } from './movements.js';
 import { today } from '../lib/dates.js';
 import {
   DEFAULT_DELIVERY_DAYS, DEFAULT_GRACE_DAYS, DEFAULT_PAY_EVERY, payDayOnOrAfter,
@@ -125,8 +126,30 @@ export async function createFarm(data, author) {
     createdBy: author?.uid || null,
     createdByName: author?.name || '',
   }));
+  const places = (data.locations || []).map((one) => one.name).filter(Boolean);
+  logMovement({
+    kind: 'farma', text: `Farma nueva: ${name}${places.length ? ` (${places.join(', ')})` : ''}`,
+    farmId: ref.id, farmName: name, by: author?.name,
+  });
 
   return { id: ref.id };
+}
+
+/** What changed on a farm, said field by field. */
+const FARM_WORDS = {
+  name: 'Nombre', contactName: 'Contacto', phone: 'Teléfono', address: 'Dirección', notes: 'Notas',
+  deliveryWindow: 'Horario de entrega', graceDays: 'Días de gracia', defaultMealsPerDay: 'Comidas por defecto',
+  defaultPayEvery: 'Paga por defecto', status: 'Estado',
+};
+function logFarmChanges(farmId, previous, clean) {
+  const name = clean.name || previous?.name || '';
+  const lines = Object.entries(FARM_WORDS)
+    .filter(([field]) => clean[field] !== undefined && !same(clean[field] ?? '', previous?.[field] ?? ''))
+    .map(([field, label]) => `${label}: ${previous?.[field] ?? '—'} → ${clean[field] || '—'}`);
+  if (clean.deliveryDays !== undefined && !same(clean.deliveryDays, previous?.deliveryDays)) {
+    lines.push('Días de entrega cambiados');
+  }
+  for (const line of lines) logMovement({ kind: 'farma', text: `${name}: ${line}`, farmId, farmName: name });
 }
 
 /**
@@ -139,6 +162,7 @@ export async function updateFarm(farmId, patch, previous) {
   const clean = sanitize(patch);
 
   await saved(updateDoc(doc(db, 'farms', farmId), { ...clean, updatedAt: serverTimestamp() }));
+  logFarmChanges(farmId, previous, clean);
 
   const nameChanged = clean.name !== undefined && clean.name !== previous?.name;
   const termsChanged = TERM_FIELDS.some(
@@ -152,6 +176,7 @@ export async function updateFarm(farmId, patch, previous) {
 
 export async function setFarmStatus(farmId, status) {
   await saved(updateDoc(doc(db, 'farms', farmId), { status, updatedAt: serverTimestamp() }));
+  logMovement({ kind: 'farma', text: `Farma ${status === 'active' ? 'activa' : 'inactiva'}`, farmId });
 }
 
 /**
@@ -166,6 +191,7 @@ export async function deleteFarm(farmId) {
     throw new Error(`Primero mueve o elimina los ${roster.size} clientes de este rancho.`);
   }
   await deleteDoc(doc(db, 'farms', farmId));
+  logMovement({ kind: 'farma', text: 'Borró una farma sin clientes', farmId });
 }
 
 /* --- Locations -------------------------------------------------------------- */
@@ -179,6 +205,7 @@ export async function addLocation(farm, name) {
 
   const locations = [...(farm.locations || []), { id: newLocationId(), name: label }];
   await saved(updateDoc(doc(db, 'farms', farm.id), { locations, updatedAt: serverTimestamp() }));
+  logMovement({ kind: 'farma', text: `${farm.name}: ubicación nueva ${label}`, farmId: farm.id, farmName: farm.name });
 }
 
 /**
@@ -198,6 +225,10 @@ export async function addLocations(farm, names) {
     have.push({ id: newLocationId(), name: label });
   }
   await saved(updateDoc(doc(db, 'farms', farm.id), { locations: have, updatedAt: serverTimestamp() }));
+  logMovement({
+    kind: 'farma', text: `${farm.name}: ${labels.length > 1 ? 'ubicaciones nuevas' : 'ubicación nueva'} ${labels.join(', ')}`,
+    farmId: farm.id, farmName: farm.name,
+  });
   return have.slice(-labels.length);
 }
 
@@ -213,6 +244,8 @@ export async function renameLocation(farm, locationId, name) {
     (loc) => (loc.id === locationId ? { ...loc, name: label } : loc),
   );
   await saved(updateDoc(doc(db, 'farms', farm.id), { locations, updatedAt: serverTimestamp() }));
+  const was = (farm.locations || []).find((loc) => loc.id === locationId)?.name || '';
+  logMovement({ kind: 'farma', text: `${farm.name}: ${was} → ${label}`, farmId: farm.id, farmName: farm.name });
 
   await eachClient(
     query(clientsRef(), where('farmId', '==', farm.id), where('locationId', '==', locationId)),
@@ -236,6 +269,8 @@ export async function removeLocation(farm, locationId) {
 
   const locations = (farm.locations || []).filter((loc) => loc.id !== locationId);
   await saved(updateDoc(doc(db, 'farms', farm.id), { locations, updatedAt: serverTimestamp() }));
+  const was = (farm.locations || []).find((loc) => loc.id === locationId)?.name || '';
+  logMovement({ kind: 'farma', text: `${farm.name}: quitó la ubicación ${was}`, farmId: farm.id, farmName: farm.name });
 }
 
 export const findLocation = (farm, locationId) =>

@@ -18,6 +18,7 @@ import {
   query, where, orderBy, limit as qLimit, serverTimestamp, runTransaction,
   docData, listData,
 } from '../firebase.js';
+import { logMovement } from './movements.js';
 import { folioFor } from './receipts.js';
 import {
   invoiceId, draftInvoice, draftCharge, chargeIdFor, isCharge, invoiceTitle,
@@ -238,7 +239,8 @@ export async function correctAmount({ invoice, amount, note }, author) {
 
   const ref = doc(db, 'invoices', id);
 
-  return runTransaction(db, async (tx) => {
+  let moved = null;
+  const result = await runTransaction(db, async (tx) => {
     const snap = await tx.get(ref);
     if (!snap.exists()) throw new Error('Esa factura ya no existe.');
 
@@ -250,8 +252,16 @@ export async function correctAmount({ invoice, amount, note }, author) {
     }
 
     tx.set(ref, correction(data, next, why, author), { merge: true });
+    moved = { from: round2(data.amount || 0), clientId: data.clientId, clientName: data.clientName };
     return { id, ...data, amount: next };
   });
+  if (moved) {
+    logMovement({
+      kind: 'deuda', text: `Corrigió una cuenta: ${money(moved.from)} → ${money(next)} — ${why}`,
+      clientId: moved.clientId, clientName: moved.clientName, by: author?.name,
+    });
+  }
+  return result;
 }
 
 /**
@@ -374,6 +384,10 @@ export async function adjustBalance({ client, target, note }, author) {
     return done;
   });
 
+  logMovement({
+    kind: 'deuda', text: `Bajó el saldo: ${money(balance)} → ${money(wanted)} — ${why}`,
+    clientId: client.id, clientName: client.name, by: author?.name,
+  });
   return { changed: difference, balance: wanted, touched };
 }
 
@@ -395,6 +409,10 @@ export async function voidCharge(invoice) {
     throw new Error('Este cargo ya tiene pagos aplicados. Cancela primero el pago.');
   }
   await deleteDoc(doc(db, 'invoices', invoice.id));
+  logMovement({
+    kind: 'deuda', text: `Quitó una deuda de ${money(invoice.amount)}${invoice.reason ? ` — ${invoice.reason}` : ''}`,
+    clientId: invoice.clientId, clientName: invoice.clientName,
+  });
 }
 
 

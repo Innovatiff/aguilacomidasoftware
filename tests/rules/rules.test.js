@@ -17,7 +17,7 @@ import {
   initializeTestEnvironment, assertFails, assertSucceeds,
 } from '@firebase/rules-unit-testing';
 import {
-  doc, getDoc, setDoc, updateDoc, deleteDoc, collection, query, where, getDocs,
+  doc, getDoc, setDoc, updateDoc, deleteDoc, collection, collectionGroup, query, where, getDocs,
 } from 'firebase/firestore';
 
 const results = [];
@@ -277,6 +277,34 @@ await check('nor plan anything', setDoc(doc(rafa, 'scheduled/s2'), {
   kind: 'payment', on: '2026-10-26', clientId: 'cA', value: { amount: 999 }, state: 'pending',
 }), false);
 await check('anon neither', getDoc(doc(anon, 'scheduled/s1')), false);
+
+/* --- Movimientos ------------------------------------------------------------ */
+
+console.log('\n--- Movimientos -------------------------------------------------');
+
+await check('the team writes down a change as it makes it',
+  setDoc(doc(admin, 'movements/v1'), {
+    kind: 'comidas', text: 'Comidas al día: 1 → 2', clientId: 'cA', by: 'María', day: '2026-10-29', ms: 1,
+  }), true);
+await check('and reads the span back',
+  getDocs(query(collection(admin, 'movements'), where('day', '>=', '2026-10-01'))), true);
+await check('a line is a record: nobody edits it',
+  updateDoc(doc(admin, 'movements/v1'), { text: 'nada' }), false);
+await check('nor deletes it', deleteDoc(doc(admin, 'movements/v1')), false);
+await check('a line too long to be a line is refused',
+  setDoc(doc(admin, 'movements/v2'), { kind: 'nota', text: 'x'.repeat(501) }), false);
+await check('a worker cannot read the movements, even their own',
+  getDoc(doc(rafa, 'movements/v1')), false);
+await check('nor write one', setDoc(doc(rafa, 'movements/v3'), { kind: 'pago', text: 'Pagó' }), false);
+await check('the team reads every thread\'s messages at once',
+  getDocs(collectionGroup(admin, 'messages')), true);
+await check('a worker cannot read every thread at once',
+  getDocs(collectionGroup(rafa, 'messages')), false);
+await check('but still reads their own thread',
+  getDocs(collection(rafa, 'conversations/cA/messages')), true);
+await check('and not somebody else\'s',
+  getDocs(collection(ana, 'conversations/cA/messages')), false);
+await check('anon cannot read any of it', getDocs(collectionGroup(anon, 'messages')), false);
 
 /* --- The first administrator ------------------------------------------------- */
 

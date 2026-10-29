@@ -23,7 +23,7 @@ import { renderClients } from './screens/clients.js';
 import { renderClientForm } from './screens/client-form.js';
 import { renderClientDetail } from './screens/client-detail.js';
 import { renderBilling } from './screens/billing.js';
-import { renderReport, renderReportList } from './screens/report.js';
+import { renderReport, renderReportList, renderMovements } from './screens/report.js';
 import { renderPacking } from './screens/packing.js';
 import { renderPackingRun } from './screens/packing-run.js';
 import { renderPackingSetup } from './screens/packing-setup.js';
@@ -38,6 +38,11 @@ import { renderSchedule } from './screens/schedule.js';
 import { emptyState, button } from './ui/kit.js';
 import { kitchen } from './lib/mode.js';
 import { seatedPacker } from './data/packing.js';
+import { setActor } from './data/movements.js';
+
+// Who each movement is written down as: in the kitchen the person who typed
+// their number, at the counter the account that is signed in.
+setActor(() => (kitchen() ? seatedPacker()?.name : '') || session.displayName || '');
 
 const TABS = [
   { id: 'home',     path: '/',         label: 'Inicio',   icon: 'home' },
@@ -193,6 +198,9 @@ function registerRoutes() {
   register('/reportes', renderReport);
   // Each of the report's lists is its own screen, so the back chevron out of
   // one goes to the report rather than out of it.
+  // Every movement of the span, with a filter; before `:lista`, which would
+  // otherwise take the name for a list.
+  register('/reportes/movimientos', renderMovements);
   register('/reportes/:lista', renderReportList);
 
   // Empaque: the morning's two lists. "ajustes" is registered before ':id' so

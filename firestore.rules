@@ -307,6 +307,29 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    /* --- movements -------------------------------------------------------------- */
+
+    // Movimientos: a line for each change somebody made that the database would
+    // otherwise write over — one comida became two, a note, a new location —
+    // with who and when, for the report. Written by the team as it works and
+    // read by the team. A line is a record: nobody edits or deletes one.
+    match /movements/{moveId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin()
+        && request.resource.data.kind is string
+        && request.resource.data.text is string
+        && request.resource.data.text.size() <= 500;
+      allow update, delete: if false;
+    }
+
+    // Movimientos also reads the messages of a span across every thread at
+    // once (a collection-group query). Reading only, and the team only:
+    // writing a message still goes through its own thread's rules above, and a
+    // worker still reads only their own thread.
+    match /{path=**}/messages/{messageId} {
+      allow read: if isAdmin();
+    }
+
     /* --- everything else ------------------------------------------------------- */
 
     match /{document=**} {

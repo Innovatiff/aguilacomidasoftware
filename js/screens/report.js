@@ -48,9 +48,15 @@ import {
   GRAINS, rangeFor, shiftRange, customRange, rangeTitle, rangeSpan,
   bucketsOf, spanOf, rangeHolds, isFuture,
 } from '../lib/periods.js';
-import { today, addDays, formatDayShort, formatDay, humanDelta, daysBetween } from '../lib/dates.js';
+import {
+  today, addDays, formatDayShort, formatDay, formatDayLong, formatTime, humanDelta, daysBetween, capitalize,
+} from '../lib/dates.js';
 import { money, number, plural, percent, matches } from '../lib/format.js';
 import { paymentMethodMeta } from '../lib/model.js';
+import { loadMovements, cachedMovements, withMine } from '../data/movements.js';
+import {
+  KINDS, kindOf, movementsFrom, filterMovements, countByKind, dayHeading,
+} from '../lib/movements.js';
 
 /** Plain words for the spans, in the order somebody actually asks for them. */
 const WHEN = [
@@ -79,13 +85,31 @@ const BUCKET_WORD = { day: 'día', week: 'semana', month: 'mes' };
  * costs one parameter.
  *
  * @param {object} [state] a bag the caller keeps across paints — a search term.
+ * @param {object} [also]  `movements: true` to read the span's movements too.
  */
-function periodView(context, paint, state = {}) {
+function periodView(context, paint, state = {}, { movements = false } = {}) {
   const life = lifetime();
   const range = fromQuery(context.query);
   let docs = cachedPeriod(range);
   let failure = null;
   let loading = !docs;
+  let moved = movements ? cachedMovements(range) : null;
+
+  // Apart from the period, and never its failure: a missing rule or index for
+  // the movements leaves the money where it is and says so in its own section.
+  function readMoves({ fresh = false } = {}) {
+    if (!movements) return;
+    const held = fresh ? null : cachedMovements(range);
+    if (held) { moved = held; return; }
+    moved = null;
+    loadMovements(range, { fresh })
+      .catch((error) => ({ logged: [], messages: [], loggedError: error, messagesError: null }))
+      .then((found) => {
+        if (!life.alive()) return;
+        moved = found;
+        paint(api);
+      });
+  }
 
   function read({ fresh = false } = {}) {
     if (fresh) forgetPeriod(range);
@@ -132,23 +156,40 @@ function periodView(context, paint, state = {}) {
     });
   }
 
+  /** Every movement of the span, newest first — or null while it is read. */
+  function moves() {
+    if (!movements || !docs || !moved || !isReady()) return null;
+    const now = freshen(docs, { receipts: store.receipts, invoices: store.outstanding }, range);
+    return movementsFrom({
+      range,
+      logged: withMine(moved, range).logged,
+      receipts: now.receipts,
+      invoices: now.invoices,
+      clients: store.clients,
+      messages: moved.messages,
+    });
+  }
+
   const api = {
     range,
     state,
     report,
+    moves,
+    movesTrouble: () => (moved ? { logged: moved.loggedError, messages: moved.messagesError } : {}),
     ready: () => !loading && !!docs && isReady(),
     failure: () => failure,
-    reload: () => { read({ fresh: true }); paint(api); },
+    reload: () => { read({ fresh: true }); readMoves({ fresh: true }); paint(api); },
     repaint: () => paint(api),
   };
 
   read();
+  readMoves();
   return life.ending(subscribe(() => paint(api)));
 }
 
 /* --- The summary ------------------------------------------------------------ */
 
-export const renderReport = (context) => periodView(context, drawSummary);
+export const renderReport = (context) => periodView(context, drawSummary, {}, { movements: true });
 
 function drawSummary(view) {
   const report = view.report();
@@ -162,15 +203,15 @@ function drawSummary(view) {
     sunken: true,
     actions: [topbarButton('refresh', { label: 'Volver a leer', onClick: view.reload })],
     body: h('div.page__inner.rbig.stack.stack-5',
-      picker(view.range),
+      picker(view.range, ''),
       view.failure()
         ? dataErrorCard(view.failure(), { onRetry: view.reload })
-        : view.ready() && report ? summary(report) : skeletonRows(4)),
+        : view.ready() && report ? summary(report, view) : skeletonRows(4)),
   });
 }
 
-/** The money, the lists, and the print button. Nothing else. */
-function summary(report) {
+/** The money, the lists, the movements and the print button. Nothing else. */
+function summary(report, view) {
   const { money: cash, counts, standing, people, range } = report;
 
   return h('div.stack.stack-5',
@@ -212,6 +253,8 @@ function summary(report) {
             h('span.rmenu__t', entry.title),
             h('span.rmenu__s', entry.note(report))),
           icon('chevronR', 'rmenu__chev'))))),
+
+    movesSection(view),
 
     h('div.stack.stack-2',
       button('Imprimir esta hoja', {
@@ -261,8 +304,15 @@ const smallBox = (label, value, note, tone) =>
 
 /* --- Choosing the span ------------------------------------------------------ */
 
-function picker(range) {
+/**
+ * @param {string} [list]  the screen the picker sits on, so a new period opens
+ *   that screen again rather than the summary
+ * @param {Function} [keep]  more of the address to carry along — a filter —
+ *   asked at the moment of the click, since the filter changes under it
+ */
+function picker(range, list = '', keep = () => ({})) {
   const ahead = isFuture(shiftRange(range, 1));
+  const open = (next) => go(urlFor(next, list, keep()), { replace: true });
   // Changing the span keeps the day you are looking at, so "este mes" from a
   // week in March is March, not today.
   const anchor = () => (rangeHolds(range) ? today() : range.start);
@@ -275,7 +325,7 @@ function picker(range) {
         { type: 'button', onclick: () => open(rangeFor(option.grain, anchor())) },
         option.label)),
       h(`button.ropt${range.grain === 'custom' ? '.is-active' : ''}`,
-        { type: 'button', onclick: () => pickDates(range) }, 'Otras fechas')),
+        { type: 'button', onclick: () => pickDates(range).then((next) => next && open(next)) }, 'Otras fechas')),
 
     h('div.rper',
       h('button.rper__nav', {
@@ -298,14 +348,11 @@ function picker(range) {
       }, icon('chevronR'))));
 }
 
-/**
- * Moves to another period.
- *
- * `replace`, so walking six months back leaves one history entry rather than
- * six — the back button has to mean "salir del reporte", not "deshacer el
- * último clic seis veces".
+/*
+ * Moving to another period writes over the address (`replace`), so walking
+ * six months back leaves one history entry rather than six — the back button
+ * has to mean "salir del reporte", not "deshacer el último clic seis veces".
  */
-const open = (range) => go(urlFor(range), { replace: true });
 
 /** The same shape of span, ending now. */
 function nowLike(range) {
@@ -313,6 +360,7 @@ function nowLike(range) {
   return customRange(addDays(today(), -(spanOf(range) - 1)), today());
 }
 
+/** Asks for two dates; the span they make, or null. */
 async function pickDates(range) {
   const from = h('input.input.input--big', { type: 'date', value: range.start, max: today() });
   const to = h('input.input.input--big', { type: 'date', value: range.end, max: today() });
@@ -346,10 +394,10 @@ async function pickDates(range) {
       })),
   });
 
-  if (!picked) return;
+  if (!picked) return null;
   const [start, end] = picked;
-  if (!start || !end) { toastBad('Faltan las fechas.'); return; }
-  open(customRange(start, end));
+  if (!start || !end) { toastBad('Faltan las fechas.'); return null; }
+  return customRange(start, end);
 }
 
 /* --- Paper ------------------------------------------------------------------ */
@@ -547,15 +595,15 @@ const LISTS = {
     }),
   },
 
-  movimientos: {
-    title: 'Todos los movimientos',
-    unit: ['movimiento', 'movimientos'],
+  pagos: {
+    title: 'Todos los pagos',
+    unit: ['pago', 'pagos'],
     icon: 'receipt',
     count: (r) => r.movements.length,
     note: (r) => (r.movements.length
       ? `${plural(r.movements.length, 'pago', 'pagos')} uno por uno, con su folio`
-      : 'No hubo movimientos'),
-    empty: { icon: 'receipt', title: 'No hubo movimientos', text: 'No se registró ningún pago en este periodo.' },
+      : 'No hubo pagos'),
+    empty: { icon: 'receipt', title: 'No hubo pagos', text: 'No se registró ningún pago en este periodo.' },
     print: (rows) => ({
       columns: ['Cliente', 'Fecha', 'Forma', 'Cobró', 'Folio', 'Monto'],
       text: [1, 2, 3, 4],
@@ -623,7 +671,7 @@ const total = (rows, pick) =>
   Math.round(rows.reduce((sum, row) => sum + (Number(pick(row)) || 0), 0) * 100) / 100;
 
 /** The order they appear in the menu: what came in, then who owes, then detail. */
-const LIST_ORDER = ['pagaron', 'deben', 'atrasados', 'dias', 'ranchos', 'movimientos', 'ajustes'];
+const LIST_ORDER = ['pagaron', 'deben', 'atrasados', 'dias', 'ranchos', 'pagos', 'ajustes'];
 
 /** How many rows before the list offers a search box. */
 const SEARCH_FROM = 8;
@@ -764,6 +812,275 @@ function refresh(view, spec, report) {
   }
 }
 
+/* --- Movimientos ------------------------------------------------------------ */
+
+/**
+ * Everything that happened to anybody, with its day and its hour: a payment,
+ * a debt, one comida that became two, a note, a pause, a message.
+ *
+ * On the summary it is a short section — the last few, and a way into each
+ * kind — because the summary is for figures. The whole list is its own screen,
+ * with the filter: only the notes, only the payments, only one person.
+ */
+const MOVES_ON_SUMMARY = 6;
+
+/**
+ * How many rows the screen draws before it asks to be shown more. A month of
+ * messages can run to thousands, and a page that long is a page that hangs.
+ */
+const MOVES_PAGE = 150;
+
+function movesSection(view) {
+  const all = view.moves();
+  const to = (kind) => `#${urlFor(view.range, 'movimientos', { k: kind })}`;
+  const counts = all ? countByKind(all) : {};
+
+  return h('section.rmoves.stack.stack-3',
+    h('div.rmoves__top',
+      h('h2.rhead', 'Movimientos'),
+      all ? h('span.rcount', plural(all.length, 'movimiento', 'movimientos')) : null),
+    movesTrouble(view),
+    !all
+      ? skeletonRows(3)
+      : !all.length
+        ? h('p.rnote', 'No hubo movimientos en este periodo.')
+        : h('div.stack.stack-3',
+            h('div.rkinds',
+              KINDS.filter((kind) => counts[kind.key]).map((kind) => h('a.chip', { href: to(kind.key) },
+                kind.label, h('span.chip__count', number(counts[kind.key]))))),
+            h('div.rmoves__list', all.slice(0, MOVES_ON_SUMMARY).map((one) => moveRow(one, { withDay: true }))),
+            h('a.btn.btn--primary.btn--lg.btn--block', { href: to('') },
+              `Ver todos los movimientos (${number(all.length)})`, icon('chevronR'))));
+}
+
+/**
+ * One movement: the hour, what kind, about whom, what happened, who did it.
+ * It opens what it is about — the receipt, the bill, the client, the farm.
+ */
+function moveRow(one, { withDay = false } = {}) {
+  const kind = kindOf(one.kind);
+  const where = one.receiptId ? `/receipts/${one.receiptId}`
+    : one.invoiceId ? `/invoices/${one.invoiceId}`
+      : one.clientId ? `/clients/${one.clientId}`
+        : one.farmId ? `/farms/${one.farmId}` : '';
+  const who = one.clientName || one.farmName || (one.kind === 'farma' ? 'Precios' : 'Sin cliente');
+
+  return h(where ? 'a.rmove.rmove--link' : 'div.rmove', where ? { href: `#${where}` } : {},
+    h('div.rmove__when',
+      // An old record may only know its day; it says so rather than "12:00".
+      h('span.rmove__time', one.exact ? formatTime(one.ms) : 'sin hora'),
+      withDay ? h('span.rmove__day', dayHeading(one.day)) : null),
+    h(`span.rmove__ico.rmove__ico--${kind.key}`, icon(kind.icon)),
+    h('div.rmove__main',
+      h('div.rmove__who', who),
+      h('div.rmove__what', one.text),
+      h('div.rmove__by', [kind.label, one.by ? `por ${one.by}` : null].filter(Boolean).join(' · '))),
+    where ? icon('chevronR', 'rmove__chev') : null);
+}
+
+/**
+ * What kept part of the list from being read, in words and with the fix.
+ * Never a failure of the page: the rest of the movements still show.
+ */
+function movesTrouble(view) {
+  const { logged, messages } = view.movesTrouble();
+  const code = (error) => String(error?.code || '');
+  const linkOf = (error) => (String(error?.message || '').match(/https:\/\/console\.firebase\.google\.com\S+/) || [])[0]
+    ?.replace(/[.,)\]]+$/, '');
+  const out = [];
+
+  if (logged) {
+    out.push(alert(code(logged) === 'permission-denied'
+      ? 'Los cambios de comidas, notas, días y datos no se están guardando: falta pegar las reglas '
+        + 'nuevas (firestore.rules) en Firebase. Los pagos, deudas, altas, pausas y mensajes sí se ven.'
+      : `No se pudieron leer los cambios guardados (${code(logged) || 'sin conexión'}). Prueba «Volver a leer».`,
+    'warn', 'alert'));
+  }
+  if (messages) {
+    const link = code(messages) === 'failed-precondition' ? linkOf(messages) : '';
+    out.push(h('div.stack.stack-2',
+      alert(code(messages) === 'failed-precondition'
+        ? 'Para ver aquí los mensajes, Firebase necesita un índice. Créalo una sola vez con el botón; '
+          + 'tarda unos minutos en quedar listo. Lo demás ya se ve.'
+        : code(messages) === 'permission-denied'
+          ? 'Para ver aquí los mensajes falta pegar las reglas nuevas (firestore.rules) en Firebase.'
+          : `No se pudieron leer los mensajes (${code(messages) || 'sin conexión'}).`,
+      'info', 'info'),
+      link
+        ? h('a.btn.btn--secondary.btn--block', { href: link, target: '_blank', rel: 'noopener' },
+            icon('shield'), 'Crear el índice de mensajes en Firebase')
+        : null));
+  }
+  return out.length ? h('div.stack.stack-2', out) : null;
+}
+
+export const renderMovements = (context) => periodView(context, drawMovements, {
+  kind: KINDS.some((kind) => kind.key === context.query.k) ? context.query.k : '',
+  term: context.query.q || '',
+  shown: MOVES_PAGE,
+}, { movements: true });
+
+function drawMovements(view) {
+  const all = view.moves();
+
+  screen({
+    title: 'Movimientos',
+    subtitle: rangeTitle(view.range),
+    backTo: urlFor(view.range),
+    tab: 'reports',
+    sunken: true,
+    actions: [
+      topbarButton('refresh', { label: 'Volver a leer', onClick: view.reload }),
+      ...(all?.length ? [topbarButton('printer', { label: 'Imprimir', onClick: () => printMoves(view) })] : []),
+    ],
+    body: h('div.page__inner.rbig.stack.stack-5',
+      picker(view.range, 'movimientos', () => ({ k: view.state.kind })),
+      view.failure()
+        ? dataErrorCard(view.failure(), { onRetry: view.reload })
+        : h('div.rmoves-host.stack.stack-4', movesBody(view))),
+  });
+}
+
+function movesBody(view) {
+  const { state, range } = view;
+  const all = view.moves();
+  if (!all) return [movesTrouble(view), skeletonRows(5)];
+
+  const counts = countByKind(all);
+  const shown = filterMovements(all, { kinds: state.kind ? [state.kind] : [], term: state.term });
+  const perDay = countBy(shown, (one) => one.day);
+  const kind = state.kind ? kindOf(state.kind) : null;
+  const change = (patch) => {
+    Object.assign(state, { shown: MOVES_PAGE }, patch);
+    remember(view);
+    refreshMoves(view);
+  };
+  const chip = (label, count, active, onClick) => h(
+    `button.chip${active ? '.is-active' : ''}${count ? '' : '.is-none'}`,
+    { type: 'button', 'aria-pressed': String(active), onclick: onClick },
+    label, h('span.chip__count', number(count)));
+
+  return [
+    movesTrouble(view),
+
+    h('div.stack.stack-3',
+      h('h2.rhead', '¿Qué tipo de movimiento?'),
+      h('div.rkinds',
+        chip('Todo', all.length, !state.kind, () => change({ kind: '' })),
+        KINDS.map((one) => chip(one.label, counts[one.key] || 0, state.kind === one.key,
+          () => change({ kind: one.key }))))),
+
+    searchInput({
+      placeholder: 'Buscar por cliente, palabra o quién lo hizo…',
+      value: state.term,
+      onInput: (value) => change({ term: value }),
+    }),
+
+    h('p.rcount', state.kind || state.term
+      ? `${plural(shown.length, 'movimiento', 'movimientos')}${kind ? ` de ${kind.label.toLowerCase()}` : ''}`
+        + `${state.term ? ` con «${state.term}»` : ''} · de ${number(all.length)}`
+      : plural(all.length, 'movimiento', 'movimientos')),
+
+    shown.length
+      ? h('div.stack.stack-5', daysOf(shown.slice(0, state.shown), perDay))
+      : emptyState(all.length
+        ? { icon: 'search', title: 'Nada con este filtro', text: 'Prueba con «Todo» o borra la búsqueda.' }
+        : { icon: 'clock', title: 'No hubo movimientos', text: 'Prueba con otro periodo arriba.' }),
+
+    shown.length > state.shown
+      ? button(`Ver ${number(Math.min(MOVES_PAGE, shown.length - state.shown))} más `
+        + `(faltan ${number(shown.length - state.shown)})`, {
+        variant: 'secondary', size: 'lg', block: true,
+        onClick: () => { state.shown += MOVES_PAGE; refreshMoves(view); },
+      })
+      : null,
+
+    shown.length
+      ? h('div.stack.stack-2',
+          button('Imprimir esta lista', {
+            variant: 'primary', size: 'lg', block: true, icon: 'printer', onClick: () => printMoves(view),
+          }),
+          h('p.rfoot', state.kind || state.term
+            ? 'Se imprime sólo lo que se ve con este filtro.'
+            : 'Sale en hoja tamaño carta, con todos los movimientos del periodo.'))
+      : null,
+
+    button('Regresar al reporte', {
+      variant: 'ghost', size: 'lg', block: true, icon: 'chevronL', onClick: () => go(urlFor(range)),
+    }),
+  ];
+}
+
+const countBy = (rows, key) => rows.reduce((acc, row) => acc.set(key(row), (acc.get(key(row)) || 0) + 1), new Map());
+
+/** The rows under a heading per day: "Hoy · Jueves 29 de octubre". */
+function daysOf(rows, perDay) {
+  const groups = [];
+  for (const one of rows) {
+    const last = groups[groups.length - 1];
+    if (last && last.day === one.day) last.rows.push(one);
+    else groups.push({ day: one.day, rows: [one] });
+  }
+  return groups.map((group) => {
+    const word = dayHeading(group.day);
+    // The year only when it is not this one.
+    const long = capitalize(formatDayLong(group.day)).replace(` de ${today().slice(0, 4)}`, '');
+    return h('section.stack.stack-2',
+      h('h3.rday',
+        h('span', word === 'Hoy' || word === 'Ayer' ? `${word} · ${long}` : long),
+        h('span.rday__n', plural(perDay.get(group.day) || group.rows.length, 'movimiento', 'movimientos'))),
+      h('div.rmoves__list', group.rows.map((one) => moveRow(one))));
+  });
+}
+
+/**
+ * Keeps the filter in the address without going anywhere, so "Atrás" from a
+ * client comes back to the same filter rather than to everything.
+ */
+function remember(view) {
+  try {
+    history.replaceState(history.state, '',
+      `#${urlFor(view.range, 'movimientos', { k: view.state.kind, q: view.state.term })}`);
+  } catch { /* the address is a convenience */ }
+}
+
+/** Redraws the list alone, keeping the caret in the search box. */
+function refreshMoves(view) {
+  const host = document.querySelector('.rmoves-host');
+  if (!host) { view.repaint(); return; }
+  const box = host.querySelector('input[type="search"]');
+  const typing = box && document.activeElement === box;
+  const caret = typing ? box.selectionStart : null;
+
+  host.replaceChildren(...movesBody(view).filter(Boolean));
+
+  const next = host.querySelector('input[type="search"]');
+  if (next && typing) {
+    next.focus();
+    if (caret != null) next.setSelectionRange(caret, caret);
+  }
+}
+
+function printMoves(view) {
+  const all = view.moves();
+  if (!all) { toastBad('Todavía se están leyendo los movimientos.'); return; }
+  const { kind, term } = view.state;
+  const rows = filterMovements(all, { kinds: kind ? [kind] : [], term });
+  printSheet(listSheet({ range: view.range }, {
+    title: kind ? `Movimientos · ${kindOf(kind).label}` : 'Movimientos',
+    note: `${plural(rows.length, 'movimiento', 'movimientos')}, del más nuevo al más viejo.`,
+    columns: ['Día', 'Hora', 'Cliente', 'Qué pasó', 'Quién'],
+    text: [1, 2, 3, 4],
+    rows: rows.map((one) => [
+      formatDayShort(one.day), one.exact ? formatTime(one.ms) : '—',
+      one.clientName || one.farmName || '—', `${kindOf(one.kind).label}: ${one.text}`, one.by || '—',
+    ]),
+    filter: term || '',
+    business: store.business,
+    by: session.displayName || session.email || '',
+  }));
+}
+
 /* --- Addresses -------------------------------------------------------------- */
 
 /**
@@ -774,12 +1091,14 @@ function refresh(view, spec, report) {
  * Inicio. A link in may choose the period — Inicio's "cobrado hoy" arrives
  * asking for today.
  */
-function urlFor(range, list) {
+function urlFor(range, list, keep = {}) {
   const base = list ? `/reportes/${list}` : '/reportes';
   const query = range.grain === 'custom'
     ? `p=custom&d=${range.start}&h=${range.end}`
     : `p=${range.grain}&d=${range.start}`;
-  return `${base}?${query}`;
+  const more = Object.entries(keep).filter(([, value]) => value)
+    .map(([key, value]) => `&${key}=${encodeURIComponent(value)}`).join('');
+  return `${base}?${query}${more}`;
 }
 
 function fromQuery(query = {}) {

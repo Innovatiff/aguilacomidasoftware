@@ -26,9 +26,10 @@ import {
   runTransaction, arrayUnion, serverTimestamp, listData, saved,
 } from '../firebase.js';
 import {
-  KINDS, applyChange, revertChange, dueNow, dueBack, isClientChange,
+  KINDS, applyChange, revertChange, dueNow, dueBack, isClientChange, changeWords,
 } from '../lib/schedule.js';
-import { addDays, today } from '../lib/dates.js';
+import { logMovement, logClientChanges } from './movements.js';
+import { addDays, today, formatDay } from '../lib/dates.js';
 import { createClient } from './clients.js';
 import { createFarm, addLocations, newLocationId } from './farms.js';
 import { addCharge, takePayment, adjustBalance } from './invoices.js';
@@ -90,7 +91,20 @@ export async function scheduleSet({ kind, on, until = '', client = null, farm = 
     createdByName: author?.name || '',
     createdByUid: author?.uid || null,
   }));
+  logMovement({
+    kind: 'programado',
+    text: `Programó: ${setWords({ kind, on, until: end, value, farmName: farm?.name, clientName: client?.name })}`,
+    clientId: client?.id || '', clientName: client?.name || '', farmId: farm?.id || '', farmName: farm?.name || '',
+    by: author?.name,
+  });
   return { id: ref.id };
+}
+
+/** "pasa a 2 comidas al día, desde el 26 de octubre hasta el 30" */
+function setWords(set) {
+  const what = set.kind === 'start' ? 'empieza' : changeWords(set);
+  return `${what}, ${KINDS[set.kind]?.ends ? 'desde el' : 'el'} ${formatDay(set.on)}`
+    + `${set.until ? ` hasta el ${formatDay(set.until)}` : ''}`;
 }
 
 /**
@@ -118,6 +132,12 @@ export async function cancelSet(set, author) {
   await saved(updateDoc(doc(db, 'scheduled', set.id), {
     state: 'cancelled', cancelledAt: serverTimestamp(), cancelledByName: author?.name || '',
   }));
+  if (set.on) {
+    logMovement({
+      kind: 'programado', text: `Canceló lo programado: ${setWords(set)}`,
+      clientId: set.clientId || '', clientName: set.clientName || '', by: author?.name,
+    });
+  }
   if (set.kind === 'start' && set.clientId) {
     await saved(updateDoc(doc(db, 'clients', set.clientId), { startsOn: '', updatedAt: serverTimestamp() }))
       .catch(() => {});
@@ -143,13 +163,22 @@ export const endNow = (set) => saved(updateDoc(doc(db, 'scheduled', set.id), {
 
 const entry = (log) => ({
   on: log.on, status: log.status, at: Date.now(),
-  tag: Math.random().toString(36).slice(2, 8), prog: log.prog || '',
+  tag: Math.random().toString(36).slice(2, 8), prog: log.prog || '', by: 'Programador',
 });
+
+/** What the Programador changed on a client, for Movimientos, once it is in. */
+const told = (said) => (outcome) => {
+  if (said.patch) {
+    logClientChanges(said.clientId, said.patch, { before: said.client, by: 'Programador', prefix: said.prefix });
+  }
+  return outcome;
+};
 
 /** A change on a client, together with the set, in one transaction. */
 function applyToClient(set, { farms, by }) {
   const setRef = doc(db, 'scheduled', set.id);
   const clientRef = doc(db, 'clients', set.clientId);
+  const said = { clientId: set.clientId, prefix: 'Programador · ' };
   return runTransaction(db, async (tx) => {
     const now = await tx.get(setRef);
     if (!now.exists() || now.data().state !== 'pending') return 'gone';
@@ -171,6 +200,7 @@ function applyToClient(set, { farms, by }) {
       ...(result.log ? { statusLog: arrayUnion(entry(result.log)) } : {}),
       updatedAt: serverTimestamp(),
     });
+    Object.assign(said, { client, patch: result.patch });
     // With an "until", it waits to be put back; a new client's end is their
     // last day, which pauses them by itself.
     const waits = !!fresh.until && fresh.kind !== 'start';
@@ -183,13 +213,14 @@ function applyToClient(set, { farms, by }) {
       ...(waits ? {} : { doneAt: serverTimestamp() }),
     });
     return 'applied';
-  });
+  }).then(told(said));
 }
 
 /** The morning after "until": what is still as the set left it goes back. */
 function revertOnClient(set, { farms, by }) {
   const setRef = doc(db, 'scheduled', set.id);
   const clientRef = doc(db, 'clients', set.clientId);
+  const said = { clientId: set.clientId, prefix: 'Programador (regresó) · ' };
   return runTransaction(db, async (tx) => {
     const now = await tx.get(setRef);
     if (!now.exists() || now.data().state !== 'active') return 'gone';
@@ -203,13 +234,14 @@ function revertOnClient(set, { farms, by }) {
         ...(log ? { statusLog: arrayUnion(entry(log)) } : {}),
         updatedAt: serverTimestamp(),
       });
+      Object.assign(said, { client, patch });
     }
     tx.update(setRef, {
       state: 'done', revertedAt: serverTimestamp(), revertedByName: by, doneAt: serverTimestamp(),
       result: { text: skipped.length ? `No se regresó ${skipped.join(' ni ')}: alguien lo cambió antes.` : 'Regresó a como estaba.', skipped: skipped.length > 0 },
     });
     return 'reverted';
-  });
+  }).then(told(said));
 }
 
 /** Takes a set that is its own operation, so only one computer does it. */

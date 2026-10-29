@@ -10,6 +10,7 @@
  */
 
 import { db, doc, getDoc, setDoc, onSnapshot, serverTimestamp, docData } from '../firebase.js';
+import { logMovement } from './movements.js';
 import { normalizePricing, normalizeTiers } from '../lib/pricing.js';
 
 const pricingRef = () => doc(db, 'config', 'pricing');
@@ -42,17 +43,24 @@ export const getPricing = async () => read(docData(await getDoc(pricingRef())));
  * as a list, and two people editing different rows of it at the same moment is
  * not a situation this business has.
  */
-export async function savePricing(pricing, author) {
+export async function savePricing(pricing, author, previous = null) {
   const tiers = normalizeTiers(pricing?.tiers);
   if (!tiers.length) throw new Error('Deja al menos un plan con precio.');
 
   const clean = normalizePricing({ ...pricing, tiers });
+  // Each price that moved, for Movimientos: "2 comidas: $266 → $280".
+  const was = new Map((previous?.tiers || []).map((tier) => [Number(tier.mealsPerDay), Number(tier.price)]));
+  const moved = clean.tiers
+    .filter((tier) => was.get(Number(tier.mealsPerDay)) !== Number(tier.price))
+    .map((tier) => `${tier.mealsPerDay} ${Number(tier.mealsPerDay) === 1 ? 'comida' : 'comidas'}: `
+      + `${was.has(Number(tier.mealsPerDay)) ? `$${was.get(Number(tier.mealsPerDay))}` : '—'} → $${tier.price}`);
 
   await setDoc(pricingRef(), {
     ...clean,
     updatedAt: serverTimestamp(),
     updatedByName: author?.name || '',
   }, { merge: true });
+  if (moved.length) logMovement({ kind: 'farma', text: `Precios por quincena: ${moved.join(' · ')}`, by: author?.name });
 
   return clean;
 }

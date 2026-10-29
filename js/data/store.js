@@ -23,6 +23,7 @@ import { watchRecentReceipts, cancelledIds, RECENT_RECEIPTS } from './receipts.j
 import { watchConversations, totalUnread } from './chat.js';
 import { pendingBilling } from './cycles.js';
 import { watchSchedule, watchScheduleSince, runSchedule } from './schedule.js';
+import { setClientLookup, forgetMovements } from './movements.js';
 import { session } from './session.js';
 import { forgetPeriods } from './reports.js';
 import { today, addDays } from '../lib/dates.js';
@@ -64,6 +65,10 @@ const subscribers = new Set();
 let stops = [];
 
 export const store = state;
+
+// Movimientos compares a client before and after a change: this is where the
+// "before" comes from.
+setClientLookup((id) => state.clients.find((client) => client.id === id) || null);
 
 /** Subscribe to any store change. Fires immediately with the current state. */
 export function subscribe(fn) {
@@ -223,6 +228,7 @@ export function stopStore() {
   // periods are the same kind of borrowed answer.
   forgetPendingBills();
   forgetPeriods();
+  forgetMovements();
   Object.assign(state, {
     pricing: { ...DEFAULT_PRICING },
     business: { ...DEFAULT_BUSINESS },

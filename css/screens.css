@@ -988,6 +988,94 @@
 
 .input--big { min-height: 52px; font-size: var(--fs-md); }
 
+/* --- Movimientos ------------------------------------------------------------
+   Everything that happened, a row each: the hour on the left where the eye
+   starts, a coloured chip for the kind, then who, what and by whom. The
+   filter is chips that wrap — on a desk screen every kind is in view at once,
+   nothing hides behind a sideways scroll. */
+
+.rmoves__top { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s3); }
+
+.rkinds { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.rkinds .chip {
+  padding: 9px var(--s4);
+  font-size: var(--fs-base);
+  text-decoration: none;
+  cursor: pointer;
+}
+.rkinds .chip:hover { border-color: var(--ink-500); color: var(--text); }
+.rkinds .chip.is-active:hover { color: #fff; }
+.rkinds .chip.is-none { opacity: .55; }
+
+.rmoves__list {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--sh-1);
+  overflow: hidden;
+}
+
+.rmove {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s3);
+  padding: var(--s3) var(--s4);
+  color: inherit;
+  text-decoration: none;
+}
+.rmove + .rmove { border-top: 1px solid var(--border); }
+.rmove--link { cursor: pointer; }
+.rmove--link:hover { background: var(--surface-alt); }
+
+.rmove__when {
+  flex: 0 0 84px;
+  display: flex; flex-direction: column;
+  padding-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.rmove__time { font-size: var(--fs-base); font-weight: 700; white-space: nowrap; }
+.rmove__day { font-size: var(--fs-sm); color: var(--text-soft); }
+
+.rmove__ico {
+  flex: none; display: grid; place-items: center;
+  width: 36px; height: 36px; border-radius: var(--r-md);
+  color: #ffffff; background: var(--ink-500);
+}
+.rmove__ico svg { width: 20px; height: 20px; }
+.rmove__ico--pago       { background: var(--brand-500); }
+.rmove__ico--deuda      { background: var(--warn-600); }
+.rmove__ico--comidas    { background: #0e6a72; }
+.rmove__ico--nota       { background: #8a6a00; }
+.rmove__ico--nocome     { background: var(--bad-500); }
+.rmove__ico--ubicacion  { background: var(--info-600); }
+.rmove__ico--datos      { background: #4a5568; }
+.rmove__ico--estado     { background: var(--ink-600); }
+.rmove__ico--alta       { background: #6b4fa0; }
+.rmove__ico--mensaje    { background: var(--ok-600); }
+.rmove__ico--programado { background: #1f5f7a; }
+.rmove__ico--farma      { background: #8b5a2b; }
+
+.rmove__main { flex: 1 1 auto; min-width: 0; }
+.rmove__who { font-size: var(--fs-md); font-weight: 700; }
+.rmove__what { font-size: var(--fs-base); line-height: 1.4; overflow-wrap: anywhere; }
+.rmove__by { font-size: var(--fs-sm); color: var(--text-soft); }
+.rmove__chev { flex: none; align-self: center; width: 20px; height: 20px; color: var(--text-faint); }
+
+.rday {
+  display: flex; align-items: baseline; justify-content: space-between; gap: var(--s3);
+  margin: 0; padding: 0 var(--s1);
+  font-size: var(--fs-md); font-weight: 700;
+}
+.rday__n { font-size: var(--fs-sm); font-weight: 600; color: var(--text-faint); white-space: nowrap; }
+
+@media (max-width: 520px) {
+  .rmove { padding: var(--s3); gap: var(--s2); }
+  .rmove__when { flex-basis: 64px; }
+  .rmove__time { font-size: var(--fs-sm); }
+  .rmove__ico { width: 30px; height: 30px; }
+  .rmove__ico svg { width: 17px; height: 17px; }
+}
+
 /* --- Pago por adelantado ----------------------------------------------------
    Where a payment that went to a fortnight before it was served is moved to.
    The old fortnight is struck through, the new one is the one to read. */

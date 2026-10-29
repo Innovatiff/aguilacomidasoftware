@@ -29,6 +29,7 @@ import {
   onSnapshot, query, where, orderBy, limit, serverTimestamp,
   writeBatch, arrayUnion, docData, listData, toDate, saved,
 } from '../firebase.js';
+import { logClientChanges, logMovement, clientBefore, actorName } from './movements.js';
 import { today, dayKey, daysBetween, addDays } from '../lib/dates.js';
 import {
   DEFAULT_DELIVERY_DAYS, DEFAULT_GRACE_DAYS, DEFAULT_PAY_EVERY, payDayOnOrAfter,
@@ -173,6 +174,8 @@ export function onPlanOn(client, day) {
  */
 const statusEntry = (status, day = today()) => ({
   on: day, status, at: Date.now(), tag: Math.random().toString(36).slice(2, 8),
+  // Who did it, for Movimientos.
+  by: actorName(),
 });
 
 /** Days left before their service ends, or null when there is no end date. */
@@ -183,10 +186,12 @@ export function daysLeft(client, day = today()) {
 
 /** Sets — or clears — the last day this person is served. */
 export async function setEndsOn(clientId, endsOn) {
+  const before = clientBefore(clientId);
   await saved(updateDoc(doc(db, 'clients', clientId), {
     endsOn: endsOn || '',
     updatedAt: serverTimestamp(),
   }));
+  logClientChanges(clientId, { endsOn: endsOn || '' }, { before });
 }
 
 /**
@@ -334,6 +339,7 @@ export async function updateClient(clientId, patch, previousEmail, farm) {
     ? place({ ...patch, farmId: patch.farmId ?? farm?.id }, farm)
     : {};
 
+  const before = clientBefore(clientId);
   const batch = writeBatch(db);
   batch.update(doc(db, 'clients', clientId), {
     ...sanitize(patch),
@@ -355,6 +361,7 @@ export async function updateClient(clientId, patch, previousEmail, farm) {
   }
 
   await saved(batch.commit());
+  logClientChanges(clientId, { ...sanitize(patch), ...placed, ...(patchEmail ? { email } : {}) }, { before });
 }
 
 /**
@@ -370,11 +377,13 @@ export async function moveClient(clientId, farm, locationId, fromFarmId) {
   const farmTerms = farm?.id && farm.id !== fromFarmId
     ? Object.fromEntries(TERM_FIELDS.map((field) => [field, terms[field]]))
     : {};
+  const before = clientBefore(clientId);
   await saved(updateDoc(doc(db, 'clients', clientId), {
     ...placed,
     ...farmTerms,
     updatedAt: serverTimestamp(),
   }));
+  logClientChanges(clientId, { ...placed, ...farmTerms }, { before });
 }
 
 /**
@@ -438,11 +447,16 @@ export async function deleteClient(clientId, email) {
       + 'desactívalo en lugar de borrarlo.');
   }
 
+  const before = clientBefore(clientId);
   const batch = writeBatch(db);
   batch.delete(doc(db, 'clients', clientId));
   const key = normalizeEmail(email);
   if (key) batch.delete(doc(db, 'clientEmails', key));
   await batch.commit();
+  logMovement({
+    kind: 'alta', text: 'Borró al cliente (se había dado de alta por error)',
+    clientId, clientName: before?.name || '', farmName: before?.farmName || '',
+  });
 }
 
 /* --- Placement ------------------------------------------------------------- */
@@ -544,11 +558,13 @@ export async function copyTagsToPreferences(clients) {
  */
 export async function setDayNote(clientId, text, day = today()) {
   const clean = String(text || '').trim();
+  const before = clientBefore(clientId);
   await saved(updateDoc(doc(db, 'clients', clientId), {
     notaDelDia: clean,
     notaDelDiaOn: clean ? day : '',
     updatedAt: serverTimestamp(),
   }));
+  logClientChanges(clientId, { notaDelDia: clean }, { before });
 }
 
 /**

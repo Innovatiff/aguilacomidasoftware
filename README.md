@@ -1037,6 +1037,46 @@ casa que no está en ninguna libreta, sale en **Avisos** antes de su día.
 lo suyo en un lugar nuevo de la base. Mientras no estén, su página dice
 «Falta publicar las reglas del Programador» y el resto del sistema sigue igual.
 
+### Movimientos: todo lo que pasó, con día y hora
+
+En **Reportes**, debajo de las listas, está **Movimientos**: lo último que
+pasó con los clientes y un botón **Ver todos los movimientos**. Ahí sale cada
+cosa en su renglón, agrupada por día, con la hora, a quién le pasó, qué pasó
+y quién lo hizo:
+
+- **Pagos** (y pagos cancelados), **deudas** escritas a mano, saldos bajados y
+  cuentas corregidas;
+- **comidas y días**: «Comidas al día: 1 → 2», los días que come, platos extra;
+- **notas** y la nota del día; **no puede comer** y preferencias;
+- **ubicación** («Mucci · Casa 1 → Berry · Campo»), **datos** (nombre,
+  teléfono, correo, cómo paga);
+- **pausas** y el último día; **altas** y bajas; **mensajes** que escribió el
+  cliente o que le escribió la oficina;
+- lo que hizo el **Programador**, y las farmas, ubicaciones y precios.
+
+Arriba se escoge el periodo (hoy, la semana, el mes, otras fechas) y el
+**tipo**: tocar «Notas» deja sólo las notas, «Pagos» sólo los pagos; «Todo»
+regresa a todo. La búsqueda encuentra por cliente, por palabra o por quién lo
+hizo. Tocar un renglón abre el cliente, el recibo o la factura. Se imprime
+tal como está filtrado.
+
+**Desde cuándo.** Pagos, deudas, altas, pausas y mensajes salen también hacia
+atrás, porque ya tenían su registro. Los cambios de comidas, notas, días,
+ubicación y datos se anotan **a partir de esta versión**: lo de antes se
+escribió encima y no quedó.
+
+**Un movimiento nunca detiene el trabajo.** La línea se anota aparte, después
+del cambio; si no se puede guardar, el cambio del cliente sí se guarda.
+
+**Dos cosas que hacer una sola vez:**
+
+1. **Pegar las reglas** (ver *Publicar las reglas*). Mientras no estén, la
+   sección dice «falta pegar las reglas» y los cambios de comidas, notas y
+   datos no se anotan.
+2. **El índice de los mensajes.** La primera vez que abras Movimientos sale el
+   botón **Crear el índice de mensajes en Firebase**: tócalo, confirma en la
+   consola y espera unos minutos. Hasta entonces se ve todo menos los mensajes.
+
 ### 11. Correr en local
 
 No hay dependencias ni build. Cualquier servidor estático sirve:
@@ -1100,8 +1140,10 @@ Las reglas se publican desde la consola, sin instalar nada:
 2. Pega el contenido de `firestore.rules` y **Publicar**.
 
 **Cuándo volver a pegarlas.** Cada vez que cambia `firestore.rules`. La última
-vez fue para **el Programador** (`scheduled`): sólo el equipo lo lee y lo
-escribe, y lo programado se cancela pero nunca se borra.
+vez fue para **Movimientos** (`movements`, y leer los mensajes de todos los
+clientes de una vez): sólo el equipo los lee y los escribe, y un movimiento
+nunca se cambia ni se borra. La anterior fue para **el Programador**
+(`scheduled`).
 
 **Los índices.** Hacen falta dos, y no se pegan: se crean con un clic. La
 primera vez que abras la ficha de un cliente o su lista de recibos, si falta
@@ -1109,7 +1151,9 @@ alguno el panel te muestra **Crear el índice en Firebase** con el enlace ya
 armado. Tarda un minuto en quedar listo y no hay que volver a tocarlo.
 
 Los dos están en `firestore.indexes.json` por si prefieres subirlos de golpe
-con `firebase deploy --only firestore:indexes`.
+con `firebase deploy --only firestore:indexes`. Ahí también está el de los
+**mensajes** que usa Movimientos (ver *Movimientos*), que se crea igual: con
+el botón que sale la primera vez.
 
 > Sólo hace falta cuando cambian las reglas mismas. Agregar gente al equipo,
 > registrar ranchos o dar de alta clientes **no** requiere republicar nada: eso
@@ -1359,6 +1403,24 @@ scheduled/{id}                   -- el Programador: un cambio para su día
                                     sólo lo que nadie tocó
   result { text, skipped }, error
   createdAt, createdByName, appliedAt, appliedByName, doneAt
+
+movements/{id}                   -- Movimientos: un cambio que se escribiría
+                                    encima (comidas, notas, días, ubicación,
+                                    datos, farmas, precios, Programador);
+                                    nunca se cambia ni se borra
+  kind                           -- pago | deuda | comidas | nota | nocome |
+                                    ubicacion | datos | estado | alta |
+                                    mensaje | programado | farma
+  text                           -- lo que pasó, en palabras («Comidas al
+                                    día: 1 → 2»), hasta 500 letras
+  clientId, clientName, farmId, farmName
+  by                             -- quién lo hizo (la oficina, quien está
+                                    sentado en la cocina, «Programador»)
+  day, ms, at                    -- el día y el momento
+
+  Pagos, deudas, altas, pausas y mensajes no se copian aquí: Reportes los lee
+  de donde ya están (receipts, invoices, clients.createdAt, statusLog, y los
+  mensajes de todas las conversaciones de una vez).
 
 packers/{packerId}               -- cada persona que trabaja en la cocina
   name, pin, active              -- el PIN es una etiqueta, no una contraseña
