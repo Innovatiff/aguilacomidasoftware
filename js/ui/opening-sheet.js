@@ -28,6 +28,7 @@ import { money, moneyFull } from '../lib/format.js';
 import { formatRange, formatDayLong, today, addDays, capitalize } from '../lib/dates.js';
 import { periodWord, periodWordPlural, payEveryOf } from '../lib/billing.js';
 import { errorText } from '../firebase.js';
+import { t } from '../lib/i18n.js';
 
 /**
  * @param {object} options
@@ -41,7 +42,7 @@ export function openOpeningSheet({ client, pricing, author }) {
   const words = periodWordPlural(client);
 
   return sheet({
-    title: 'Saldo del cuaderno',
+    title: t('Saldo del cuaderno'),
     build: (close) => {
       // One period back is the common case — most people are one behind — and
       // it is a starting point, not an answer.
@@ -67,25 +68,26 @@ export function openOpeningSheet({ client, pricing, author }) {
         mount(submit,
           icon('receipt'),
           chosen
-            ? `Registrar ${chosen} ${chosen === 1 ? word : words} · ${money(total())}`
-            : 'No hay nada que registrar');
+            ? t('Registrar {count} {periods} · {amount}', {
+              count: chosen, periods: chosen === 1 ? t(word) : t(words), amount: money(total()),
+            })
+            : t('No hay nada que registrar'));
         submit.disabled = !chosen || busy;
 
         mount(preview,
           !found.amount
-            ? alert('Su plan no tiene precio, así que no se puede calcular cuánto debe. '
-              + 'Ponlo en Ajustes → Precios.', 'warn')
+            ? alert(t('Su plan no tiene precio, así que no se puede calcular cuánto debe. Ponlo en Ajustes → Precios.'), 'warn')
             : null,
 
           found.periods.length
             ? h('div.stack.stack-2',
-                h('div.t-xs.upper.c-faint.w-700', `${capitalize(words)} desde entonces`),
+                h('div.t-xs.upper.c-faint.w-700', t('{periods} desde entonces', { periods: capitalize(t(words)) })),
                 card(h('div.stack.stack-1', found.periods.map(periodRow))))
-            : alert(`Con esa fecha no queda ninguna ${word} pendiente.`, 'info'),
+            : alert(t('Con esa fecha no queda ninguna {period} pendiente.', { period: t(word) }), 'info'),
 
           chosen
             ? h('div.row.row--between',
-                h('span.w-650', 'Total que quedará debiendo'),
+                h('span.w-650', t('Total que quedará debiendo')),
                 h('span.t-lg.w-700', moneyFull(total())))
             : null);
       }
@@ -101,7 +103,7 @@ export function openOpeningSheet({ client, pricing, author }) {
         return h('label.switch', { style: { padding: '6px 0' } },
           h('div.grow',
             h('div.w-600', formatRange(period.start, period.end)),
-            h('div.t-xs.c-soft', `Ya servida · ${money(period.amount)}`)),
+            h('div.t-xs.c-soft', t('Ya servida · {amount}', { amount: money(period.amount) }))),
           box,
           h('span.switch__track'));
       }
@@ -110,14 +112,16 @@ export function openOpeningSheet({ client, pricing, author }) {
         if (busy) return;
         busy = true;
         paint();
-        mount(submit, h('span.spinner.spinner--light'), 'Registrando…');
+        mount(submit, h('span.spinner.spinner--light'), t('Registrando…'));
 
         try {
           const issued = await openBalance(client, found.periods, author);
           // The last day that payment paid for — the end of the fortnight it
           // was for — not the day it was made.
           if (found.paidThrough) await setPaidThrough(client.id, found.paidThrough);
-          toastOk(`${issued} ${issued === 1 ? `${word} registrada` : `${words} registradas`}`);
+          toastOk(issued === 1
+            ? t('{count} {period} registrada', { count: issued, period: t(word) })
+            : t('{count} {periods} registradas', { count: issued, periods: t(words) }));
           close(issued);
         } catch (error) {
           busy = false;
@@ -130,14 +134,13 @@ export function openOpeningSheet({ client, pricing, author }) {
 
       return h('div.stack.stack-4',
         h('p.t-sm.c-soft',
-          `Lo que ${client.name} traía debiendo antes de usar el sistema. Dinos cuándo pagó por `
-          + `última vez y el panel calcula las ${words} que ya comió y no ha pagado. Cada pago `
-          + 'es por lo que ya se sirvió: la que está en curso se paga cuando termine.'),
+          t('Lo que {name} traía debiendo antes de usar el sistema. Dinos cuándo pagó por última vez y el panel calcula las {periods} que ya comió y no ha pagado. Cada pago es por lo que ya se sirvió: la que está en curso se paga cuando termine.',
+            { name: client.name, periods: t(words) })),
 
         field({
-          label: '¿Cuándo pagó por última vez?',
-          hint: `Su ciclo empezó el ${formatDayLong(client.cycleAnchor || today())}, así que las `
-            + `${words} se cuentan desde ahí.`,
+          label: t('¿Cuándo pagó por última vez?'),
+          hint: t('Su ciclo empezó el {day}, así que las {periods} se cuentan desde ahí.',
+            { day: formatDayLong(client.cycleAnchor || today()), periods: t(words) }),
           control: input({
             type: 'date',
             value: lastPaidOn,
@@ -148,8 +151,8 @@ export function openOpeningSheet({ client, pricing, author }) {
 
         preview,
 
-        h('p.t-xs.c-faint', `Se emite una factura por ${word}, marcada como traída del `
-          + 'cuaderno. Puedes cobrarlas como cualquier otra, completas o de a poco.'),
+        h('p.t-xs.c-faint', t('Se emite una factura por {period}, marcada como traída del cuaderno. Puedes cobrarlas como cualquier otra, completas o de a poco.',
+          { period: t(word) })),
 
         submit);
     },

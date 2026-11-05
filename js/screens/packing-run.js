@@ -87,6 +87,7 @@ import {
 import { today, formatDayLong, capitalize } from '../lib/dates.js';
 import { plural, number } from '../lib/format.js';
 import { errorText } from '../firebase.js';
+import { t } from '../lib/i18n.js';
 
 export function renderPackingRun(context) {
   const life = lifetime();
@@ -338,7 +339,7 @@ export function renderPackingRun(context) {
         })),
       });
     } catch (error) {
-      toastBad(`No se pudo imprimir la etiqueta: ${errorText(error)}`);
+      toastBad(t('No se pudo imprimir la etiqueta: {error}', { error: errorText(error) }));
     }
   }
 
@@ -378,7 +379,7 @@ export function renderPackingRun(context) {
   function paint() {
     if (!life.alive()) return;
     screen({
-      title: plan?.line?.name || 'Empaque',
+      title: plan?.line?.name || t('Empaque'),
       subtitle: `${packer.name} · ${capitalize(formatDayLong(day))}`,
       backTo: '/empaque',
       tab: 'packing',
@@ -403,18 +404,18 @@ export function renderPackingRun(context) {
     if (!lineOf(setup.lines, lineId)) {
       return emptyState({
         icon: 'search',
-        title: 'Esa libreta ya no existe',
-        text: 'El encargado pudo haberla cambiado. Regresa y escoge otra.',
-        action: button('Regresar', { variant: 'primary', size: 'lg', onClick: () => go('/empaque') }),
+        title: t('Esa libreta ya no existe'),
+        text: t('El encargado pudo haberla cambiado. Regresa y escoge otra.'),
+        action: button(t('Regresar'), { variant: 'primary', size: 'lg', onClick: () => go('/empaque') }),
       });
     }
 
     if (!plan?.slides.length) {
       return emptyState({
         icon: 'box',
-        title: 'Hoy no hay nada que empacar en esta libreta',
-        text: 'Ninguna de sus ubicaciones tiene gente que coma hoy.',
-        action: button('Regresar', { variant: 'primary', size: 'lg', onClick: () => go('/empaque') }),
+        title: t('Hoy no hay nada que empacar en esta libreta'),
+        text: t('Ninguna de sus ubicaciones tiene gente que coma hoy.'),
+        action: button(t('Regresar'), { variant: 'primary', size: 'lg', onClick: () => go('/empaque') }),
       });
     }
 
@@ -440,7 +441,7 @@ export function renderPackingRun(context) {
       h('div.pkbar__row',
         // How many people are packed, and nothing else. The number of farms
         // was on this line too; it never changed while anybody was reading it.
-        h('div.pkbar__text', `${number(done)} de ${number(people)}`),
+        h('div.pkbar__text', t('{n} de {total}', { n: number(done), total: number(people) })),
         prints()
           ? h('div.pkbar__tools',
               plan.slides[at]?.kind === 'done' ? null : specialButton(),
@@ -454,8 +455,7 @@ export function renderPackingRun(context) {
   }
 
   function offlineNote() {
-    return alert('Sin conexión con la base de datos. Se empaca con la lista guardada en esta '
-      + 'computadora; alguien agregado hace un momento podría no salir.', 'warn');
+    return alert(t('Sin conexión con la base de datos. Se empaca con la lista guardada en esta computadora; alguien agregado hace un momento podría no salir.'), 'warn');
   }
 
   /** Somebody behind the place it is at who was never packed — see `missed`. */
@@ -472,14 +472,14 @@ export function renderPackingRun(context) {
     return h('div.pkmissed', { role: 'alert' },
       h('div.pkmissed__text',
         h('strong', behind.length > 1
-          ? `Faltan ${behind.length} personas que se agregaron antes de donde vas`
-          : 'Falta alguien que se agregó antes de donde vas'),
+          ? t('Faltan {n} personas que se agregaron antes de donde vas', { n: behind.length })
+          : t('Falta alguien que se agregó antes de donde vas')),
         h('span', `${slide.client.name}${where ? ` · ${where}` : ''}`
-          + `${slide.plates > 1 ? ` · ${slide.plates} comidas` : ''}`)),
+          + `${slide.plates > 1 ? ` · ${t('{n} comidas', { n: slide.plates })}` : ''}`)),
       h('div.pkmissed__acts',
-        prints() ? act('Imprimir sus etiquetas', 'printer',
+        prints() ? act(t('Imprimir sus etiquetas'), 'printer',
           () => printFor(index, { pressed: true, alone: true })) : null,
-        act('Ya lo empaqué', 'check', () => {
+        act(t('Ya lo empaqué'), 'check', () => {
           seen.add(slide.client.id);
           remember();
           paint();
@@ -516,7 +516,7 @@ export function renderPackingRun(context) {
           lineId: plan.line?.id || '',
         });
       },
-    }, icon('note'), 'Etiqueta especial');
+    }, icon('note'), t('Etiqueta especial'));
   }
 
   /**
@@ -542,7 +542,7 @@ export function renderPackingRun(context) {
       },
     },
     icon('printer'),
-    h('span.pkprint__text', on ? 'Siguiente imprime' : 'Siguiente no imprime'),
+    h('span.pkprint__text', on ? t('Siguiente imprime') : t('Siguiente no imprime')),
     h('span.pkprint__switch', h('span.pkprint__knob')));
   }
 
@@ -551,7 +551,7 @@ export function renderPackingRun(context) {
   function farmSlide(slide) {
     const bag = bagAt(plan.slides, at);
     return h('div.pkfarm',
-      h('div.pkfarm__eyebrow', 'Sigue esta farma'),
+      h('div.pkfarm__eyebrow', t('Sigue esta farma')),
       h('h2.pkfarm__name', slide.farm.name),
       // Which of its locations come now, in the order they come. The libreta
       // goes location by location, so a farm can come back later in the
@@ -562,19 +562,19 @@ export function renderPackingRun(context) {
       // One line instead of two stacked columns of figures. It is the size of
       // what is coming, read once; the line under the name is enough for that.
       h('div.pkfarm__nums',
-        h('span', h('b', number(slide.people)), slide.people === 1 ? ' persona' : ' personas'),
+        h('span', h('b', number(slide.people)), slide.people === 1 ? ` ${t('persona')}` : ` ${t('personas')}`),
         h('span.pkfarm__dot', '·'),
-        h('span', h('b', number(slide.plates)), slide.plates === 1 ? ' comida' : ' comidas'),
+        h('span', h('b', number(slide.plates)), slide.plates === 1 ? ` ${t('comida')}` : ` ${t('comidas')}`),
         bag?.of > 1 ? h('span.pkfarm__dot', '·') : null,
-        bag?.of > 1 ? h('span', h('b', number(bag.of)), ' bolsas') : null),
+        bag?.of > 1 ? h('span', h('b', number(bag.of)), ` ${t('bolsas')}`) : null),
 
       // The first bag's sticker came out when this slide did. This is for
       // when it jammed — and for the first farm, which has no slide before it
       // to step back to and come forward from.
       prints()
         ? reprint(bag?.of > 1
-          ? 'Volver a imprimir la etiqueta de la bolsa 1'
-          : 'Volver a imprimir la etiqueta de la bolsa')
+          ? t('Volver a imprimir la etiqueta de la bolsa 1')
+          : t('Volver a imprimir la etiqueta de la bolsa'))
         : null);
   }
 
@@ -589,17 +589,17 @@ export function renderPackingRun(context) {
         [slide.farm.name, slide.place?.name].filter(Boolean).join(' · '),
         // Which of the farm's bags their food goes in, when it has more than
         // one: the bag on the counter has the same number on its sticker.
-        bag?.of > 1 ? h('span.pkperson__bag', `Bolsa ${bag.number} de ${bag.of}`) : null,
+        bag?.of > 1 ? h('span.pkperson__bag', t('Bolsa {n} de {total}', { n: bag.number, total: bag.of })) : null,
         // A location nobody has put in this libreta yet, packed here with its
         // farm: said, so the packer knows why a house they did not have is here.
-        slide.newPlace ? h('span.pkperson__new', 'Ubicación nueva') : null),
+        slide.newPlace ? h('span.pkperson__new', t('Ubicación nueva')) : null),
 
       // Who, and how many, on one line.
       h('div.pkperson__head',
         h('h2.pkperson__name', client.name),
         h('div.pkperson__plates',
           h('span.pkperson__count', number(slide.plates)),
-          h('span.pkperson__word', slide.plates === 1 ? 'comida' : 'comidas'))),
+          h('span.pkperson__word', slide.plates === 1 ? t('comida') : t('comidas')))),
 
       // What they cannot eat. The words themselves usually say it — "sin
       // pollo" — but they are typed by hand, and a tag written "maní" instead
@@ -609,7 +609,7 @@ export function renderPackingRun(context) {
         ? h('div.pkdiet',
             icon('alert'),
             h('div.pkdiet__body',
-              h('span.pkdiet__head', 'No puede comer'),
+              h('span.pkdiet__head', t('No puede comer')),
               h('span.pkdiet__what', diet.join(' · '))))
         : null,
 
@@ -622,9 +622,9 @@ export function renderPackingRun(context) {
       // slide where it came out.
       prints()
         ? h('div.pkreprints',
-            reprint('Imprimir otra etiqueta', { extra: true }),
+            reprint(t('Imprimir otra etiqueta'), { extra: true }),
             bag?.starts && bag.number > 1
-              ? reprint(`Volver a imprimir la etiqueta de la bolsa ${bag.number}`, { bagOnly: true })
+              ? reprint(t('Volver a imprimir la etiqueta de la bolsa {n}', { n: bag.number }), { bagOnly: true })
               : null)
         : null);
   }
@@ -632,12 +632,14 @@ export function renderPackingRun(context) {
   function doneSlide() {
     return h('div.pkdone',
       h('div.pkdone__ico', icon('check')),
-      h('h2.pkdone__title', '¡Libreta terminada!'),
+      h('h2.pkdone__title', t('¡Libreta terminada!')),
       h('p.pkdone__text',
-        `Empacaste ${plural(plan.people, 'persona', 'personas')} `
-        + `y ${plural(plan.plates, 'comida', 'comidas')} de `
-        + `${plural(plan.farmCount, 'farma', 'farmas')}.`),
-      h('p.pkdone__who', `Queda registrado a nombre de ${packer.name}.`));
+        t('Empacaste {people} y {meals} de {farms}.', {
+          people: plural(plan.people, 'persona', 'personas'),
+          meals: plural(plan.plates, 'comida', 'comidas'),
+          farms: plural(plan.farmCount, 'farma', 'farmas'),
+        })),
+      h('p.pkdone__who', t('Queda registrado a nombre de {name}.', { name: packer.name })));
   }
 
   /* --- The two buttons, always in the same two places ------------------------ */
@@ -647,13 +649,13 @@ export function renderPackingRun(context) {
     return h('div.pkfoot',
       h('button.pkbtn.pkbtn--back', {
         type: 'button', disabled: at === 0, onclick: () => move(-1),
-      }, icon('chevronL'), 'Atrás'),
+      }, icon('chevronL'), t('Atrás')),
 
       last
         ? h('button.pkbtn.pkbtn--done', { type: 'button', onclick: finish },
-            icon('check'), 'Terminar')
+            icon('check'), t('Terminar'))
         : h('button.pkbtn.pkbtn--go', { type: 'button', onclick: () => move(1) },
-            'Siguiente', icon('chevronR')));
+            t('Siguiente'), icon('chevronR')));
   }
 
   rebuild();

@@ -39,6 +39,7 @@
 import { packingSequence } from './packing.js';
 import { mealsOn } from './pricing.js';
 import { weekdayOf, today as todayKey } from './dates.js';
+import { t } from './i18n.js';
 
 const PREFIX = /^(sin|no|nada de|cero)\b[\s:.,-]*/i;
 
@@ -129,7 +130,7 @@ export function dayBoard({ lines = [], farms = [], clients = [], day = todayKey(
   // Counted, in a column of their own: their food has to be cooked like
   // everybody else's, and the column is what says nobody is packing it yet.
   if (adrift.length) {
-    columns.push({ id: NO_LINE, name: 'Sin libreta', none: true });
+    columns.push({ id: NO_LINE, name: t('Sin libreta'), none: true });
     for (const client of adrift) packed.push({ client, line: NO_LINE, plates: mealsOn(client, weekday) });
   }
 
@@ -173,8 +174,8 @@ export function dayBoard({ lines = [], farms = [], clients = [], day = todayKey(
   // A media for everybody packed today, one comida or two; a completa only for
   // the ones on two (or more). The kitchen counts it that way on its boards.
   const KINDS = [
-    { id: 'medias', title: 'Medias', note: 'todos: 1 o 2 comidas', holds: (n) => n >= 1 },
-    { id: 'completas', title: 'Completas', note: 'solo los de 2 comidas', holds: (n) => n >= 2 },
+    { id: 'medias', title: t('Medias'), note: t('todos: 1 o 2 comidas'), holds: (n) => n >= 1 },
+    { id: 'completas', title: t('Completas'), note: t('solo los de 2 comidas'), holds: (n) => n >= 2 },
   ];
 
   const kinds = KINDS.map(({ id, title, note, holds }) => {

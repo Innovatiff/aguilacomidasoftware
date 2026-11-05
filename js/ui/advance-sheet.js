@@ -23,6 +23,7 @@ import { periodOf, payDayAfter, periodWord } from '../lib/billing.js';
 import { money, plural } from '../lib/format.js';
 import { formatDay, formatRange, weekdayName } from '../lib/dates.js';
 import { errorText } from '../firebase.js';
+import { t } from '../lib/i18n.js';
 
 /* --- One client --------------------------------------------------------------- */
 
@@ -47,7 +48,7 @@ export async function openAdvanceSheet({ client, author, plan = null, beforeChar
   }
 
   return sheet({
-    title: 'Pago por adelantado',
+    title: t('Pago por adelantado'),
     build: (close) => {
       let busy = false;
       const apply = button(applyLabel(plan), {
@@ -70,14 +71,14 @@ export async function openAdvanceSheet({ client, author, plan = null, beforeChar
 
       return h('div.stack.stack-4',
         beforeCharge
-          ? alert('Antes de cobrar: lo que debe sale mal mientras esto no se corrija.', 'warn')
+          ? alert(t('Antes de cobrar: lo que debe sale mal mientras esto no se corrija.'), 'warn')
           : null,
         explain(client, plan),
         planDetail(client, plan),
         apply,
         beforeCharge
-          ? button('Cobrar sin corregir', { variant: 'ghost', block: true, onClick: () => close(null) })
-          : button('Ahora no', { variant: 'ghost', block: true, onClick: () => close(undefined) }));
+          ? button(t('Cobrar sin corregir'), { variant: 'ghost', block: true, onClick: () => close(null) })
+          : button(t('Ahora no'), { variant: 'ghost', block: true, onClick: () => close(undefined) }));
     },
   });
 }
@@ -87,18 +88,17 @@ function explain(client, plan) {
   const word = periodWord(client);
   if (plan.moves.length) {
     return h('p.t-sm.c-soft',
-      `Aquí nadie paga por adelantado: cada pago es por la ${word} que se acaba de servir. `
-      + `A ${client.name} se le puso dinero en una ${word} antes de que terminara; va a la `
-      + `${word} anterior, que es la que pagó.`);
+      t('Aquí nadie paga por adelantado: cada pago es por la {period} que se acaba de servir. A {name} se le puso dinero en una {period} antes de que terminara; va a la {period} anterior, que es la que pagó.',
+        { period: t(word), name: client.name }));
   }
   if (plan.paidThrough !== plan.wasPaidThrough) {
     return h('p.t-sm.c-soft',
-      `Su “pagado hasta” cae en una ${word} que todavía no se termina de servir. Aquí cada pago `
-      + `es por la ${word} anterior, así que queda en el último día ya servido.`);
+      t('Su “pagado hasta” cae en una {period} que todavía no se termina de servir. Aquí cada pago es por la {period} anterior, así que queda en el último día ya servido.',
+        { period: t(word) }));
   }
   return h('p.t-sm.c-soft',
-    `Tiene un pago hecho antes de que terminara su ${word}, y no hay nada que se pueda mover `
-    + 'solo. Míralo con el cliente; al marcarlo como revisado deja de salir aquí.');
+    t('Tiene un pago hecho antes de que terminara su {period}, y no hay nada que se pueda mover solo. Míralo con el cliente; al marcarlo como revisado deja de salir aquí.',
+      { period: t(word) }));
 }
 
 /** What moves, what stays, and where it leaves them. */
@@ -110,48 +110,53 @@ function planDetail(client, plan) {
   return h('div.stack.stack-3',
     plan.moves.length
       ? h('div.stack.stack-2',
-          h('div.t-xs.upper.c-faint.w-700', 'Se mueve'),
+          h('div.t-xs.upper.c-faint.w-700', t('Se mueve')),
           ...plan.moves.map((move) => h('div.advrow',
-            h('div.w-600', `${money(move.amount)} pagados el ${formatDay(move.date)}`),
+            h('div.w-600', t('{amount} pagados el {day}', { amount: money(move.amount), day: formatDay(move.date) })),
             h('div.t-sm',
-              h('span.c-faint', 'de '), h('s.c-soft', move.from),
-              h('span.c-faint', ' a '), h('span.w-600', move.to)))))
+              h('span.c-faint', t('de ')), h('s.c-soft', move.from),
+              h('span.c-faint', t(' a ')), h('span.w-600', move.to)))))
       : null,
 
     plan.stuck.length
       ? h('div.stack.stack-2',
-          h('div.t-xs.upper.c-faint.w-700', 'Se queda donde está'),
+          h('div.t-xs.upper.c-faint.w-700', t('Se queda donde está')),
           ...plan.stuck.map((item) => h('div.advrow.advrow--stuck',
-            h('div.w-600', `${money(item.amount)} pagados el ${formatDay(item.date)} · en ${item.from}`),
+            h('div.w-600', t('{amount} pagados el {day} · en {from}', {
+              amount: money(item.amount), day: formatDay(item.date), from: item.from,
+            })),
             h('div.t-sm.c-soft', item.why))))
       : null,
 
     defList([
       plan.paidThrough !== plan.wasPaidThrough
-        ? defRow('Pagado hasta', `${plan.wasPaidThrough ? formatDay(plan.wasPaidThrough) : '—'} → `
+        ? defRow(t('Pagado hasta'), `${plan.wasPaidThrough ? formatDay(plan.wasPaidThrough) : '—'} → `
           + `${plan.paidThrough ? formatDay(plan.paidThrough) : '—'}`)
         : null,
-      defRow('Debe de lo ya servido', plan.owedAfter !== plan.owedBefore
+      defRow(t('Debe de lo ya servido'), plan.owedAfter !== plan.owedBefore
         ? `${money(plan.owedBefore)} → ${money(plan.owedAfter)}`
         : money(plan.owedAfter)),
-      defRow(`Su ${word} en curso`,
-        `${formatRange(period.start, period.end)} · se paga el ${weekdayName(payDay)} ${formatDay(payDay)}`),
+      defRow(t('Su {period} en curso', { period: t(word) }),
+        t('{range} · se paga el {weekday} {day}', {
+          range: formatRange(period.start, period.end), weekday: weekdayName(payDay), day: formatDay(payDay),
+        })),
     ].filter(Boolean)),
 
     h('p.t-xs.c-faint',
-      'Los recibos no cambian: siguen diciendo cuánto pagó y cuándo. Lo que cambia es a qué '
-      + `${word} va cada pago.`));
+      t('Los recibos no cambian: siguen diciendo cuánto pagó y cuándo. Lo que cambia es a qué {period} va cada pago.',
+        { period: t(word) })));
 }
 
 const applyLabel = (plan) => (plan.moves.length || plan.paidThrough !== plan.wasPaidThrough
-  ? 'Corregir'
-  : 'Marcar como revisado');
+  ? t('Corregir')
+  : t('Marcar como revisado'));
 
 function doneText(plan) {
   if (plan.moves.length) {
-    return `${plural(plan.moves.length, 'pago movido', 'pagos movidos')} a la quincena que pagaron`;
+    return t('{payments} a la quincena que pagaron',
+      { payments: plural(plan.moves.length, 'pago movido', 'pagos movidos') });
   }
-  return plan.changes ? 'Corregido' : 'Marcado como revisado';
+  return plan.changes ? t('Corregido') : t('Marcado como revisado');
 }
 
 /* --- Everybody ---------------------------------------------------------------- */
@@ -169,7 +174,7 @@ export function openAdvanceReview({ clients, author }) {
   let fixed = 0;
 
   return sheet({
-    title: 'Pagos por adelantado',
+    title: t('Pagos por adelantado'),
     build: (close) => {
       const host = h('div.stack.stack-4', loading());
       const plans = new Map();
@@ -201,9 +206,7 @@ export function openAdvanceReview({ clients, author }) {
 
         mount(host,
           h('p.t-sm.c-soft',
-            'Aquí nadie paga por adelantado: cada pago es por la quincena que se acaba de servir. '
-            + 'A estos clientes se les puso dinero en una quincena antes de que terminara. Cada '
-            + 'pago va a la quincena anterior, que es la que pagaron.'),
+            t('Aquí nadie paga por adelantado: cada pago es por la quincena que se acaba de servir. A estos clientes se les puso dinero en una quincena antes de que terminara. Cada pago va a la quincena anterior, que es la que pagaron.')),
 
           list(clients.map((client) => reviewRow(client, plans.get(client.id))), { card: true }),
 
@@ -216,9 +219,9 @@ export function openAdvanceReview({ clients, author }) {
                 })
               : null,
           clients.length > ready.length && !progress
-            ? h('p.t-xs.c-faint', 'Los que tienen algo que no se mueve solo se revisan uno por uno.')
+            ? h('p.t-xs.c-faint', t('Los que tienen algo que no se mueve solo se revisan uno por uno.'))
             : null,
-          button(fixed ? 'Listo' : 'Cerrar', {
+          button(fixed ? t('Listo') : t('Cerrar'), {
             variant: 'ghost', block: true, onClick: () => close(fixed),
           }));
       }
@@ -238,8 +241,8 @@ export function openAdvanceReview({ clients, author }) {
 
         return itemRow({
           title: client.name,
-          meta: plan ? summary(plan) : 'Revisando…',
-          end: plan && !plan.error && plan.stuck.length ? badge('Revisar', 'warn') : null,
+          meta: plan ? summary(plan) : t('Revisando…'),
+          end: plan && !plan.error && plan.stuck.length ? badge(t('Revisar'), 'warn') : null,
           className: 'item--wrap',
           onClick: open,
         });
@@ -250,7 +253,7 @@ export function openAdvanceReview({ clients, author }) {
         busy = true;
         let failed = 0;
         for (let i = 0; i < ready.length; i += 1) {
-          paint(`Corrigiendo ${i + 1} de ${ready.length}…`);
+          paint(t('Corrigiendo {n} de {total}…', { n: i + 1, total: ready.length }));
           try {
             await fixAdvance(ready[i], author);
             fixed += 1;
@@ -261,7 +264,9 @@ export function openAdvanceReview({ clients, author }) {
           }
         }
         busy = false;
-        if (failed) toastBad(`${plural(failed, 'cliente no se pudo', 'clientes no se pudieron')} corregir.`);
+        if (failed) {
+          toastBad(t('{clients} corregir.', { clients: plural(failed, 'cliente no se pudo', 'clientes no se pudieron') }));
+        }
         if (fixed) toastOk(`${plural(fixed, 'cliente corregido', 'clientes corregidos')}`);
         if (!clients.length) { close(fixed); return; }
         paint();
@@ -275,8 +280,10 @@ export function openAdvanceReview({ clients, author }) {
 
 /** "Corregir a los 12", or only the ones nobody needs to look at first. */
 function fixAllLabel(ready, total) {
-  if (ready === total) return ready === 1 ? 'Corregir' : `Corregir a los ${ready}`;
-  return ready === 1 ? 'Corregir al que no tiene pendientes' : `Corregir a los ${ready} sin pendientes`;
+  if (ready === total) return ready === 1 ? t('Corregir') : t('Corregir a los {n}', { n: ready });
+  return ready === 1
+    ? t('Corregir al que no tiene pendientes')
+    : t('Corregir a los {n} sin pendientes', { n: ready });
 }
 
 /** One line per client: what would move, and where it leaves them. */
@@ -284,12 +291,18 @@ function summary(plan) {
   if (plan.error) return plan.error;
   const parts = [];
   if (plan.moves.length) {
-    parts.push(`${plural(plan.moves.length, 'pago va', 'pagos van')} a la quincena anterior`);
+    parts.push(t('{payments} a la quincena anterior',
+      { payments: plural(plan.moves.length, 'pago va', 'pagos van') }));
   }
   if (plan.paidThrough !== plan.wasPaidThrough) {
-    parts.push(plan.paidThrough ? `pagado hasta el ${formatDay(plan.paidThrough)}` : 'sin “pagado hasta”');
+    parts.push(plan.paidThrough
+      ? t('pagado hasta el {day}', { day: formatDay(plan.paidThrough) })
+      : t('sin “pagado hasta”'));
   }
-  if (plan.owedAfter > 0.005) parts.push(`quedaría debiendo ${money(plan.owedAfter)}`);
-  if (plan.stuck.length) parts.push(`${plural(plan.stuck.length, 'pago se queda', 'pagos se quedan')} donde está`);
-  return parts.length ? parts.join(' · ') : 'Nada que mover — solo marcarlo como revisado';
+  if (plan.owedAfter > 0.005) parts.push(t('quedaría debiendo {amount}', { amount: money(plan.owedAfter) }));
+  if (plan.stuck.length) {
+    parts.push(t('{payments} donde está',
+      { payments: plural(plan.stuck.length, 'pago se queda', 'pagos se quedan') }));
+  }
+  return parts.length ? parts.join(' · ') : t('Nada que mover — solo marcarlo como revisado');
 }

@@ -32,6 +32,7 @@ import {
 import {
   invoiceId, isCharge, isPayable, periodOf, dueDateFor, invoiceTitle, round2, paymentsOf,
 } from './billing.js';
+import { t } from './i18n.js';
 
 const CENT = 0.005;
 
@@ -109,28 +110,28 @@ export function planAdvanceFix({ client, bills = [], since = '', day = todayKey(
       });
 
       if (String(entry.date) < target.end) {
-        leave('Se pagó antes de que terminara también la quincena anterior.');
+        leave(t('Se pagó antes de que terminara también la quincena anterior.'));
         continue;
       }
       if (since && target.end < since) {
-        leave(`La quincena anterior es de antes de que empezara (${formatDay(since)}). Si ya comía `
-          + 'aquí antes, corrige «¿Desde cuándo come aquí?» en Editar y vuelve a revisar.');
+        leave(t('La quincena anterior es de antes de que empezara ({day}). Si ya comía aquí antes, corrige «¿Desde cuándo come aquí?» en Editar y vuelve a revisar.',
+          { day: formatDay(since) }));
         continue;
       }
       if (client.endsOn && target.start > client.endsOn) {
-        leave('Ya había dejado el servicio.');
+        leave(t('Ya había dejado el servicio.'));
         continue;
       }
 
       let dest = work.get(targetId);
-      if (dest && isCharge(dest)) { leave('Esa fecha tiene una deuda escrita a mano.'); continue; }
+      if (dest && isCharge(dest)) { leave(t('Esa fecha tiene una deuda escrita a mano.')); continue; }
       if (!dest) {
         // A bill cut with other dates over the same days — from before their
         // fortnight moved — is not something to stack a second one on top of.
         const overlap = [...work.values()].find((bill) => !isCharge(bill)
           && bill.periodStart <= target.end && bill.periodEnd >= target.start);
         if (overlap) {
-          leave(`La quincena anterior se cruza con otra factura (${invoiceTitle(overlap)}).`);
+          leave(t('La quincena anterior se cruza con otra factura ({title}).', { title: invoiceTitle(overlap) }));
           continue;
         }
         dest = {
@@ -159,7 +160,7 @@ export function planAdvanceFix({ client, bills = [], since = '', day = todayKey(
       }
 
       const room = owedOn(dest);
-      if (room <= CENT) { leave('La quincena anterior ya está pagada.'); continue; }
+      if (room <= CENT) { leave(t('La quincena anterior ya está pagada.')); continue; }
 
       const take = Math.min(amount, room);
       const index = source.payments.indexOf(entry);
@@ -180,7 +181,7 @@ export function planAdvanceFix({ client, bills = [], since = '', day = todayKey(
       if (take < amount - CENT) {
         stuck.push({
           amount: round2(amount - take), date: entry.date, receiptId: entry.receiptId || null,
-          from: invoiceTitle(source), why: 'No cupo completo en la quincena anterior.',
+          from: invoiceTitle(source), why: t('No cupo completo en la quincena anterior.'),
         });
       }
     }

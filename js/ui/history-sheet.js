@@ -25,12 +25,14 @@ import { icon } from '../lib/icons.js';
 import { recordPastPayment } from '../data/invoices.js';
 import { updateClient } from '../data/clients.js';
 import {
-  cycleFromPayment, periodOf, payDayAfter, payDaysInWords, periodWord, periodWordPlural,
+  cycleFromPayment, periodOf, payDayAfter, periodWord, periodWordPlural,
 } from '../lib/billing.js';
+import { payDaysWords } from '../lib/billing-words.js';
 import { money } from '../lib/format.js';
 import { formatDay, formatDayLong, weekdayName, today } from '../lib/dates.js';
 import { PAYMENT_METHODS } from '../lib/model.js';
 import { errorText } from '../firebase.js';
+import { t } from '../lib/i18n.js';
 
 /**
  * @param {object} options
@@ -41,7 +43,7 @@ import { errorText } from '../firebase.js';
 export function openHistorySheet({ client, author }) {
   const word = periodWord(client);
   return sheet({
-    title: 'Registrar un pago anterior',
+    title: t('Registrar un pago anterior'),
     build: (close) => {
       let amount = '';
       let method = 'cash';
@@ -63,17 +65,22 @@ export function openHistorySheet({ client, author }) {
       function repaint() {
         const value = Number(amount) || 0;
         mount(submit, icon('receipt'),
-          value > 0 ? `Registrar ${money(value)}` : 'Registrar el pago');
+          value > 0 ? t('Registrar {amount}', { amount: money(value) }) : t('Registrar el pago'));
         submit.disabled = busy || !(value > 0) || !date;
 
         const anchor = cycleFromPayment(date);
         const period = periodOf({ ...client, cycleAnchor: anchor });
         mount(cycleLine, setCycle
-          ? `Su ${word} queda anclada al ${weekdayName(anchor)} ${formatDay(anchor)}. `
-            + `Hoy corre del ${formatDay(period.start)} al ${formatDay(period.end)}, `
-            + `y se paga el ${weekdayName(payDayAfter(period))} `
-            + `${formatDay(payDayAfter(period))}, cuando termine.`
-          : `Sólo se guarda el pago; su ${word} no se mueve.`);
+          ? t('Su {period} queda anclada al {weekday} {day}. Hoy corre del {start} al {end}, y se paga el {payweekday} {payday}, cuando termine.', {
+            period: t(word),
+            weekday: weekdayName(anchor),
+            day: formatDay(anchor),
+            start: formatDay(period.start),
+            end: formatDay(period.end),
+            payweekday: weekdayName(payDayAfter(period)),
+            payday: formatDay(payDayAfter(period)),
+          })
+          : t('Sólo se guarda el pago; su {period} no se mueve.', { period: t(word) }));
       }
 
       const form = h('form.stack.stack-4', {
@@ -81,11 +88,11 @@ export function openHistorySheet({ client, author }) {
           event.preventDefault();
           if (busy) return;
           const value = Number(amount);
-          if (!(value > 0)) { toastBad('El monto debe ser mayor a cero.'); return; }
+          if (!(value > 0)) { toastBad(t('El monto debe ser mayor a cero.')); return; }
 
           busy = true;
           submit.disabled = true;
-          mount(submit, h('span.spinner.spinner--light'), 'Registrando…');
+          mount(submit, h('span.spinner.spinner--light'), t('Registrando…'));
 
           try {
             const receipt = await recordPastPayment(
@@ -96,7 +103,7 @@ export function openHistorySheet({ client, author }) {
                 cycleSetOn: date,
               });
             }
-            toastOk(`Pago registrado · ${receipt.folio}`);
+            toastOk(t('Pago registrado · {folio}', { folio: receipt.folio }));
             close(receipt);
           } catch (error) {
             busy = false;
@@ -108,23 +115,22 @@ export function openHistorySheet({ client, author }) {
 
       h('div.card.card--tight',
         defList([
-          defRow('Cliente', client.name),
-          defRow('Dónde', [client.farmName, client.locationName].filter(Boolean).join(' · ') || '—'),
-          defRow(`Su ${word} hoy`, client.cycleAnchor
+          defRow(t('Cliente'), client.name),
+          defRow(t('Dónde'), [client.farmName, client.locationName].filter(Boolean).join(' · ') || '—'),
+          defRow(t('Su {period} hoy', { period: t(word) }), client.cycleAnchor
             ? formatDayLong(client.cycleAnchor)
-            : 'Sin definir'),
+            : t('Sin definir')),
         ])),
 
-      alert('Es lo que ya te pagaron antes de usar el sistema. Queda en su historial y en la '
-        + `libreta, pero no cambia su saldo: esas ${periodWordPlural(client)} tampoco se `
-        + 'facturaron aquí.', 'info'),
+      alert(t('Es lo que ya te pagaron antes de usar el sistema. Queda en su historial y en la libreta, pero no cambia su saldo: esas {periods} tampoco se facturaron aquí.',
+        { periods: t(periodWordPlural(client)) }), 'info'),
 
-      field({ label: 'Cuánto pagó', control: amountBox }),
+      field({ label: t('Cuánto pagó'), control: amountBox }),
 
       field({
-        label: '¿Qué día pagó?',
-        hint: `Si fijas su ${word} con esta fecha: se cobra en ${payDaysInWords()}, y si `
-          + `eliges otro día, la ${word} empieza el siguiente día de cobro.`,
+        label: t('¿Qué día pagó?'),
+        hint: t('Si fijas su {period} con esta fecha: se cobra en {paydays}, y si eliges otro día, la {period} empieza el siguiente día de cobro.',
+          { period: t(word), paydays: payDaysWords() }),
         control: input({
           type: 'date', value: date, max: today(),
           onchange: (event) => { date = event.target.value || today(); repaint(); },
@@ -132,7 +138,7 @@ export function openHistorySheet({ client, author }) {
       }),
 
       field({
-        label: 'Forma de pago',
+        label: t('Forma de pago'),
         control: select({
           value: method,
           options: Object.entries(PAYMENT_METHODS).map(([value, meta]) => ({ value, label: meta.label })),
@@ -140,18 +146,17 @@ export function openHistorySheet({ client, author }) {
         }),
       }),
 
-      switchRow(`Fijar su ${word} con esta fecha`, {
+      switchRow(t('Fijar su {period} con esta fecha', { period: t(word) }), {
         checked: setCycle,
-        hint: 'Sólo si su fecha de pago de hoy está mal. Es lo que decide cuándo le toca '
-          + 'pagar otra vez.',
+        hint: t('Sólo si su fecha de pago de hoy está mal. Es lo que decide cuándo le toca pagar otra vez.'),
         onChange: (value) => { setCycle = value; repaint(); },
       }),
       cycleLine,
 
       field({
-        label: 'Nota interna',
+        label: t('Nota interna'),
         control: textarea({
-          rows: 2, placeholder: 'Opcional — de qué página del cuaderno salió, por ejemplo.',
+          rows: 2, placeholder: t('Opcional — de qué página del cuaderno salió, por ejemplo.'),
           oninput: (event) => { note = event.target.value; },
         }),
       }),

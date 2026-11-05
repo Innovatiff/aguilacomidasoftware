@@ -20,6 +20,7 @@ import { billsOf } from './invoices.js';
 import { servingSince } from './clients.js';
 import { planAdvanceFix } from '../lib/advance.js';
 import { today } from '../lib/dates.js';
+import { t } from '../lib/i18n.js';
 
 /** The plan for one client, from their bills as they are now. */
 export async function advancePlan(client, day = today()) {
@@ -45,7 +46,7 @@ export async function fixAdvance(client, author, day = today()) {
     // Every read first — Firestore refuses a read after a write in the same
     // transaction.
     const clientSnap = await tx.get(clientRef);
-    if (!clientSnap.exists()) throw new Error('Ese cliente ya no existe.');
+    if (!clientSnap.exists()) throw new Error(t('Ese cliente ya no existe.'));
     const fresh = { ...client, ...clientSnap.data(), id: client.id };
 
     const bills = [];
@@ -59,7 +60,7 @@ export async function fixAdvance(client, author, day = today()) {
     // list above was read, somebody else is working on this client.
     for (const id of plan.created) {
       const snap = await tx.get(doc(db, 'invoices', id));
-      if (snap.exists()) throw new Error('Algo cambió en este cliente mientras tanto. Vuelve a intentarlo.');
+      if (snap.exists()) throw new Error(t('Algo cambió en este cliente mientras tanto. Vuelve a intentarlo.'));
     }
 
     for (const bill of plan.writes) {

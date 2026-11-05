@@ -154,6 +154,7 @@ img, svg { display: block; max-width: 100%; }
 /* Hidden until the tab bar becomes a rail — see the desktop section. */
 .tabbar__brand { display: none; }
 .tabbar__ver { display: none; }
+.tabbar__lang { display: none; }
 
 .tab {
   position: relative;
@@ -393,6 +394,17 @@ img, svg { display: block; max-width: 100%; }
     color: var(--nav-fg);
   }
   .tabbar__ver span { display: none; }
+
+  /* The language, just above the version, in the rail's own colours. */
+  .tabbar__lang {
+    display: flex; justify-content: center;
+    position: absolute; left: 0; right: 0; bottom: 36px;
+  }
+  .tabbar__lang .langsw { background: transparent; border-color: rgba(255, 255, 255, .16); }
+  .tabbar__lang .langsw__ico { display: none; }
+  .tabbar__lang .langsw__opt { color: var(--nav-fg); }
+  .tabbar__lang .langsw__opt:hover { color: #fff; }
+  .tabbar__lang .langsw__opt.is-active { background: rgba(255, 255, 255, .16); color: #fff; }
 
   .tab {
     height: 62px;

@@ -12,6 +12,7 @@
 import { db, doc, getDoc, setDoc, onSnapshot, serverTimestamp, docData } from '../firebase.js';
 import { logMovement } from './movements.js';
 import { normalizePricing, normalizeTiers } from '../lib/pricing.js';
+import { t } from '../lib/i18n.js';
 
 const pricingRef = () => doc(db, 'config', 'pricing');
 
@@ -45,7 +46,7 @@ export const getPricing = async () => read(docData(await getDoc(pricingRef())));
  */
 export async function savePricing(pricing, author, previous = null) {
   const tiers = normalizeTiers(pricing?.tiers);
-  if (!tiers.length) throw new Error('Deja al menos un plan con precio.');
+  if (!tiers.length) throw new Error(t('Deja al menos un plan con precio.'));
 
   const clean = normalizePricing({ ...pricing, tiers });
   // Each price that moved, for Movimientos: "2 comidas: $266 → $280".

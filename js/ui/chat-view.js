@@ -16,6 +16,7 @@ import {
 } from '../data/chat.js';
 import { formatTime, relativeDay, dayKey } from '../lib/dates.js';
 import { errorText } from '../firebase.js';
+import { t } from '../lib/i18n.js';
 
 /**
  * @param {object} config
@@ -66,8 +67,8 @@ export function chatView({ clientId, role, sender, client, quickReplies = [], em
     if (!messages.length) {
       mount(scroll, emptyState({
         icon: 'chat',
-        title: 'Empiecen la conversación',
-        text: emptyText || 'Escriban aquí cualquier duda sobre las entregas o los pagos.',
+        title: t('Empiecen la conversación'),
+        text: emptyText || t('Escriban aquí cualquier duda sobre las entregas o los pagos.'),
       }));
       return;
     }
@@ -96,7 +97,7 @@ export function chatView({ clientId, role, sender, client, quickReplies = [], em
         showAuthor ? h('span.bubble__author', message.senderName) : null,
         h('span', message.text),
         h('span.bubble__foot',
-          message.pending ? 'enviando…' : formatTime(message.atDate),
+          message.pending ? t('enviando…') : formatTime(message.atDate),
           outgoing && !message.pending
             ? h(`span${read ? '.is-read' : ''}`, icon(read ? 'checkDouble' : 'check'))
             : null)));
@@ -110,8 +111,8 @@ export function chatView({ clientId, role, sender, client, quickReplies = [], em
       // What the rules accept in one message; past it the send would be
       // refused with nothing on screen saying why.
       maxlength: 4000,
-      placeholder: 'Escribe un mensaje…',
-      'aria-label': 'Mensaje',
+      placeholder: t('Escribe un mensaje…'),
+      'aria-label': t('Mensaje'),
       oninput: () => { send.disabled = !box.value.trim() || sending; },
       onkeydown: (event) => {
         // Enter sends on a hardware keyboard; on a phone the key is a newline,
@@ -125,7 +126,7 @@ export function chatView({ clientId, role, sender, client, quickReplies = [], em
     autosize(box);
 
     const send = h('button.chat__send', {
-      type: 'button', disabled: true, 'aria-label': 'Enviar',
+      type: 'button', disabled: true, 'aria-label': t('Enviar'),
       onclick: submit,
     }, icon('send'));
 

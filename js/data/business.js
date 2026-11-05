@@ -12,6 +12,7 @@
  */
 
 import { db, doc, getDoc, setDoc, onSnapshot, serverTimestamp, docData } from '../firebase.js';
+import { t } from '../lib/i18n.js';
 
 const businessRef = () => doc(db, 'config', 'business');
 
@@ -55,7 +56,7 @@ export async function saveBusiness(values, author) {
   for (const key of Object.keys(DEFAULT_BUSINESS)) {
     clean[key] = String(values?.[key] ?? '').trim();
   }
-  if (!clean.name) throw new Error('El recibo necesita al menos el nombre del negocio.');
+  if (!clean.name) throw new Error(t('El recibo necesita al menos el nombre del negocio.'));
 
   await setDoc(businessRef(), {
     ...clean,

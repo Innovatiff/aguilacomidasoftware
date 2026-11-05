@@ -33,13 +33,15 @@ import { planAdvanceFix } from '../lib/advance.js';
 import { openAdvanceSheet } from './advance-sheet.js';
 import { postSystemMessage } from '../data/chat.js';
 import {
-  periodOf, appliedTitle, cycleFromPayment, payDayAfter, payDaysInWords, periodWord,
+  periodOf, appliedTitle, cycleFromPayment, payDayAfter, periodWord,
 } from '../lib/billing.js';
+import { payDaysWords } from '../lib/billing-words.js';
 import { chargeFor } from '../lib/pricing.js';
 import { money, moneyFull, plural } from '../lib/format.js';
 import { formatDay, weekdayName, today, addDays } from '../lib/dates.js';
 import { PAYMENT_METHODS } from '../lib/model.js';
 import { errorText } from '../firebase.js';
+import { t, tx, inSpanish } from '../lib/i18n.js';
 
 let charging = false;
 
@@ -111,7 +113,7 @@ async function chargeSheet({ client, pricing, author }) {
   const cycleKnown = cycleIsSet(client);
 
   return sheet({
-    title: 'Cobrar',
+    title: t('Cobrar'),
     build: (close) => {
       let method = 'cash';
       let reference = '';
@@ -161,9 +163,8 @@ async function chargeSheet({ client, pricing, author }) {
       function paintAdvance() {
         mount(advanceNote, advance.moves.length
           ? h('div.stack.stack-2',
-              alert('Tiene un pago puesto por adelantado. Se puede corregir ahora o después desde '
-                + 'su ficha; el cobro entra igual.', 'warn'),
-              button('Revisar y corregir', {
+              alert(t('Tiene un pago puesto por adelantado. Se puede corregir ahora o después desde su ficha; el cobro entra igual.'), 'warn'),
+              button(t('Revisar y corregir'), {
                 variant: 'soft', size: 'sm', icon: 'check', onClick: fixAdvance,
               }))
           : null);
@@ -210,32 +211,40 @@ async function chargeSheet({ client, pricing, author }) {
         const value = Number(amount) || 0;
 
         mount(owedRow, defList([
-          defRow('Debe hoy', now.total > 0.005 ? money(now.total) : 'Nada', { total: true }),
+          defRow(t('Debe hoy'), now.total > 0.005 ? money(now.total) : t('Nada'), { total: true }),
         ]));
         mount(nothing, now.total > 0.005 ? null : alert(nothingOwedYet(now.payer, date), 'info'));
         mount(quickRow,
-          now.total > 0.005 ? quick(`Todo lo que debe ${money(now.total)}`, () => setAmount(now.total)) : null,
+          now.total > 0.005
+            ? quick(t('Todo lo que debe {amount}', { amount: money(now.total) }), () => setAmount(now.total))
+            : null,
           now.rows.length > 1
-            ? quick(`Solo ${now.rows[0].title} ${money(now.rows[0].owed)}`, () => setAmount(now.rows[0].owed))
+            ? quick(t('Solo {title} {amount}', { title: tx(now.rows[0].title), amount: money(now.rows[0].owed) }),
+              () => setAmount(now.rows[0].owed))
             : null,
           // Somebody who owes nothing is still paying something: usually a
           // fortnight's worth.
           now.total <= 0.005 && fortnight
-            ? quick(`Una ${word} ${money(fortnight)}`, () => setAmount(fortnight))
+            ? quick(t('Una {period} {amount}', { period: t(word), amount: money(fortnight) }), () => setAmount(fortnight))
             : null);
 
-        mount(submit, icon('cash'), `Cobrar ${money(value)}`);
+        mount(submit, icon('cash'), t('Cobrar {amount}', { amount: money(value) }));
         submit.disabled = busy || !(value > 0);
         mount(covers, explain(value, now, aheadOf(value)));
 
         const running = periodOf(now.payer, date);
         const payDay = payDayAfter(running);
         mount(cycleLine, setCycle
-          ? `Su ${word} queda en ${weekdayName(now.anchor)}: este pago es por la que terminó el `
-            + `${formatDay(addDays(now.anchor, -1))}, y la que está en curso se paga el `
-            + `${weekdayName(payDay)} ${formatDay(payDay)}.`
-          : `Su ${word} no se mueve: la que está en curso se paga el ${weekdayName(payDay)} `
-            + `${formatDay(payDay)}.`);
+          ? t('Su {period} queda en {start}: este pago es por la que terminó el {ended}, y la que está en curso se paga el {weekday} {day}.', {
+            period: t(word),
+            start: weekdayName(now.anchor),
+            ended: formatDay(addDays(now.anchor, -1)),
+            weekday: weekdayName(payDay),
+            day: formatDay(payDay),
+          })
+          : t('Su {period} no se mueve: la que está en curso se paga el {weekday} {day}.', {
+            period: t(word), weekday: weekdayName(payDay), day: formatDay(payDay),
+          }));
       }
 
       const form = h('form.stack.stack-4', {
@@ -244,11 +253,11 @@ async function chargeSheet({ client, pricing, author }) {
           if (busy) return;
 
           const value = Number(amount);
-          if (!(value > 0)) { toastBad('El monto debe ser mayor a cero.'); return; }
+          if (!(value > 0)) { toastBad(t('El monto debe ser mayor a cero.')); return; }
 
           busy = true;
           submit.disabled = true;
-          mount(submit, h('span.spinner.spinner--light'), 'Cobrando…');
+          mount(submit, h('span.spinner.spinner--light'), t('Cobrando…'));
 
           try {
             const receipt = await takePayment(
@@ -257,7 +266,7 @@ async function chargeSheet({ client, pricing, author }) {
             // Not awaited: offline, a chat message only settles once the internet
             // is back, and the payment is already in.
             announce(receipt, client).catch(() => {});
-            toastOk(`Cobrado ${money(value)} · ${receipt.folio}`);
+            toastOk(t('Cobrado {amount} · {folio}', { amount: money(value), folio: receipt.folio }));
             close(receipt);
           } catch (error) {
             busy = false;
@@ -269,11 +278,14 @@ async function chargeSheet({ client, pricing, author }) {
 
       h('div.card.card--tight',
         defList([
-          defRow('Cliente', client.name),
-          defRow('Dónde', [client.farmName, client.locationName].filter(Boolean).join(' · ') || '—'),
-          defRow('Plan', client.mealsPerDay
-            ? `${plural(client.mealsPerDay, 'comida', 'comidas')}/día · `
-              + `${fortnight ? money(fortnight) : 'sin precio'} por ${word}`
+          defRow(t('Cliente'), client.name),
+          defRow(t('Dónde'), [client.farmName, client.locationName].filter(Boolean).join(' · ') || '—'),
+          defRow(t('Plan'), client.mealsPerDay
+            ? t('{meals}/día · {price} por {period}', {
+              meals: plural(client.mealsPerDay, 'comida', 'comidas'),
+              price: fortnight ? money(fortnight) : t('sin precio'),
+              period: t(word),
+            })
             : '—'),
         ]),
         owedRow),
@@ -281,23 +293,22 @@ async function chargeSheet({ client, pricing, author }) {
       advanceNote,
 
       unread
-        ? alert('No se pudo leer lo que debe (sin internet o sin conexión con la base de datos). '
-          + 'El pago entra igual y queda a cuenta, marcado para revisarlo.', 'warn')
+        ? alert(t('No se pudo leer lo que debe (sin internet o sin conexión con la base de datos). El pago entra igual y queda a cuenta, marcado para revisarlo.'), 'warn')
         : null,
 
       nothing,
 
-      fortnight ? null : alert('Este plan no tiene precio. Agrégalo en Ajustes → Precios '
-        + `para poder cobrarle sus ${word === 'semana' ? 'semanas' : 'quincenas'}.`, 'warn'),
+      fortnight ? null : alert(t('Este plan no tiene precio. Agrégalo en Ajustes → Precios para poder cobrarle sus {periods}.',
+        { periods: word === 'semana' ? t('semanas') : t('quincenas') }), 'warn'),
 
       field({
-        label: 'Monto recibido',
+        label: t('Monto recibido'),
         control: h('div.stack.stack-2', amountBox, quickRow),
       }),
       covers,
 
       field({
-        label: 'Forma de pago',
+        label: t('Forma de pago'),
         control: select({
           value: method,
           options: Object.entries(PAYMENT_METHODS).map(([value, meta]) => ({ value, label: meta.label })),
@@ -306,32 +317,33 @@ async function chargeSheet({ client, pricing, author }) {
       }),
 
       field({
-        label: 'Fecha del pago',
+        label: t('Fecha del pago'),
         control: input({
           type: 'date', value: date, max: today(),
           onchange: (event) => { date = event.target.value || today(); recompute(); },
         }),
       }),
 
-      switchRow(cycleKnown ? `Reajustar su ${word} con este pago` : `Fijar su ${word} con este pago`, {
+      switchRow(cycleKnown
+        ? t('Reajustar su {period} con este pago', { period: t(word) })
+        : t('Fijar su {period} con este pago', { period: t(word) }), {
         checked: false,
-        hint: `Apagado, el pago no le mueve ninguna fecha. Actívalo solo si hoy de verdad empieza `
-          + `su ${word} — se cobra en ${payDaysInWords()} —; pagar unos días antes o después no `
-          + 'es razón para moverla.',
+        hint: t('Apagado, el pago no le mueve ninguna fecha. Actívalo solo si hoy de verdad empieza su {period} — se cobra en {paydays} —; pagar unos días antes o después no es razón para moverla.',
+          { period: t(word), paydays: payDaysWords() }),
         onChange: (value) => { setCycle = value; recompute(); },
       }),
       cycleLine,
 
       field({
-        label: 'Referencia',
-        hint: 'Número de transferencia, folio del cheque, quién entregó el efectivo…',
-        control: input({ placeholder: 'Opcional', oninput: (event) => { reference = event.target.value; } }),
+        label: t('Referencia'),
+        hint: t('Número de transferencia, folio del cheque, quién entregó el efectivo…'),
+        control: input({ placeholder: t('Opcional'), oninput: (event) => { reference = event.target.value; } }),
       }),
 
       field({
-        label: 'Nota interna',
+        label: t('Nota interna'),
         control: textarea({
-          rows: 2, placeholder: 'Opcional — sólo la ve el equipo de la cocina.',
+          rows: 2, placeholder: t('Opcional — sólo la ve el equipo de la cocina.'),
           oninput: (event) => { note = event.target.value; },
         }),
       }),
@@ -358,7 +370,7 @@ const quick = (label, onClick) => button(label, { variant: 'soft', size: 'sm', o
  * @param {object[]} ahead  where anything past what is owed would wait
  */
 function explain(value, now, ahead = []) {
-  if (!(value > 0)) return 'Escribe el monto recibido.';
+  if (!(value > 0)) return t('Escribe el monto recibido.');
 
   // The same order the payment itself uses: oldest first, then what waits.
   const spread = (rows, money0) => {
@@ -368,7 +380,7 @@ function explain(value, now, ahead = []) {
       if (left <= 0.005) break;
       const take = Math.min(left, row.owed);
       left = round2(left - take);
-      parts.push(`${row.title} (${money(take)})`);
+      parts.push(`${tx(row.title)} (${money(take)})`);
     }
     return { parts, left };
   };
@@ -378,35 +390,23 @@ function explain(value, now, ahead = []) {
   const owedLeft = round2(now.total - Math.min(value, now.total));
 
   const said = [];
-  if (paid.parts.length) said.push(`Paga ${paid.parts.join(', ')}.`);
+  if (paid.parts.length) said.push(t('Paga {what}.', { what: paid.parts.join(', ') }));
   if (waiting.parts.length) {
-    said.push(`${paid.parts.length ? 'Lo que sobra queda' : 'Queda'} a cuenta de `
-      + `${waiting.parts.join(', ')}.`);
+    said.push(paid.parts.length
+      ? t('Lo que sobra queda a cuenta de {what}.', { what: waiting.parts.join(', ') })
+      : t('Queda a cuenta de {what}.', { what: waiting.parts.join(', ') }));
   }
-  if (waiting.left > 0.005) said.push(`${money(waiting.left)} quedan a cuenta, sin quincena.`);
-  said.push(owedLeft > 0.005 ? `Quedarían ${money(owedLeft)} pendientes.` : 'Queda al corriente.');
+  if (waiting.left > 0.005) said.push(t('{amount} quedan a cuenta, sin quincena.', { amount: money(waiting.left) }));
+  said.push(owedLeft > 0.005
+    ? t('Quedarían {amount} pendientes.', { amount: money(owedLeft) })
+    : t('Queda al corriente.'));
   return said.join(' ');
 }
 
 /** Tells the client, in their own thread, that the payment landed. */
 async function announce(receipt, client) {
-  const label = PAYMENT_METHODS[receipt.method]?.label || 'pago';
-  const served = receipt.applied.filter((row) => !row.ahead).map(appliedTitle);
-  const waiting = receipt.applied.filter((row) => row.ahead).map(appliedTitle);
-  const what = [
-    served.length ? `por ${served.join(', ')}` : '',
-    waiting.length ? `a cuenta de ${waiting.join(', ')}` : '',
-    receipt.unapplied ? `${money(receipt.unapplied)} a cuenta` : '',
-  ].filter(Boolean).join(' y ') || 'a su cuenta';
-
-  const text = receipt.held
-    ? `Recibimos su pago de ${moneyFull(receipt.amount)} (${label}). Su recibo ${receipt.folio} `
-      + 'está en su app. ¡Gracias!'
-    : receipt.balanceAfter > 0.005
-      ? `Recibimos su pago de ${moneyFull(receipt.amount)} (${label}), ${what}. `
-        + `Saldo pendiente: ${money(receipt.balanceAfter)}. Su recibo ${receipt.folio} está en su app.`
-      : `Recibimos su pago de ${moneyFull(receipt.amount)} (${label}), ${what}. Queda al `
-        + `corriente. Su recibo ${receipt.folio} está en su app. ¡Gracias!`;
+  // In Spanish whatever the screen shows: it goes to the client's app.
+  const text = inSpanish(() => paymentNote(receipt));
 
   try {
     await postSystemMessage(client.id, text, {
@@ -416,6 +416,27 @@ async function announce(receipt, client) {
   } catch {
     // The payment is what matters; a failed courtesy note must not undo it.
   }
+}
+
+/** The words of that message. */
+function paymentNote(receipt) {
+  const label = PAYMENT_METHODS[receipt.method]?.label || 'pago';
+  const served = receipt.applied.filter((row) => !row.ahead).map(appliedTitle);
+  const waiting = receipt.applied.filter((row) => row.ahead).map(appliedTitle);
+  const what = [
+    served.length ? `por ${served.join(', ')}` : '',
+    waiting.length ? `a cuenta de ${waiting.join(', ')}` : '',
+    receipt.unapplied ? `${money(receipt.unapplied)} a cuenta` : '',
+  ].filter(Boolean).join(' y ') || 'a su cuenta';
+
+  return receipt.held
+    ? `Recibimos su pago de ${moneyFull(receipt.amount)} (${label}). Su recibo ${receipt.folio} `
+      + 'está en su app. ¡Gracias!'
+    : receipt.balanceAfter > 0.005
+      ? `Recibimos su pago de ${moneyFull(receipt.amount)} (${label}), ${what}. `
+        + `Saldo pendiente: ${money(receipt.balanceAfter)}. Su recibo ${receipt.folio} está en su app.`
+      : `Recibimos su pago de ${moneyFull(receipt.amount)} (${label}), ${what}. Queda al `
+        + `corriente. Su recibo ${receipt.folio} está en su app. ¡Gracias!`;
 }
 
 const round2 = (value) => Math.round((Number(value) || 0) * 100) / 100;

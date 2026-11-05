@@ -2,9 +2,11 @@
 
 import { h, frag, autosize } from '../lib/dom.js';
 import { icon } from '../lib/icons.js';
-import { initials, money } from '../lib/format.js';
+import { initials, money, plural } from '../lib/format.js';
 import { badgeClass, dotClass } from '../lib/model.js';
 import { periodWord } from '../lib/billing.js';
+import { WEEKDAYS_SHORT, capitalize } from '../lib/dates.js';
+import { t } from '../lib/i18n.js';
 
 /* --- Badges & dots -------------------------------------------------------- */
 
@@ -38,7 +40,7 @@ export function iconButton(name, { onClick, label, variant = 'ghost', className 
 }
 
 /** Puts a button in a permanent "working…" state while its promise runs. */
-export function asyncButton(label, { busyLabel = 'Guardando…', onClick, ...rest } = {}) {
+export function asyncButton(label, { busyLabel = t('Guardando…'), onClick, ...rest } = {}) {
   const el = button(label, { ...rest, onClick: run });
   async function run(event) {
     if (el.disabled) return;
@@ -216,7 +218,7 @@ export function select({ options = [], value, ...rest } = {}) {
   return el;
 }
 
-export function searchInput({ placeholder = 'Buscar…', onInput, value = '' } = {}) {
+export function searchInput({ placeholder = t('Buscar…'), onInput, value = '' } = {}) {
   return h('div.input-group',
     h('span.input-group__icon', icon('search')),
     h('input.input', {
@@ -291,23 +293,23 @@ export function chargeRows(charge, priced = true) {
   const word = periodWord({ payEvery: charge?.payEvery });
 
   const rows = [
-    defRow('Plan', `${perDay} ${perDay === 1 ? 'comida' : 'comidas'} al día`),
-    defRow('Días de servicio', `${days} en la ${word}`),
-    defRow(`Comidas de la ${word}`, String(meals)),
+    defRow(t('Plan'), t('{meals} al día', { meals: plural(perDay, 'comida', 'comidas') })),
+    defRow(t('Días de servicio'), t('{days} en la {period}', { days, period: t(word) })),
+    defRow(t('Comidas de la {period}', { period: t(word) }), String(meals)),
   ];
 
   if (extras.length) {
-    rows.push(defRow('Comidas extra',
-      extras.map((entry) => `${WEEKDAY_SHORT[entry.weekday]} +${entry.count}`).join(' · ')));
+    rows.push(defRow(t('Comidas extra'),
+      extras.map((entry) => `${capitalize(WEEKDAYS_SHORT[entry.weekday])} +${entry.count}`).join(' · ')));
   }
 
   if (priced) {
-    rows.push(defRow('Precio del plan', money(base)));
+    rows.push(defRow(t('Precio del plan'), money(base)));
     if (Math.abs(adjustment) > 0.005) {
       const sign = adjustment > 0 ? '+' : '−';
       const count = Math.abs(Number(charge?.difference) || 0);
       rows.push(defRow(
-        adjustment > 0 ? 'Comidas de más' : 'Comidas de menos',
+        adjustment > 0 ? t('Comidas de más') : t('Comidas de menos'),
         `${sign}${money(Math.abs(adjustment))}`
         + (rate ? `  (${count} × ${money(rate)})` : '')));
     }
@@ -315,8 +317,6 @@ export function chargeRows(charge, priced = true) {
 
   return rows;
 }
-
-const WEEKDAY_SHORT = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
 /* --- Food restrictions ------------------------------------------------------ */
 
@@ -358,34 +358,33 @@ export function dataErrorCard(error, { onRetry } = {}) {
     ?.replace(/[.,)\]]+$/, '');
 
   const explanation = {
-    'failed-precondition': 'Firestore necesita un índice para esta consulta. Créalo con el enlace de abajo; tarda un minuto en quedar listo.',
-    'permission-denied': 'Las reglas publicadas en Firestore no permiten esta consulta. Vuelve a pegar firestore.rules completo en la consola y publícalas.',
-    unavailable: 'Sin conexión con Firestore. Revisa tu internet.',
-    unauthenticated: 'La sesión caducó. Cierra sesión y vuelve a entrar.',
+    'failed-precondition': t('Firestore necesita un índice para esta consulta. Créalo con el enlace de abajo; tarda un minuto en quedar listo.'),
+    'permission-denied': t('Las reglas publicadas en Firestore no permiten esta consulta. Vuelve a pegar firestore.rules completo en la consola y publícalas.'),
+    unavailable: t('Sin conexión con Firestore. Revisa tu internet.'),
+    unauthenticated: t('La sesión caducó. Cierra sesión y vuelve a entrar.'),
     // Not a bug and not a thing to retry: the day's allowance is spent and
     // nothing will read until midnight. Saying so is the difference between
     // somebody waiting it out and somebody reinstalling the panel.
-    'resource-exhausted': 'La base de datos llegó a su límite diario de lecturas. '
-      + 'Se restablece a medianoche; hasta entonces no se puede consultar.',
-  }[code] || 'Firestore rechazó una consulta.';
+    'resource-exhausted': t('La base de datos llegó a su límite diario de lecturas. Se restablece a medianoche; hasta entonces no se puede consultar.'),
+  }[code] || t('Firestore rechazó una consulta.');
 
   return h('div.card', { style: { borderColor: 'var(--bad-500)', borderLeftWidth: '4px' } },
     h('div.stack.stack-3',
       h('div.row',
         h('span', { style: { color: 'var(--bad-500)' } }, icon('alert')),
-        h('div.w-650', 'No se pudieron cargar los datos')),
+        h('div.w-650', t('No se pudieron cargar los datos'))),
 
       h('p.t-sm.c-soft', { style: { lineHeight: '1.5' } }, explanation),
 
       link
         ? h('a.btn.btn--primary.btn--block', { href: link, target: '_blank', rel: 'noopener' },
-            icon('shield'), 'Crear el índice en Firebase')
+            icon('shield'), t('Crear el índice en Firebase'))
         : null,
 
-      onRetry ? button('Reintentar', { variant: 'ghost', block: true, icon: 'refresh', onClick: onRetry }) : null,
+      onRetry ? button(t('Reintentar'), { variant: 'ghost', block: true, icon: 'refresh', onClick: onRetry }) : null,
 
       h('details',
-        h('summary.t-xs.c-faint', { style: { cursor: 'pointer' } }, 'Detalle técnico'),
+        h('summary.t-xs.c-faint', { style: { cursor: 'pointer' } }, t('Detalle técnico')),
         h('p.t-xs.c-faint', {
           style: { marginTop: '8px', lineHeight: '1.5', wordBreak: 'break-word', userSelect: 'text' },
         }, `${code}${code ? ': ' : ''}${message}`))));

@@ -57,13 +57,14 @@ import { loadMovements, cachedMovements, withMine } from '../data/movements.js';
 import {
   KINDS, kindOf, movementsFrom, filterMovements, countByKind, dayHeading,
 } from '../lib/movements.js';
+import { t } from '../lib/i18n.js';
 
 /** Plain words for the spans, in the order somebody actually asks for them. */
 const WHEN = [
-  { grain: 'day', label: 'Hoy' },
-  { grain: 'week', label: 'Esta semana' },
-  { grain: 'month', label: 'Este mes' },
-  { grain: 'year', label: 'Este año' },
+  { grain: 'day', label: t('Hoy') },
+  { grain: 'week', label: t('Esta semana') },
+  { grain: 'month', label: t('Este mes') },
+  { grain: 'year', label: t('Este año') },
 ];
 
 const BUCKET_WORD = { day: 'día', week: 'semana', month: 'mes' };
@@ -195,13 +196,13 @@ function drawSummary(view) {
   const report = view.report();
 
   screen({
-    title: 'Reportes',
+    title: t('Reportes'),
     subtitle: rangeTitle(view.range),
     // No back chevron: it is a tab now, like Inicio or Clientes, and the way
     // out of a tab is another tab.
     tab: 'reports',
     sunken: true,
-    actions: [topbarButton('refresh', { label: 'Volver a leer', onClick: view.reload })],
+    actions: [topbarButton('refresh', { label: t('Volver a leer'), onClick: view.reload })],
     body: h('div.page__inner.rbig.stack.stack-5',
       picker(view.range, ''),
       view.failure()
@@ -218,32 +219,42 @@ function summary(report, view) {
     takings(report),
 
     h('div.rgrid',
-      smallBox('Se facturó', money(cash.billed, { round: true }),
-        `${plural(counts.bills, 'factura', 'facturas')} de este periodo`),
+      smallBox(t('Se facturó'), money(cash.billed, { round: true }),
+        t('{invoices} de este periodo', { invoices: plural(counts.bills, 'factura', 'facturas') })),
       smallBox(debtWord(cash.change), money(Math.abs(cash.change), { round: true }),
         debtWhy(cash.change)),
-      smallBox('Deben hoy', money(standing.owed, { round: true }),
-        `${plural(standing.debtors.length, 'cliente', 'clientes')} · `
-        + `${money(standing.overdue, { round: true })} vencido`, 'warn'),
+      smallBox(t('Deben hoy'), money(standing.owed, { round: true }),
+        t('{clients} · {amount} vencido', {
+          clients: plural(standing.debtors.length, 'cliente', 'clientes'),
+          amount: money(standing.overdue, { round: true }),
+        }), 'warn'),
       // Lo que la cocina pone en la estufa un día cualquiera. Es de hoy, no del
       // periodo, y por eso el pie lo dice.
-      smallBox('Comidas al día', number(people.meals),
-        `${plural(people.active, 'cliente activo', 'clientes activos')} hoy`)),
+      smallBox(t('Comidas al día'), number(people.meals),
+        t('{clients} hoy', { clients: plural(people.active, 'cliente activo', 'clientes activos') }))),
 
     counts.refunds
-      ? alert(`${counts.refunds === 1 ? 'Se canceló' : 'Se cancelaron'} `
-        + `${plural(counts.refunds, 'pago', 'pagos')} por ${money(Math.abs(cash.refunds))}. `
-        + 'Ya está descontado de lo que se cobró.', 'warn', 'alert')
+      ? alert((counts.refunds === 1
+        ? t('Se canceló {payments} por {amount}. Ya está descontado de lo que se cobró.', {
+          payments: plural(counts.refunds, 'pago', 'pagos'), amount: money(Math.abs(cash.refunds)),
+        })
+        : t('Se cancelaron {payments} por {amount}. Ya está descontado de lo que se cobró.', {
+          payments: plural(counts.refunds, 'pago', 'pagos'), amount: money(Math.abs(cash.refunds)),
+        })), 'warn', 'alert')
       : null,
 
     report.pricingChanged
-      ? alert(`Los precios cambiaron el ${formatDayShort(report.pricingChanged.date)}`
-        + `${report.pricingChanged.byName ? `, los cambió ${report.pricingChanged.byName}` : ''}. `
-        + 'Las facturas de antes de ese día conservan el precio que tenían.', 'info', 'info')
+      ? alert((report.pricingChanged.byName
+        ? t('Los precios cambiaron el {day}, los cambió {name}. Las facturas de antes de ese día conservan el precio que tenían.', {
+          day: formatDayShort(report.pricingChanged.date), name: report.pricingChanged.byName,
+        })
+        : t('Los precios cambiaron el {day}. Las facturas de antes de ese día conservan el precio que tenían.', {
+          day: formatDayShort(report.pricingChanged.date),
+        })), 'info', 'info')
       : null,
 
     h('div.stack.stack-3',
-      h('h2.rhead', 'Ver las listas'),
+      h('h2.rhead', t('Ver las listas')),
       h('div.rmenu', LIST_ORDER
         .map((key) => ({ key, ...LISTS[key] }))
         .filter((entry) => entry.count(report) > 0 || !entry.onlyWhenSome)
@@ -257,13 +268,12 @@ function summary(report, view) {
     movesSection(view),
 
     h('div.stack.stack-2',
-      button('Imprimir esta hoja', {
+      button(t('Imprimir esta hoja'), {
         variant: 'primary', size: 'lg', block: true, icon: 'printer',
         onClick: () => printReport(report),
       }),
       h('p.rfoot',
-        'Sale en una sola hoja tamaño carta, con los totales de este periodo. '
-        + 'Las listas de personas se quedan aquí en la pantalla.')));
+        t('Sale en una sola hoja tamaño carta, con los totales de este periodo. Las listas de personas se quedan aquí en la pantalla.'))));
 }
 
 /** The one figure the screen exists for, set as large as it deserves. */
@@ -275,26 +285,28 @@ function takings(report) {
     .reduce((total, m) => total + m.takings, 0);
 
   return h('div.rmoney',
-    h('div.rmoney__k', rangeHolds(report.range) ? 'Se ha cobrado' : 'Se cobró'),
+    h('div.rmoney__k', rangeHolds(report.range) ? t('Se ha cobrado') : t('Se cobró')),
     h('div.rmoney__v', money(cash.collected, { round: true })),
     h('div.rmoney__n', counts.payments
-      ? `${plural(counts.payments, 'pago', 'pagos')} de ${plural(counts.payers, 'persona', 'personas')}`
-      : 'No se recibió ningún pago'),
+      ? t('{payments} de {people}', {
+        payments: plural(counts.payments, 'pago', 'pagos'), people: plural(counts.payers, 'persona', 'personas'),
+      })
+      : t('No se recibió ningún pago')),
 
     // Cash against card: the two figures the counter is squared with at the end
     // of the day, and the reason the kitchen started recording how people pay.
     cash.takings > 0
       ? h('div.rmoney__split',
-          tillCell('Efectivo', of('cash'), cash.takings),
-          tillCell('Débito', of('debit'), cash.takings),
-          others ? tillCell('Otras formas', others, cash.takings) : null)
+          tillCell(t('Efectivo'), of('cash'), cash.takings),
+          tillCell(t('Débito'), of('debit'), cash.takings),
+          others ? tillCell(t('Otras formas'), others, cash.takings) : null)
       : null);
 }
 
 const tillCell = (label, amount, whole) => h('div.rcell',
   h('div.rcell__k', label),
   h('div.rcell__v', money(amount, { round: true })),
-  h('div.rcell__n', `${percent(amount, whole)}% de lo que entró`));
+  h('div.rcell__n', t('{percent}% de lo que entró', { percent: percent(amount, whole) })));
 
 const smallBox = (label, value, note, tone) =>
   h(`div.rbox${tone ? `.rbox--${tone}` : ''}`,
@@ -318,31 +330,31 @@ function picker(range, list = '', keep = () => ({})) {
   const anchor = () => (rangeHolds(range) ? today() : range.start);
 
   return h('div.rwhen',
-    h('h2.rhead', '¿Qué quieres ver?'),
+    h('h2.rhead', t('¿Qué quieres ver?')),
     h('div.rwhen__opts',
       WHEN.map((option) => h(
         `button.ropt${range.grain === option.grain ? '.is-active' : ''}`,
         { type: 'button', onclick: () => open(rangeFor(option.grain, anchor())) },
         option.label)),
       h(`button.ropt${range.grain === 'custom' ? '.is-active' : ''}`,
-        { type: 'button', onclick: () => pickDates(range).then((next) => next && open(next)) }, 'Otras fechas')),
+        { type: 'button', onclick: () => pickDates(range).then((next) => next && open(next)) }, t('Otras fechas'))),
 
     h('div.rper',
       h('button.rper__nav', {
-        type: 'button', 'aria-label': 'El periodo anterior',
+        type: 'button', 'aria-label': t('El periodo anterior'),
         onclick: () => open(shiftRange(range, -1)),
       }, icon('chevronL')),
 
       h('button.rper__now', {
         type: 'button',
-        'aria-label': 'Regresar al periodo de ahora',
+        'aria-label': t('Regresar al periodo de ahora'),
         onclick: () => open(nowLike(range)),
       },
         h('span.rper__t', rangeTitle(range)),
-        h('span.rper__s', `${rangeSpan(range)}${rangeHolds(range) ? ' · en curso' : ''}`)),
+        h('span.rper__s', rangeHolds(range) ? t('{span} · en curso', { span: rangeSpan(range) }) : rangeSpan(range))),
 
       h('button.rper__nav', {
-        type: 'button', 'aria-label': 'El periodo siguiente',
+        type: 'button', 'aria-label': t('El periodo siguiente'),
         disabled: ahead,
         onclick: () => open(shiftRange(range, 1)),
       }, icon('chevronR'))));
@@ -377,33 +389,33 @@ async function pickDates(range) {
   const measure = () => {
     if (!from.value || !to.value) { note.textContent = ''; return; }
     const picked = customRange(from.value, to.value);
-    note.textContent = `Son ${plural(spanOf(picked), 'día', 'días')}: ${rangeSpan(picked)}.`;
+    note.textContent = t('Son {days}: {span}.', { days: plural(spanOf(picked), 'día', 'días'), span: rangeSpan(picked) });
   };
   from.addEventListener('change', measure);
   to.addEventListener('change', measure);
   measure();
 
   const picked = await sheet({
-    title: 'Escoge las fechas',
+    title: t('Escoge las fechas'),
     build: (close) => h('div.stack.stack-4',
-      field({ label: 'Desde el día', control: from }),
-      field({ label: 'Hasta el día', control: to }),
+      field({ label: t('Desde el día'), control: from }),
+      field({ label: t('Hasta el día'), control: to }),
       note,
-      button('Ver este periodo', {
+      button(t('Ver este periodo'), {
         variant: 'primary', size: 'lg', block: true, onClick: () => close([from.value, to.value]),
       })),
   });
 
   if (!picked) return null;
   const [start, end] = picked;
-  if (!start || !end) { toastBad('Faltan las fechas.'); return null; }
+  if (!start || !end) { toastBad(t('Faltan las fechas.')); return null; }
   return customRange(start, end);
 }
 
 /* --- Paper ------------------------------------------------------------------ */
 
 function printReport(report) {
-  if (!report) { toastBad('Todavía se está leyendo el periodo.'); return; }
+  if (!report) { toastBad(t('Todavía se está leyendo el periodo.')); return; }
   printSheet(reportSheet(report, {
     business: store.business,
     by: session.displayName || session.email || '',
@@ -422,27 +434,27 @@ function printReport(report) {
  */
 const LISTS = {
   pagaron: {
-    title: 'Quién pagó',
+    title: t('Quién pagó'),
     unit: ['persona', 'personas'],
     icon: 'wallet',
     count: (r) => r.payers.length,
     note: (r) => (r.payers.length
-      ? `${plural(r.payers.length, 'persona pagó', 'personas pagaron')} en este periodo`
-      : 'Nadie pagó en este periodo'),
-    empty: { icon: 'wallet', title: 'Nadie pagó en este periodo', text: 'Prueba con otro periodo arriba.' },
+      ? t('{paid} en este periodo', { paid: plural(r.payers.length, 'persona pagó', 'personas pagaron') })
+      : t('Nadie pagó en este periodo')),
+    empty: { icon: 'wallet', title: t('Nadie pagó en este periodo'), text: t('Prueba con otro periodo arriba.') },
     // La columna de lo devuelto sólo aparece cuando hay algo devuelto: una
     // columna de rayas en toda la hoja es una columna que estorba.
     print: (rows) => {
       const back = rows.some((row) => row.refunds);
       return {
-        columns: ['Cliente', 'Rancho', 'Pagos', ...(back ? ['Devuelto'] : []), 'Pagó'],
+        columns: [t('Cliente'), t('Rancho'), t('Pagos'), ...(back ? [t('Devuelto')] : []), t('Pagó')],
         text: [1],
         body: rows.map((row) => [
           row.name, row.farmName || '—', number(row.count),
           ...(back ? [row.refunds ? `−${money(Math.abs(row.refunds))}` : '—'] : []),
           money(row.amount),
         ]),
-        total: ['Total', '', number(total(rows, (row) => row.count)),
+        total: [t('Total'), '', number(total(rows, (row) => row.count)),
           ...(back ? [`−${money(Math.abs(total(rows, (row) => row.refunds)))}`] : []),
           money(total(rows, (row) => row.amount))],
       };
@@ -453,10 +465,10 @@ const LISTS = {
       lead: avatar(row.name, { size: 'sm' }),
       title: row.name,
       meta: [row.farmName, row.count > 1 ? plural(row.count, 'pago', 'pagos') : null,
-        row.last ? `el ${formatDay(row.last)}` : null,
+        row.last ? t('el {day}', { day: formatDay(row.last) }) : null,
         // Said on the row rather than taken off the figure beside it: money
         // given back is a different event from money handed over.
-        row.refunds ? `se le regresaron ${money(Math.abs(row.refunds))}` : null,
+        row.refunds ? t('se le regresaron {amount}', { amount: money(Math.abs(row.refunds)) }) : null,
       ].filter(Boolean).join(' · '),
       end: h('div.rlist__money', money(row.amount, { round: true })),
       chevron: !!row.clientId,
@@ -465,26 +477,28 @@ const LISTS = {
   },
 
   deben: {
-    title: 'Quién debe',
+    title: t('Quién debe'),
     unit: ['cliente', 'clientes'],
     icon: 'users',
     count: (r) => r.standing.debtors.length,
     note: (r) => (r.standing.debtors.length
-      ? `${plural(r.standing.debtors.length, 'cliente debe', 'clientes deben')} `
-        + `${money(r.standing.owed, { round: true })} al día de hoy`
-      : 'Nadie debe nada'),
-    empty: { icon: 'shield', title: 'Nadie debe nada', text: 'Todas las facturas emitidas están pagadas.' },
+      ? t('{owe} {amount} al día de hoy', {
+        owe: plural(r.standing.debtors.length, 'cliente debe', 'clientes deben'),
+        amount: money(r.standing.owed, { round: true }),
+      })
+      : t('Nadie debe nada')),
+    empty: { icon: 'shield', title: t('Nadie debe nada'), text: t('Todas las facturas emitidas están pagadas.') },
     print: (rows) => ({
-      columns: ['Cliente', 'Rancho', 'Facturas', 'Atrasadas', 'Debe'],
+      columns: [t('Cliente'), t('Rancho'), t('Facturas'), t('Atrasadas'), t('Debe')],
       text: [1],
       body: rows.map((row) => [
         row.name, row.farmName || '—', number(row.bills),
         row.late ? number(row.late) : '—', money(row.balance),
       ]),
-      total: ['Total', '', number(total(rows, (row) => row.bills)),
+      total: [t('Total'), '', number(total(rows, (row) => row.bills)),
         number(total(rows, (row) => row.late)), money(total(rows, (row) => row.balance))],
     }),
-    head: () => 'Esto no es del periodo: es lo que se debe en este momento, de cualquier fecha.',
+    head: () => t('Esto no es del periodo: es lo que se debe en este momento, de cualquier fecha.'),
     search: (row) => [row.name, row.farmName],
     rows: (r) => r.standing.debtors,
     render: (row) => itemRow({
@@ -493,39 +507,39 @@ const LISTS = {
       meta: [row.farmName, plural(row.bills, 'factura', 'facturas')].filter(Boolean).join(' · '),
       end: [
         h('div.rlist__money', money(row.balance, { round: true })),
-        row.late ? badge('Atrasado', 'bad') : null,
+        row.late ? badge(t('Atrasado'), 'bad') : null,
       ],
       onClick: () => go(`/clients/${row.clientId}`),
     }),
   },
 
   atrasados: {
-    title: 'Quién está atrasado',
+    title: t('Quién está atrasado'),
     unit: ['cliente', 'clientes'],
     icon: 'alert',
     count: (r) => r.standing.late.length,
     note: (r) => (r.standing.late.length
-      ? `${plural(r.standing.late.length, 'cliente pasó', 'clientes pasaron')} su fecha de pago`
-      : 'Nadie está atrasado'),
-    empty: { icon: 'shield', title: 'Nadie está atrasado', text: 'Nadie ha pasado su fecha de pago.' },
+      ? t('{clients} su fecha de pago', { clients: plural(r.standing.late.length, 'cliente pasó', 'clientes pasaron') })
+      : t('Nadie está atrasado')),
+    empty: { icon: 'shield', title: t('Nadie está atrasado'), text: t('Nadie ha pasado su fecha de pago.') },
     print: (rows) => ({
-      columns: ['Cliente', 'Rancho', 'Venció', 'Facturas', 'Atrasado'],
+      columns: [t('Cliente'), t('Rancho'), t('Venció'), t('Facturas'), t('Atrasado')],
       text: [1, 2],
       body: rows.map((row) => [
         row.name, row.farmName || '—',
         `${formatDayShort(row.oldest)} · ${humanDelta(daysBetween(today(), row.oldest))}`,
         number(row.late), money(row.lateBalance),
       ]),
-      total: ['Total', '', '', number(total(rows, (row) => row.late)),
+      total: [t('Total'), '', '', number(total(rows, (row) => row.late)),
         money(total(rows, (row) => row.lateBalance))],
     }),
-    head: () => 'Al día de hoy. Los más viejos primero.',
+    head: () => t('Al día de hoy. Los más viejos primero.'),
     search: (row) => [row.name, row.farmName],
     rows: (r) => r.standing.late,
     render: (row) => itemRow({
       lead: avatar(row.name, { size: 'sm' }),
       title: row.name,
-      meta: [row.farmName, `venció ${humanDelta(daysBetween(today(), row.oldest))}`]
+      meta: [row.farmName, t('venció {when}', { when: humanDelta(daysBetween(today(), row.oldest)) })]
         .filter(Boolean).join(' · '),
       end: h('div.rlist__money.c-bad', money(row.lateBalance, { round: true })),
       onClick: () => go(`/clients/${row.clientId}`),
@@ -533,26 +547,27 @@ const LISTS = {
   },
 
   ranchos: {
-    title: 'Por rancho',
+    title: t('Por rancho'),
     unit: ['rancho', 'ranchos'],
     icon: 'farm',
     count: (r) => r.farms.length,
-    note: (r) => `Cuánto entró de cada uno de los ${number(r.farms.length)} ranchos`,
-    empty: { icon: 'farm', title: 'Sin movimiento por rancho', text: 'No hubo pagos ni facturas en este periodo.' },
+    note: (r) => t('Cuánto entró de cada uno de los {count} ranchos', { count: number(r.farms.length) }),
+    empty: { icon: 'farm', title: t('Sin movimiento por rancho'), text: t('No hubo pagos ni facturas en este periodo.') },
     print: (rows) => ({
-      columns: ['Rancho', 'Pagaron', 'Cobrado', 'Facturado'],
+      columns: [t('Rancho'), t('Pagaron'), t('Cobrado'), t('Facturado')],
       body: rows.map((row) => [
         row.name, number(row.payers), money(row.collected), money(row.billed),
       ]),
-      total: ['Total', number(total(rows, (row) => row.payers)),
+      total: [t('Total'), number(total(rows, (row) => row.payers)),
         money(total(rows, (row) => row.collected)), money(total(rows, (row) => row.billed))],
     }),
     rows: (r) => r.farms,
     render: (row) => itemRow({
       lead: h('span.c-faint', icon('farm')),
       title: row.name,
-      meta: `${plural(row.payers, 'persona pagó', 'personas pagaron')} · `
-        + `${money(row.billed, { round: true })} facturado`,
+      meta: t('{count} · {amount} facturado', {
+        count: plural(row.payers, 'persona pagó', 'personas pagaron'), amount: money(row.billed, { round: true }),
+      }),
       end: h('div.rlist__money', money(row.collected, { round: true })),
       chevron: !!row.farmId,
       onClick: () => row.farmId && go(`/farms/${row.farmId}`),
@@ -560,7 +575,7 @@ const LISTS = {
   },
 
   dias: {
-    title: 'Día por día',
+    title: t('Día por día'),
     // Named after whatever the period is cut into, which is days for a month
     // and months for a year.
     unit: (r) => (BUCKET_WORD[r.buckets[0]?.grain] === 'mes'
@@ -571,14 +586,14 @@ const LISTS = {
     // appear on the menu at all rather than opening an empty list.
     count: (r) => (r.buckets.length > 1 ? r.buckets.length : 0),
     onlyWhenSome: true,
-    note: (r) => `Cómo fue cada ${BUCKET_WORD[r.buckets[0]?.grain] || 'día'} del periodo`,
-    empty: { icon: 'chart', title: 'Un solo día', text: 'Este periodo es un día; no hay nada que comparar.' },
+    note: (r) => t('Cómo fue cada {unit} del periodo', { unit: t(BUCKET_WORD[r.buckets[0]?.grain] || 'día') }),
+    empty: { icon: 'chart', title: t('Un solo día'), text: t('Este periodo es un día; no hay nada que comparar.') },
     print: (rows) => ({
-      columns: ['Periodo', 'Pagos', 'Cobrado', 'Facturado'],
+      columns: [t('Periodo'), t('Pagos'), t('Cobrado'), t('Facturado')],
       body: rows.map((row) => [
         row.label, number(row.count), money(row.amount), money(row.billed),
       ]),
-      total: ['Total', number(total(rows, (row) => row.count)),
+      total: [t('Total'), number(total(rows, (row) => row.count)),
         money(total(rows, (row) => row.amount)), money(total(rows, (row) => row.billed))],
     }),
     chart: true,
@@ -588,31 +603,33 @@ const LISTS = {
     render: (row) => itemRow({
       title: row.label,
       meta: row.count
-        ? `${plural(row.count, 'pago', 'pagos')}${row.billed ? ` · ${money(row.billed, { round: true })} facturado` : ''}`
-        : (row.billed ? `${money(row.billed, { round: true })} facturado` : 'Sin pagos'),
+        ? (row.billed
+          ? t('{count} · {amount} facturado', { count: plural(row.count, 'pago', 'pagos'), amount: money(row.billed, { round: true }) })
+          : plural(row.count, 'pago', 'pagos'))
+        : (row.billed ? t('{amount} facturado', { amount: money(row.billed, { round: true }) }) : t('Sin pagos')),
       end: h('div.rlist__money', money(row.amount, { round: true })),
       chevron: false,
     }),
   },
 
   pagos: {
-    title: 'Todos los pagos',
+    title: t('Todos los pagos'),
     unit: ['pago', 'pagos'],
     icon: 'receipt',
     count: (r) => r.movements.length,
     note: (r) => (r.movements.length
-      ? `${plural(r.movements.length, 'pago', 'pagos')} uno por uno, con su folio`
-      : 'No hubo pagos'),
-    empty: { icon: 'receipt', title: 'No hubo pagos', text: 'No se registró ningún pago en este periodo.' },
+      ? t('{payments} uno por uno, con su folio', { payments: plural(r.movements.length, 'pago', 'pagos') })
+      : t('No hubo pagos')),
+    empty: { icon: 'receipt', title: t('No hubo pagos'), text: t('No se registró ningún pago en este periodo.') },
     print: (rows) => ({
-      columns: ['Cliente', 'Fecha', 'Forma', 'Cobró', 'Folio', 'Monto'],
+      columns: [t('Cliente'), t('Fecha'), t('Forma'), t('Cobró'), t('Folio'), t('Monto')],
       text: [1, 2, 3, 4],
       body: rows.map((row) => [
-        row.clientName || 'Sin cliente', formatDayShort(row.date),
+        row.clientName || t('Sin cliente'), formatDayShort(row.date),
         paymentMethodMeta(row.method).label, row.takenByName || '—', row.folio || '—',
         `${Number(row.amount) < 0 ? '−' : ''}${money(Math.abs(Number(row.amount) || 0))}`,
       ]),
-      total: ['Total', '', '', '', '', money(total(rows, (row) => row.amount))],
+      total: [t('Total'), '', '', '', '', money(total(rows, (row) => row.amount))],
     }),
     search: (row) => [row.clientName, row.folio, row.takenByName, row.farmName],
     rows: (r) => r.movements,
@@ -620,14 +637,14 @@ const LISTS = {
       const back = Number(row.amount) < 0;
       return itemRow({
         lead: avatar(row.clientName || '—', { size: 'sm' }),
-        title: row.clientName || 'Sin cliente',
-        meta: `${formatDay(row.date)} · ${paymentMethodMeta(row.method).label}`
-          + `${row.takenByName ? ` · cobró ${row.takenByName}` : ''}`
-          + `${row.folio ? ` · ${row.folio}` : ''}`,
+        title: row.clientName || t('Sin cliente'),
+        meta: [formatDay(row.date), paymentMethodMeta(row.method).label,
+          row.takenByName ? t('cobró {name}', { name: row.takenByName }) : null,
+          row.folio || null].filter(Boolean).join(' · '),
         end: [
           h(`div.rlist__money${back ? '.c-bad' : ''}`,
             `${back ? '−' : ''}${money(Math.abs(Number(row.amount) || 0), { round: true })}`),
-          back ? badge('Cancelado', 'bad') : null,
+          back ? badge(t('Cancelado'), 'bad') : null,
         ],
         onClick: () => go(`/receipts/${row.id}`),
       });
@@ -635,27 +652,27 @@ const LISTS = {
   },
 
   ajustes: {
-    title: 'Ajustes de saldo',
+    title: t('Ajustes de saldo'),
     unit: ['ajuste', 'ajustes'],
     icon: 'edit',
     count: (r) => r.corrections.length,
     onlyWhenSome: true,
-    note: (r) => `${plural(r.corrections.length, 'cuenta se corrigió', 'cuentas se corrigieron')} a mano`,
-    empty: { icon: 'edit', title: 'Sin ajustes', text: 'Nadie cambió un saldo a mano en este periodo.' },
+    note: (r) => t('{accounts} a mano', { accounts: plural(r.corrections.length, 'cuenta se corrigió', 'cuentas se corrigieron') }),
+    empty: { icon: 'edit', title: t('Sin ajustes'), text: t('Nadie cambió un saldo a mano en este periodo.') },
     print: (rows) => ({
-      columns: ['Cliente', 'Motivo', 'Quién', 'Fecha', 'Antes', 'Después'],
+      columns: [t('Cliente'), t('Motivo'), t('Quién'), t('Fecha'), t('Antes'), t('Después')],
       text: [1, 2, 3],
       body: rows.map((row) => [
         row.clientName, row.note || '—', row.byName || '—', formatDayShort(row.date),
         money(row.from), money(row.to),
       ]),
     }),
-    head: () => 'Cambios hechos a las facturas de este periodo, con el motivo que se escribió.',
+    head: () => t('Cambios hechos a las facturas de este periodo, con el motivo que se escribió.'),
     rows: (r) => r.corrections,
     render: (row) => itemRow({
       lead: avatar(row.clientName, { size: 'sm' }),
       title: row.clientName,
-      meta: `${row.note || 'Sin motivo'} · ${row.byName || 'sin registrar'} · ${formatDay(row.date)}`,
+      meta: `${row.note || t('Sin motivo')} · ${row.byName || t('sin registrar')} · ${formatDay(row.date)}`,
       end: [
         h(`div.rlist__money${row.delta > 0 ? '' : '.c-ok'}`,
           `${row.delta > 0 ? '+' : '−'}${money(Math.abs(row.delta), { round: true })}`),
@@ -684,7 +701,7 @@ function drawList(view) {
   const report = view.report();
 
   screen({
-    title: spec ? spec.title : 'Lista',
+    title: spec ? spec.title : t('Lista'),
     subtitle: rangeTitle(view.range),
     // The way back is the report on the same period, so the chevron out of a
     // list never loses the span somebody chose to get here.
@@ -692,14 +709,14 @@ function drawList(view) {
     tab: 'reports',
     sunken: true,
     actions: spec && report
-      ? [topbarButton('printer', { label: 'Imprimir la lista', onClick: () => printList(view, spec, report) })]
+      ? [topbarButton('printer', { label: t('Imprimir la lista'), onClick: () => printList(view, spec, report) })]
       : [],
     body: h('div.page__inner.rbig.stack.stack-4',
       !spec
         ? emptyState({
-            icon: 'search', title: 'Esta lista no existe',
-            text: 'Regresa al reporte y escoge una de la lista.',
-            action: button('Ir al reporte', { onClick: () => go(urlFor(view.range)) }),
+            icon: 'search', title: t('Esta lista no existe'),
+            text: t('Regresa al reporte y escoge una de la lista.'),
+            action: button(t('Ir al reporte'), { onClick: () => go(urlFor(view.range)) }),
           })
         : view.failure()
           ? dataErrorCard(view.failure(), { onRetry: view.reload })
@@ -728,7 +745,7 @@ function listBody(view, spec, report) {
 
     all.length >= SEARCH_FROM && spec.search
       ? searchInput({
-          placeholder: 'Buscar por nombre…',
+          placeholder: t('Buscar por nombre…'),
           value: state.term,
           onInput: (value) => { state.term = value; refresh(view, spec, report); },
         })
@@ -737,25 +754,25 @@ function listBody(view, spec, report) {
     all.length
       ? h('div.stack.stack-2',
           h('p.rcount', state.term
-            ? `${plural(shown.length, 'resultado', 'resultados')} de ${all.length}`
+            ? t('{results} de {total}', { results: plural(shown.length, 'resultado', 'resultados'), total: all.length })
             : plural(all.length, ...(typeof spec.unit === 'function' ? spec.unit(report) : spec.unit))),
           shown.length
             ? list(shown.map(spec.render), { card: true })
-            : emptyState({ icon: 'search', title: 'Nada con ese nombre', text: 'Prueba escribiendo menos letras.' }))
+            : emptyState({ icon: 'search', title: t('Nada con ese nombre'), text: t('Prueba escribiendo menos letras.') }))
       : emptyState(spec.empty),
 
     all.length
       ? h('div.stack.stack-2',
-          button('Imprimir esta lista', {
+          button(t('Imprimir esta lista'), {
             variant: 'primary', size: 'lg', block: true, icon: 'printer',
             onClick: () => printList(view, spec, report),
           }),
           h('p.rfoot', state.term
-            ? `Se imprime sólo lo que dice «${state.term}». Borra la búsqueda para la lista completa.`
-            : 'Sale en hoja tamaño carta, con esta lista completa y su total.'))
+            ? t('Se imprime sólo lo que dice «{term}». Borra la búsqueda para la lista completa.', { term: state.term })
+            : t('Sale en hoja tamaño carta, con esta lista completa y su total.')))
       : null,
 
-    button('Regresar al reporte', {
+    button(t('Regresar al reporte'), {
       variant: 'ghost', size: 'lg', block: true, icon: 'chevronL',
       onClick: () => go(urlFor(range)),
     }));
@@ -769,7 +786,7 @@ function listBody(view, spec, report) {
  * quietly missing from it.
  */
 function printList(view, spec, report) {
-  if (!spec?.print || !report) { toastBad('Esta lista no se puede imprimir.'); return; }
+  if (!spec?.print || !report) { toastBad(t('Esta lista no se puede imprimir.')); return; }
 
   const all = spec.rows(report);
   const rows = view.state.term && spec.search
@@ -837,20 +854,20 @@ function movesSection(view) {
 
   return h('section.rmoves.stack.stack-3',
     h('div.rmoves__top',
-      h('h2.rhead', 'Movimientos'),
+      h('h2.rhead', t('Movimientos')),
       all ? h('span.rcount', plural(all.length, 'movimiento', 'movimientos')) : null),
     movesTrouble(view),
     !all
       ? skeletonRows(3)
       : !all.length
-        ? h('p.rnote', 'No hubo movimientos en este periodo.')
+        ? h('p.rnote', t('No hubo movimientos en este periodo.'))
         : h('div.stack.stack-3',
             h('div.rkinds',
               KINDS.filter((kind) => counts[kind.key]).map((kind) => h('a.chip', { href: to(kind.key) },
-                kind.label, h('span.chip__count', number(counts[kind.key]))))),
+                t(kind.label), h('span.chip__count', number(counts[kind.key]))))),
             h('div.rmoves__list', all.slice(0, MOVES_ON_SUMMARY).map((one) => moveRow(one, { withDay: true }))),
             h('a.btn.btn--primary.btn--lg.btn--block', { href: to('') },
-              `Ver todos los movimientos (${number(all.length)})`, icon('chevronR'))));
+              t('Ver todos los movimientos ({count})', { count: number(all.length) }), icon('chevronR'))));
 }
 
 /**
@@ -863,18 +880,18 @@ function moveRow(one, { withDay = false } = {}) {
     : one.invoiceId ? `/invoices/${one.invoiceId}`
       : one.clientId ? `/clients/${one.clientId}`
         : one.farmId ? `/farms/${one.farmId}` : '';
-  const who = one.clientName || one.farmName || (one.kind === 'farma' ? 'Precios' : 'Sin cliente');
+  const who = one.clientName || one.farmName || (one.kind === 'farma' ? t('Precios') : t('Sin cliente'));
 
   return h(where ? 'a.rmove.rmove--link' : 'div.rmove', where ? { href: `#${where}` } : {},
     h('div.rmove__when',
       // An old record may only know its day; it says so rather than "12:00".
-      h('span.rmove__time', one.exact ? formatTime(one.ms) : 'sin hora'),
+      h('span.rmove__time', one.exact ? formatTime(one.ms) : t('sin hora')),
       withDay ? h('span.rmove__day', dayHeading(one.day)) : null),
     h(`span.rmove__ico.rmove__ico--${kind.key}`, icon(kind.icon)),
     h('div.rmove__main',
       h('div.rmove__who', who),
       h('div.rmove__what', one.text),
-      h('div.rmove__by', [kind.label, one.by ? `por ${one.by}` : null].filter(Boolean).join(' · '))),
+      h('div.rmove__by', [t(kind.label), one.by ? t('por {name}', { name: one.by }) : null].filter(Boolean).join(' · '))),
     where ? icon('chevronR', 'rmove__chev') : null);
 }
 
@@ -891,24 +908,22 @@ function movesTrouble(view) {
 
   if (logged) {
     out.push(alert(code(logged) === 'permission-denied'
-      ? 'Los cambios de comidas, notas, días y datos no se están guardando: falta pegar las reglas '
-        + 'nuevas (firestore.rules) en Firebase. Los pagos, deudas, altas, pausas y mensajes sí se ven.'
-      : `No se pudieron leer los cambios guardados (${code(logged) || 'sin conexión'}). Prueba «Volver a leer».`,
+      ? t('Los cambios de comidas, notas, días y datos no se están guardando: falta pegar las reglas nuevas (firestore.rules) en Firebase. Los pagos, deudas, altas, pausas y mensajes sí se ven.')
+      : t('No se pudieron leer los cambios guardados ({code}). Prueba «Volver a leer».', { code: code(logged) || t('sin conexión') }),
     'warn', 'alert'));
   }
   if (messages) {
     const link = code(messages) === 'failed-precondition' ? linkOf(messages) : '';
     out.push(h('div.stack.stack-2',
       alert(code(messages) === 'failed-precondition'
-        ? 'Para ver aquí los mensajes, Firebase necesita un índice. Créalo una sola vez con el botón; '
-          + 'tarda unos minutos en quedar listo. Lo demás ya se ve.'
+        ? t('Para ver aquí los mensajes, Firebase necesita un índice. Créalo una sola vez con el botón; tarda unos minutos en quedar listo. Lo demás ya se ve.')
         : code(messages) === 'permission-denied'
-          ? 'Para ver aquí los mensajes falta pegar las reglas nuevas (firestore.rules) en Firebase.'
-          : `No se pudieron leer los mensajes (${code(messages) || 'sin conexión'}).`,
+          ? t('Para ver aquí los mensajes falta pegar las reglas nuevas (firestore.rules) en Firebase.')
+          : t('No se pudieron leer los mensajes ({code}).', { code: code(messages) || t('sin conexión') }),
       'info', 'info'),
       link
         ? h('a.btn.btn--secondary.btn--block', { href: link, target: '_blank', rel: 'noopener' },
-            icon('shield'), 'Crear el índice de mensajes en Firebase')
+            icon('shield'), t('Crear el índice de mensajes en Firebase'))
         : null));
   }
   return out.length ? h('div.stack.stack-2', out) : null;
@@ -924,14 +939,14 @@ function drawMovements(view) {
   const all = view.moves();
 
   screen({
-    title: 'Movimientos',
+    title: t('Movimientos'),
     subtitle: rangeTitle(view.range),
     backTo: urlFor(view.range),
     tab: 'reports',
     sunken: true,
     actions: [
-      topbarButton('refresh', { label: 'Volver a leer', onClick: view.reload }),
-      ...(all?.length ? [topbarButton('printer', { label: 'Imprimir', onClick: () => printMoves(view) })] : []),
+      topbarButton('refresh', { label: t('Volver a leer'), onClick: view.reload }),
+      ...(all?.length ? [topbarButton('printer', { label: t('Imprimir'), onClick: () => printMoves(view) })] : []),
     ],
     body: h('div.page__inner.rbig.stack.stack-5',
       picker(view.range, 'movimientos', () => ({ k: view.state.kind })),
@@ -964,32 +979,37 @@ function movesBody(view) {
     movesTrouble(view),
 
     h('div.stack.stack-3',
-      h('h2.rhead', '¿Qué tipo de movimiento?'),
+      h('h2.rhead', t('¿Qué tipo de movimiento?')),
       h('div.rkinds',
-        chip('Todo', all.length, !state.kind, () => change({ kind: '' })),
-        KINDS.map((one) => chip(one.label, counts[one.key] || 0, state.kind === one.key,
+        chip(t('Todo'), all.length, !state.kind, () => change({ kind: '' })),
+        KINDS.map((one) => chip(t(one.label), counts[one.key] || 0, state.kind === one.key,
           () => change({ kind: one.key }))))),
 
     searchInput({
-      placeholder: 'Buscar por cliente, palabra o quién lo hizo…',
+      placeholder: t('Buscar por cliente, palabra o quién lo hizo…'),
       value: state.term,
       onInput: (value) => change({ term: value }),
     }),
 
     h('p.rcount', state.kind || state.term
-      ? `${plural(shown.length, 'movimiento', 'movimientos')}${kind ? ` de ${kind.label.toLowerCase()}` : ''}`
-        + `${state.term ? ` con «${state.term}»` : ''} · de ${number(all.length)}`
+      ? countLine({
+        entries: plural(shown.length, 'movimiento', 'movimientos'),
+        kind: kind ? t(kind.label).toLowerCase() : '',
+        term: state.term,
+        total: number(all.length),
+      })
       : plural(all.length, 'movimiento', 'movimientos')),
 
     shown.length
       ? h('div.stack.stack-5', daysOf(shown.slice(0, state.shown), perDay))
       : emptyState(all.length
-        ? { icon: 'search', title: 'Nada con este filtro', text: 'Prueba con «Todo» o borra la búsqueda.' }
-        : { icon: 'clock', title: 'No hubo movimientos', text: 'Prueba con otro periodo arriba.' }),
+        ? { icon: 'search', title: t('Nada con este filtro'), text: t('Prueba con «Todo» o borra la búsqueda.') }
+        : { icon: 'clock', title: t('No hubo movimientos'), text: t('Prueba con otro periodo arriba.') }),
 
     shown.length > state.shown
-      ? button(`Ver ${number(Math.min(MOVES_PAGE, shown.length - state.shown))} más `
-        + `(faltan ${number(shown.length - state.shown)})`, {
+      ? button(t('Ver {count} más (faltan {left})', {
+        count: number(Math.min(MOVES_PAGE, shown.length - state.shown)), left: number(shown.length - state.shown),
+      }), {
         variant: 'secondary', size: 'lg', block: true,
         onClick: () => { state.shown += MOVES_PAGE; refreshMoves(view); },
       })
@@ -997,18 +1017,27 @@ function movesBody(view) {
 
     shown.length
       ? h('div.stack.stack-2',
-          button('Imprimir esta lista', {
+          button(t('Imprimir esta lista'), {
             variant: 'primary', size: 'lg', block: true, icon: 'printer', onClick: () => printMoves(view),
           }),
           h('p.rfoot', state.kind || state.term
-            ? 'Se imprime sólo lo que se ve con este filtro.'
-            : 'Sale en hoja tamaño carta, con todos los movimientos del periodo.'))
+            ? t('Se imprime sólo lo que se ve con este filtro.')
+            : t('Sale en hoja tamaño carta, con todos los movimientos del periodo.')))
       : null,
 
-    button('Regresar al reporte', {
+    button(t('Regresar al reporte'), {
       variant: 'ghost', size: 'lg', block: true, icon: 'chevronL', onClick: () => go(urlFor(range)),
     }),
   ];
+}
+
+/**
+ * "12 movimientos de notas con «Juan» · de 300" — what the filter left, of how many.
+ */
+function countLine({ entries, kind, term, total }) {
+  if (kind && term) return t('{entries} de {kind} con «{term}» · de {total}', { entries, kind, term, total });
+  if (kind) return t('{entries} de {kind} · de {total}', { entries, kind, total });
+  return t('{entries} con «{term}» · de {total}', { entries, term, total });
 }
 
 const countBy = (rows, key) => rows.reduce((acc, row) => acc.set(key(row), (acc.get(key(row)) || 0) + 1), new Map());
@@ -1024,10 +1053,11 @@ function daysOf(rows, perDay) {
   return groups.map((group) => {
     const word = dayHeading(group.day);
     // The year only when it is not this one.
-    const long = capitalize(formatDayLong(group.day)).replace(` de ${today().slice(0, 4)}`, '');
+    const long = capitalize(formatDayLong(group.day, { year: group.day.slice(0, 4) !== today().slice(0, 4) }));
+    const near = group.day === today() || group.day === addDays(today(), -1);
     return h('section.stack.stack-2',
       h('h3.rday',
-        h('span', word === 'Hoy' || word === 'Ayer' ? `${word} · ${long}` : long),
+        h('span', near ? `${word} · ${long}` : long),
         h('span.rday__n', plural(perDay.get(group.day) || group.rows.length, 'movimiento', 'movimientos'))),
       h('div.rmoves__list', group.rows.map((one) => moveRow(one))));
   });
@@ -1063,17 +1093,17 @@ function refreshMoves(view) {
 
 function printMoves(view) {
   const all = view.moves();
-  if (!all) { toastBad('Todavía se están leyendo los movimientos.'); return; }
+  if (!all) { toastBad(t('Todavía se están leyendo los movimientos.')); return; }
   const { kind, term } = view.state;
   const rows = filterMovements(all, { kinds: kind ? [kind] : [], term });
-  printSheet(listSheet({ range: view.range }, {
-    title: kind ? `Movimientos · ${kindOf(kind).label}` : 'Movimientos',
-    note: `${plural(rows.length, 'movimiento', 'movimientos')}, del más nuevo al más viejo.`,
-    columns: ['Día', 'Hora', 'Cliente', 'Qué pasó', 'Quién'],
+  printSheet(listSheet({ range: view.range, day: today() }, {
+    title: kind ? t('Movimientos · {kind}', { kind: t(kindOf(kind).label) }) : t('Movimientos'),
+    note: t('{entries}, del más nuevo al más viejo.', { entries: plural(rows.length, 'movimiento', 'movimientos') }),
+    columns: [t('Día'), t('Hora'), t('Cliente'), t('Qué pasó'), t('Quién')],
     text: [1, 2, 3, 4],
     rows: rows.map((one) => [
       formatDayShort(one.day), one.exact ? formatTime(one.ms) : '—',
-      one.clientName || one.farmName || '—', `${kindOf(one.kind).label}: ${one.text}`, one.by || '—',
+      one.clientName || one.farmName || '—', `${t(kindOf(one.kind).label)}: ${one.text}`, one.by || '—',
     ]),
     filter: term || '',
     business: store.business,

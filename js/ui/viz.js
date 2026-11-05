@@ -26,7 +26,8 @@
 
 import { h, mount } from '../lib/dom.js';
 import { money, number } from '../lib/format.js';
-import { weekdayName, formatDay } from '../lib/dates.js';
+import { weekdayName, formatDayLong } from '../lib/dates.js';
+import { t } from '../lib/i18n.js';
 
 /* --- Columns: what came in, day by day ------------------------------------ */
 
@@ -46,8 +47,8 @@ import { weekdayName, formatDay } from '../lib/dates.js';
 export function columnChart(rows, {
   today: todayKey, height = 168,
   tick = (row) => weekdayName(row.day).slice(0, 3),
-  label = (row) => `${weekdayName(row.day)} ${formatDay(row.day)}`,
-  axis = [`Hace ${rows.length} días`, 'Hoy'],
+  label = (row) => formatDayLong(row.day, { year: false }),
+  axis = [t('Hace {count} días', { count: rows.length }), t('Hoy')],
 } = {}) {
   const top = Math.max(...rows.map((r) => r.amount), 1);
   const best = rows.reduce((a, b) => (b.amount > a.amount ? b : a), rows[0]);
@@ -106,10 +107,10 @@ export function columnChart(rows, {
       h('div.viz__tip-k', label(row)),
       h('div.viz__tip-v', money(row.amount)),
       h('div.viz__tip-n', row.amount < 0
-        ? 'Se regresó más de lo que entró'
+        ? t('Se regresó más de lo que entró')
         : row.count
-          ? `${number(row.count)} ${row.count === 1 ? 'pago' : 'pagos'}`
-          : 'Sin pagos'));
+          ? `${number(row.count)} ${row.count === 1 ? t('pago') : t('pagos')}`
+          : t('Sin pagos')));
     tip.hidden = false;
     const box = node.getBoundingClientRect();
     const host = wrap.getBoundingClientRect();

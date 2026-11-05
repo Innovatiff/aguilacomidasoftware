@@ -25,7 +25,8 @@ import {
 } from './label.js';
 import { money } from '../lib/format.js';
 import { paymentMethodMeta } from '../lib/model.js';
-import { parseDay } from '../lib/dates.js';
+import { parseDay, monthName } from '../lib/dates.js';
+import { t, tx } from '../lib/i18n.js';
 import { toDate } from '../firebase.js';
 
 /* --- Building blocks -------------------------------------------------------- */
@@ -73,24 +74,24 @@ export function receiptSheet(receipt, {
     business.email ? mid(business.email) : null,
 
     rule(),
-    h('div.rcp__title', reversal ? 'CANCELACION DE PAGO' : 'RECIBO DE PAGO'),
-    copy ? mid('- COPIA -') : null,
+    h('div.rcp__title', reversal ? t('CANCELACION DE PAGO') : t('RECIBO DE PAGO')),
+    copy ? mid(t('- COPIA -')) : null,
     // Which of the two this is, boxed, directly under the title: the moment
     // that matters is the one where somebody tears off two identical-looking
     // slips and has to hand over the right one without reading either.
-    forWhom ? h('div.rcp__for', forWhom === 'store' ? 'PARA LA TIENDA' : 'PARA EL CLIENTE') : null,
+    forWhom ? h('div.rcp__for', forWhom === 'store' ? t('PARA LA TIENDA') : t('PARA EL CLIENTE')) : null,
     rule(),
 
     /* Which receipt this is, and who took it. */
-    line(`FOLIO: ${receipt.folio || receipt.id || ''}`),
-    line(`FECHA: ${stampDay(receipt.date)}${stamp ? `  ${clock(stamp)}` : ''}`),
-    receipt.takenByName ? line(`ATENDIO: ${receipt.takenByName}`) : null,
+    line(t('FOLIO: {folio}', { folio: receipt.folio || receipt.id || '' })),
+    line(t('FECHA: {date}', { date: `${stampDay(receipt.date)}${stamp ? `  ${clock(stamp)}` : ''}` })),
+    receipt.takenByName ? line(t('ATENDIO: {name}', { name: receipt.takenByName })) : null,
     receipt.reference ? line(`REF: ${receipt.reference}`) : null,
 
     rule(),
 
     /* Who paid. */
-    line('CLIENTE'),
+    line(t('CLIENTE')),
     h('div.rcp__who', receipt.clientName || '—'),
     [receipt.farmName, receipt.locationName].filter(Boolean).length
       ? line([receipt.farmName, receipt.locationName].filter(Boolean).join(' - '))
@@ -99,27 +100,27 @@ export function receiptSheet(receipt, {
     rule(),
 
     /* The money itself. */
-    pair('FORMA', method.toUpperCase()),
-    pair(reversal ? 'SE REGRESA' : 'TOTAL', money(amount), '.rcp__pair--total'),
+    pair(t('FORMA'), method.toUpperCase()),
+    pair(reversal ? t('SE REGRESA') : t('TOTAL'), money(amount), '.rcp__pair--total'),
 
     rule(),
 
     /* Where that leaves them. */
     reversal
       ? line(receipt.reversalOfFolio
-        ? `CANCELA EL RECIBO ${receipt.reversalOfFolio}`
-        : 'CANCELACION DE UN PAGO')
+        ? t('CANCELA EL RECIBO {folio}', { folio: receipt.reversalOfFolio })
+        : t('CANCELACION DE UN PAGO'))
       // Kept whole when it could not be spread over their bills: the money is
       // in, and what they owe is worked out afterwards — so it says neither
       // "al corriente" nor a balance it does not know.
       : receipt.held
-        ? h('div.rcp__ok', 'PAGO RECIBIDO')
+        ? h('div.rcp__ok', t('PAGO RECIBIDO'))
         : (Number(receipt.balanceAfter) || 0) > 0.005
-          ? pair('QUEDA DEBIENDO', money(receipt.balanceAfter), '.rcp__pair--total')
-          : h('div.rcp__ok', 'QUEDA AL CORRIENTE'),
+          ? pair(t('QUEDA DEBIENDO'), money(receipt.balanceAfter), '.rcp__pair--total')
+          : h('div.rcp__ok', t('QUEDA AL CORRIENTE')),
 
     rule(),
-    mid(business.footer || 'GRACIAS'),
+    mid(business.footer ? tx(business.footer) : t('GRACIAS')),
     mid(business.name),
     h('div.rcp__tail', ' '));
 }
@@ -132,12 +133,9 @@ export function receiptSheet(receipt, {
  * somebody may bring back three weeks later to argue about, the month is
  * spelled.
  */
-const MONTHS = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN',
-  'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
-
 function stampDay(key) {
   const d = parseDay(key);
-  return `${String(d.getDate()).padStart(2, '0')} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+  return `${String(d.getDate()).padStart(2, '0')} ${(monthName(key) || '').slice(0, 3).toUpperCase()} ${d.getFullYear()}`;
 }
 
 /** 24-hour clock, the way the store's own receipts print it. */

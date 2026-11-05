@@ -16,6 +16,7 @@ import {
   onAuthStateChanged, signInWithEmailAndPassword, signOut,
   sendPasswordResetEmail, docData,
 } from '../firebase.js';
+import { t } from '../lib/i18n.js';
 
 const state = { user: null, staff: null, profile: null, ready: false };
 const listeners = new Set();
@@ -117,7 +118,7 @@ export const resetPassword = (email) => sendPasswordResetEmail(auth, email.trim(
 
 /** Saves this person's own name and phone. Grants nothing. */
 export async function updateOwnProfile(patch) {
-  if (!state.user) throw new Error('Sin sesión');
+  if (!state.user) throw new Error(t('Sin sesión'));
   await setDoc(doc(db, 'users', state.user.uid), {
     ...patch,
     email: state.user.email || '',

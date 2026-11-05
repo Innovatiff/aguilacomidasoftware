@@ -26,11 +26,13 @@ import {
 } from '../data/farms.js';
 import { farmById, clientsOfFarm, whenReady, isReady } from '../data/store.js';
 import {
-  periodFor, PAY_EVERY, servingDays, payDayOnOrAfter, payDaysInWords, periodWord,
+  periodFor, PAY_EVERY, servingDays, payDayOnOrAfter, periodWord,
 } from '../lib/billing.js';
+import { payDaysWords } from '../lib/billing-words.js';
 import { WEEKDAYS_SHORT, today, formatRange } from '../lib/dates.js';
 import { plural } from '../lib/format.js';
 import { errorText } from '../firebase.js';
+import { t } from '../lib/i18n.js';
 
 /** What this form edits. Everything else on a farm is somebody else's. */
 const EDITABLE = [
@@ -43,7 +45,7 @@ export async function renderFarmForm(context) {
   const isNew = !farmId || farmId === 'new';
 
   if (!isReady()) {
-    screen({ title: 'Rancho', backTo: '/farms', tab: 'farms', body: loading() });
+    screen({ title: t('Rancho'), backTo: '/farms', tab: 'farms', body: loading() });
     await whenReady();
   }
   let model = isNew ? emptyFarm() : farmById(farmId) || await getFarm(farmId);
@@ -52,8 +54,8 @@ export async function renderFarmForm(context) {
 
   if (!model) {
     screen({
-      title: 'Rancho', backTo: '/farms', tab: 'farms',
-      body: h('div.page__inner', alert('Este rancho ya no existe.', 'bad')),
+      title: t('Rancho'), backTo: '/farms', tab: 'farms',
+      body: h('div.page__inner', alert(t('Este rancho ya no existe.'), 'bad')),
     });
     return;
   }
@@ -69,7 +71,7 @@ export async function renderFarmForm(context) {
   let errors = {};
 
   const draw = () => screen({
-    title: isNew ? 'Nuevo rancho' : 'Editar rancho',
+    title: isNew ? t('Nuevo rancho') : t('Editar rancho'),
     subtitle: isNew ? null : model.name,
     backTo: isNew ? '/farms' : `/farms/${farmId}`,
     tab: 'farms',
@@ -86,23 +88,23 @@ export async function renderFarmForm(context) {
 
   function validate() {
     errors = {};
-    if (!model.name?.trim()) errors.name = 'Escribe el nombre del rancho.';
-    if (!model.deliveryDays?.length) errors.deliveryDays = 'Elige al menos un día.';
+    if (!model.name?.trim()) errors.name = t('Escribe el nombre del rancho.');
+    if (!model.deliveryDays?.length) errors.deliveryDays = t('Elige al menos un día.');
     return Object.keys(errors).length === 0;
   }
 
   async function save(event) {
     event.preventDefault();
-    if (!validate()) { draw(); toastBad('Revisa los campos marcados.'); return; }
+    if (!validate()) { draw(); toastBad(t('Revisa los campos marcados.')); return; }
 
     // Changing terms rewrites every worker's copy. Say how many before doing it.
     if (!isNew && termsChanged() && clientsOfFarm(farmId).length) {
       const roster = clientsOfFarm(farmId).length;
       const ok = await confirm({
-        title: 'Aplicar a todo el rancho',
-        message: `Las nuevas condiciones se copiarán a ${plural(roster, 'cliente', 'clientes')} de ${model.name}. `
-          + 'Las facturas ya emitidas no cambian.',
-        confirmLabel: 'Guardar y aplicar',
+        title: t('Aplicar a todo el rancho'),
+        message: t('Las nuevas condiciones se copiarán a {clients} de {farm}. Las facturas ya emitidas no cambian.',
+          { clients: plural(roster, 'cliente', 'clientes'), farm: model.name }),
+        confirmLabel: t('Guardar y aplicar'),
         icon: 'users',
       });
       if (!ok) return;
@@ -113,7 +115,7 @@ export async function renderFarmForm(context) {
     try {
       if (isNew) {
         const { id } = await createFarm(model, { uid: session.uid, name: session.displayName });
-        toastOk('Rancho registrado');
+        toastOk(t('Rancho registrado'));
         go(`/farms/${id}`, { replace: true });
       } else {
         // Only what was changed here. The whole form would carry the farm's
@@ -124,7 +126,7 @@ export async function renderFarmForm(context) {
           .filter((key) => JSON.stringify(model[key]) !== JSON.stringify(opened[key]))
           .map((key) => [key, model[key]]));
         if (Object.keys(patch).length) await updateFarm(farmId, patch, previous);
-        toastOk('Cambios guardados');
+        toastOk(t('Cambios guardados'));
         go(`/farms/${farmId}`, { replace: true });
       }
     } catch (error) {
@@ -141,10 +143,10 @@ export async function renderFarmForm(context) {
   function form() {
     return h('form.page__inner.page__inner--narrow.stack.stack-4', { onsubmit: save, novalidate: true },
 
-      sectionLabel('El rancho'),
+      sectionLabel(t('El rancho')),
       card(h('div.stack.stack-4',
         field({
-          label: 'Nombre del rancho',
+          label: t('Nombre del rancho'),
           error: errors.name,
           control: input({
             value: model.name, required: true, placeholder: 'Mucci Farms',
@@ -152,41 +154,40 @@ export async function renderFarmForm(context) {
           }),
         }),
         field({
-          label: 'Persona de contacto',
-          hint: 'El encargado o supervisor con quien trata la cocina.',
+          label: t('Persona de contacto'),
+          hint: t('El encargado o supervisor con quien trata la cocina.'),
           control: input({
-            value: model.contactName, placeholder: 'Nombre del encargado',
+            value: model.contactName, placeholder: t('Nombre del encargado'),
             oninput: (e) => update({ contactName: e.target.value }),
           }),
         }),
         field({
-          label: 'Teléfono',
+          label: t('Teléfono'),
           control: input({
             value: model.phone, type: 'tel', inputmode: 'tel', placeholder: '(604) 555-0143',
             oninput: (e) => update({ phone: e.target.value }),
           }),
         }),
         field({
-          label: 'Dirección',
+          label: t('Dirección'),
           control: textarea({
-            value: model.address, rows: 2, placeholder: 'Camino y referencias para llegar',
+            value: model.address, rows: 2, placeholder: t('Camino y referencias para llegar'),
             oninput: (e) => update({ address: e.target.value }),
           }),
         }),
         field({
-          label: 'Notas para el chofer',
+          label: t('Notas para el chofer'),
           control: textarea({
-            value: model.notes, rows: 2, placeholder: 'Entrar por el portón azul, preguntar por…',
+            value: model.notes, rows: 2, placeholder: t('Entrar por el portón azul, preguntar por…'),
             oninput: (e) => update({ notes: e.target.value }),
           }),
         }))),
 
-      sectionLabel('Servicio para todos sus clientes'),
+      sectionLabel(t('Servicio para todos sus clientes')),
       card(h('div.stack.stack-4',
         field({
-          label: 'Comidas por persona',
-          hint: 'Valor inicial al registrar a alguien aquí. El precio del periodo sale de '
-            + 'ese número, según los planes en Ajustes.',
+          label: t('Comidas por persona'),
+          hint: t('Valor inicial al registrar a alguien aquí. El precio del periodo sale de ese número, según los planes en Ajustes.'),
           control: input({
             value: model.defaultMealsPerDay, type: 'number', inputmode: 'numeric', min: '1', step: '1',
             oninput: (e) => update({ defaultMealsPerDay: Number(e.target.value) }),
@@ -194,43 +195,38 @@ export async function renderFarmForm(context) {
         }),
 
         field({
-          label: 'Días de servicio',
+          label: t('Días de servicio'),
           error: errors.deliveryDays,
-          hint: 'Con qué días empieza alguien registrado aquí. Cada cliente puede tener los '
-            + 'suyos: hay quien come de lunes a viernes y quien lleva una comida extra el '
-            + 'sábado. Cambiar esto no toca a los que ya están.',
+          hint: t('Con qué días empieza alguien registrado aquí. Cada cliente puede tener los suyos: hay quien come de lunes a viernes y quien lleva una comida extra el sábado. Cambiar esto no toca a los que ya están.'),
           control: weekdayPicker(model.deliveryDays, (days) => update({ deliveryDays: days })),
         }),
 
         field({
-          label: 'Horario de entrega',
+          label: t('Horario de entrega'),
           control: input({
             value: model.deliveryWindow, placeholder: '11:00 – 13:00',
             oninput: (e) => update({ deliveryWindow: e.target.value }),
           }),
         }))),
 
-      sectionLabel('Cobro'),
+      sectionLabel(t('Cobro')),
       card(h('div.stack.stack-4',
         field({
-          label: 'Cada cuánto pagan, por defecto',
-          hint: 'Con qué periodo arranca alguien registrado aquí. Cada cliente puede tener el '
-            + 'suyo: en un mismo rancho hay quien paga cada semana y quien paga cada quincena. '
-            + 'Cambiar esto no toca a los que ya están.',
+          label: t('Cada cuánto pagan, por defecto'),
+          hint: t('Con qué periodo arranca alguien registrado aquí. Cada cliente puede tener el suyo: en un mismo rancho hay quien paga cada semana y quien paga cada quincena. Cambiar esto no toca a los que ya están.'),
           control: select({
             value: String(model.defaultPayEvery ?? PAY_EVERY.FORTNIGHT),
             options: [
-              { value: String(PAY_EVERY.FORTNIGHT), label: 'Cada quincena — 14 días' },
-              { value: String(PAY_EVERY.WEEK), label: 'Cada semana — 7 días' },
+              { value: String(PAY_EVERY.FORTNIGHT), label: t('Cada quincena — 14 días') },
+              { value: String(PAY_EVERY.WEEK), label: t('Cada semana — 7 días') },
             ],
             onchange: (e) => { update({ defaultPayEvery: Number(e.target.value) }); draw(); },
           }),
         }),
         field({
-          label: 'Inicio del ciclo para clientes nuevos',
-          hint: `Se cobra en ${payDaysInWords()}. Esto sólo decide desde qué día arranca `
-            + 'alguien registrado aquí a partir de ahora: el periodo de cada cliente es suyo y '
-            + 'se ajusta en su ficha, con su último pago.',
+          label: t('Inicio del ciclo para clientes nuevos'),
+          hint: t('Se cobra en {days}. Esto sólo decide desde qué día arranca alguien registrado aquí a partir de ahora: el periodo de cada cliente es suyo y se ajusta en su ficha, con su último pago.',
+            { days: payDaysWords() }),
           control: input({
             value: model.cycleAnchor, type: 'date',
             // Snapped: a cycle that does not start on a collection day would
@@ -244,22 +240,22 @@ export async function renderFarmForm(context) {
           }),
         }),
         field({
-          label: 'Días de gracia para pagar',
-          hint: 'Días después de cerrar el periodo antes de marcarlo como vencido.',
+          label: t('Días de gracia para pagar'),
+          hint: t('Días después de cerrar el periodo antes de marcarlo como vencido.'),
           control: select({
             value: String(model.graceDays),
-            options: [0, 1, 2, 3, 5, 7].map((n) => ({ value: String(n), label: n === 0 ? 'Mismo día' : `${n} días` })),
+            options: [0, 1, 2, 3, 5, 7].map((n) => ({ value: String(n), label: n === 0 ? t('Mismo día') : n === 1 ? t('1 días') : t('{n} días', { n }) })),
             onchange: (e) => update({ graceDays: Number(e.target.value) }),
           }),
         }),
         field({
-          label: 'Estado',
+          label: t('Estado'),
           control: select({
             value: model.status,
             options: [
-              { value: 'active', label: 'Activo — recibe comida' },
-              { value: 'paused', label: 'En pausa — sin entregas por ahora' },
-              { value: 'inactive', label: 'Inactivo — ya no es cliente' },
+              { value: 'active', label: t('Activo — recibe comida') },
+              { value: 'paused', label: t('En pausa — sin entregas por ahora') },
+              { value: 'inactive', label: t('Inactivo — ya no es cliente') },
             ],
             onchange: (e) => update({ status: e.target.value }),
           }),
@@ -268,8 +264,8 @@ export async function renderFarmForm(context) {
 
       h('div.stack.stack-2', { style: { marginTop: '8px' } },
         h('button.btn.btn--primary.btn--block.btn--lg', { type: 'submit' },
-          isNew ? 'Registrar rancho' : 'Guardar cambios'),
-        button('Cancelar', { variant: 'ghost', block: true, onClick: () => back('/farms') })),
+          isNew ? t('Registrar rancho') : t('Guardar cambios')),
+        button(t('Cancelar'), { variant: 'ghost', block: true, onClick: () => back('/farms') })),
 
       isNew ? null : dangerZone());
   }
@@ -283,12 +279,13 @@ export async function renderFarmForm(context) {
     const perDay = Number(model.defaultMealsPerDay) || 0;
 
     if (!days) {
-      return alert('Elige los días de servicio para ver cómo queda el periodo.', 'info');
+      return alert(t('Elige los días de servicio para ver cómo queda el periodo.'), 'info');
     }
     return alert(
-      `Periodo actual ${formatRange(period.start, period.end)}: ${days} días de servicio. `
-      + `Una persona con ${plural(perDay, 'comida', 'comidas')} al día recibe `
-      + `${days * perDay} comidas en la ${periodWord({ payEvery: every })}.`,
+      t('Periodo actual {range}: {days} días de servicio. Una persona con {meals} al día recibe {total} comidas en la {period}.', {
+        range: formatRange(period.start, period.end), days, meals: plural(perDay, 'comida', 'comidas'),
+        total: days * perDay, period: t(periodWord({ payEvery: every })),
+      }),
       'brand', 'receipt');
   }
 
@@ -296,44 +293,44 @@ export async function renderFarmForm(context) {
     const roster = clientsOfFarm(farmId).length;
 
     return h('div.stack.stack-3', { style: { marginTop: '8px' } },
-      sectionLabel('Zona delicada'),
+      sectionLabel(t('Zona delicada')),
       model.status === 'active'
-        ? button('Poner el rancho en pausa', {
+        ? button(t('Poner el rancho en pausa'), {
             variant: 'ghost', block: true, icon: 'pause',
             onClick: async () => {
               if (!await confirm({
-                title: 'Poner en pausa',
-                message: 'El rancho deja de aparecer al generar rutas. Sus clientes, facturas e historial se conservan.',
-                confirmLabel: 'Poner en pausa', icon: 'pause',
+                title: t('Poner en pausa'),
+                message: t('El rancho deja de aparecer al generar rutas. Sus clientes, facturas e historial se conservan.'),
+                confirmLabel: t('Poner en pausa'), icon: 'pause',
               })) return;
               await setFarmStatus(farmId, 'paused');
-              toastOk('Rancho en pausa');
+              toastOk(t('Rancho en pausa'));
               go(`/farms/${farmId}`);
             },
           })
-        : button('Reactivar rancho', {
+        : button(t('Reactivar rancho'), {
             variant: 'ok', block: true, icon: 'play',
             onClick: async () => {
               await setFarmStatus(farmId, 'active');
-              toastOk('Rancho reactivado');
+              toastOk(t('Rancho reactivado'));
               go(`/farms/${farmId}`);
             },
           }),
-      button('Eliminar rancho', {
+      button(t('Eliminar rancho'), {
         variant: 'danger-soft', block: true, icon: 'ban',
         onClick: async () => {
           if (roster) {
-            toastBad(`Primero mueve o elimina sus ${roster} clientes.`);
+            toastBad(t('Primero mueve o elimina sus {count} clientes.', { count: roster }));
             return;
           }
           if (!await confirm({
-            title: `Eliminar ${model.name}`,
-            message: 'Se borra el rancho y sus ubicaciones. Esta acción no se puede deshacer.',
-            confirmLabel: 'Eliminar definitivamente', tone: 'danger', icon: 'alert',
+            title: t('Eliminar {name}', { name: model.name }),
+            message: t('Se borra el rancho y sus ubicaciones. Esta acción no se puede deshacer.'),
+            confirmLabel: t('Eliminar definitivamente'), tone: 'danger', icon: 'alert',
           })) return;
           try {
             await deleteFarm(farmId);
-            toastOk('Rancho eliminado');
+            toastOk(t('Rancho eliminado'));
             go('/farms', { replace: true });
           } catch (error) {
             toastBad(errorText(error));

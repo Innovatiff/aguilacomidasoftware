@@ -4,6 +4,7 @@ import { h, mount } from '../lib/dom.js';
 import { errorText } from '../firebase.js';
 import { icon } from '../lib/icons.js';
 import { button } from './kit.js';
+import { t } from '../lib/i18n.js';
 
 /* --- Toasts --------------------------------------------------------------- */
 
@@ -68,12 +69,12 @@ export function sheet({ title, build, foot, dismissible = true, wide = false }) 
 
     // `wide` is for the rare sheet that is a workspace rather than a question —
     // putting forty locations in order wants the whole screen, not 560px of it.
-    const panel = h(`div.sheet${wide ? '.sheet--wide' : ''}`, { role: 'dialog', 'aria-modal': 'true', 'aria-label': title || 'Diálogo' },
+    const panel = h(`div.sheet${wide ? '.sheet--wide' : ''}`, { role: 'dialog', 'aria-modal': 'true', 'aria-label': title || t('Diálogo') },
       h('div.sheet__grip'),
       title ? h('div.sheet__head',
         h('h2.sheet__title', title),
         dismissible ? h('button.btn.btn--quiet.btn--icon',
-          { type: 'button', 'aria-label': 'Cerrar', onclick: () => close(undefined) }, icon('x')) : null,
+          { type: 'button', 'aria-label': t('Cerrar'), onclick: () => close(undefined) }, icon('x')) : null,
       ) : null,
       h('div.sheet__body', build(close)),
       foot ? h('div.sheet__foot', foot(close)) : null);
@@ -88,7 +89,7 @@ export function sheet({ title, build, foot, dismissible = true, wide = false }) 
 
     // Focus the first real control so keyboards and screen readers land inside.
     queueMicrotask(() => {
-      const first = panel.querySelector('input, textarea, select, button:not([aria-label="Cerrar"])');
+      const first = panel.querySelector(`input, textarea, select, button:not([aria-label="${t('Cerrar')}"])`);
       first?.focus({ preventScroll: true });
     });
   });
@@ -96,7 +97,7 @@ export function sheet({ title, build, foot, dismissible = true, wide = false }) 
 
 /** Yes/no confirmation. Resolves true only when the action is confirmed. */
 export function confirm({
-  title, message, confirmLabel = 'Confirmar', cancelLabel = 'Cancelar',
+  title, message, confirmLabel = t('Confirmar'), cancelLabel = t('Cancelar'),
   tone = 'primary', icon: ico,
 }) {
   return sheet({
@@ -114,7 +115,7 @@ export function confirm({
  * A sheet wrapping a form. `fields(close)` returns the controls; on submit the
  * sheet hands the collected FormData values to `onSubmit` and closes on success.
  */
-export function formSheet({ title, fields, submitLabel = 'Guardar', onSubmit }) {
+export function formSheet({ title, fields, submitLabel = t('Guardar'), onSubmit }) {
   return sheet({
     title,
     build: (close) => {
@@ -126,7 +127,7 @@ export function formSheet({ title, fields, submitLabel = 'Guardar', onSubmit }) 
           const values = Object.fromEntries(new FormData(form).entries());
           submit.disabled = true;
           const label = submit.textContent;
-          mount(submit, h('span.spinner.spinner--light'), 'Guardando…');
+          mount(submit, h('span.spinner.spinner--light'), t('Guardando…'));
           try {
             const result = await onSubmit(values);
             if (result !== false) close(result ?? values);

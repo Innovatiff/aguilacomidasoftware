@@ -30,6 +30,7 @@ import {
 } from '../lib/schedule.js';
 import { logMovement, logClientChanges } from './movements.js';
 import { addDays, today, formatDay } from '../lib/dates.js';
+import { t, inSpanish } from '../lib/i18n.js';
 import { createClient } from './clients.js';
 import { createFarm, addLocations, newLocationId } from './farms.js';
 import { addCharge, takePayment, adjustBalance } from './invoices.js';
@@ -70,11 +71,11 @@ export function watchScheduleHistory(onData, onError, count = 80) {
  * @param {object} input.value   what it sets
  */
 export async function scheduleSet({ kind, on, until = '', client = null, farm = null, value }, author) {
-  if (!KINDS[kind]) throw new Error('No se sabe qué programar.');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(on || ''))) throw new Error('Escoge el día.');
-  if (KINDS[kind].client && !client?.id) throw new Error('Escoge a la persona.');
+  if (!KINDS[kind]) throw new Error(t('No se sabe qué programar.'));
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(on || ''))) throw new Error(t('Escoge el día.'));
+  if (KINDS[kind].client && !client?.id) throw new Error(t('Escoge a la persona.'));
   const end = KINDS[kind].ends && until ? until : '';
-  if (end && end < on) throw new Error('El último día no puede ser antes del primero.');
+  if (end && end < on) throw new Error(t('El último día no puede ser antes del primero.'));
 
   const ref = doc(setsRef());
   await saved(setDoc(ref, {
@@ -93,7 +94,7 @@ export async function scheduleSet({ kind, on, until = '', client = null, farm = 
   }));
   logMovement({
     kind: 'programado',
-    text: `Programó: ${setWords({ kind, on, until: end, value, farmName: farm?.name, clientName: client?.name })}`,
+    text: inSpanish(() => `Programó: ${setWords({ kind, on, until: end, value, farmName: farm?.name, clientName: client?.name })}`),
     clientId: client?.id || '', clientName: client?.name || '', farmId: farm?.id || '', farmName: farm?.name || '',
     by: author?.name,
   });
@@ -134,7 +135,7 @@ export async function cancelSet(set, author) {
   }));
   if (set.on) {
     logMovement({
-      kind: 'programado', text: `Canceló lo programado: ${setWords(set)}`,
+      kind: 'programado', text: inSpanish(() => `Canceló lo programado: ${setWords(set)}`),
       clientId: set.clientId || '', clientName: set.clientName || '', by: author?.name,
     });
   }
@@ -169,7 +170,7 @@ const entry = (log) => ({
 /** What the Programador changed on a client, for Movimientos, once it is in. */
 const told = (said) => (outcome) => {
   if (said.patch) {
-    logClientChanges(said.clientId, said.patch, { before: said.client, by: 'Programador', prefix: said.prefix });
+    inSpanish(() => logClientChanges(said.clientId, said.patch, { before: said.client, by: 'Programador', prefix: said.prefix }));
   }
   return outcome;
 };
@@ -268,28 +269,31 @@ async function applyOperation(set, { clients, farms, pricing, by }) {
   const client = set.clientId ? clients.find((one) => one.id === set.clientId) : null;
   try {
     let text = '';
+    // Each operation's own checks run before its first wait, and what they
+    // say is kept on the set as its error: so they speak Spanish, as
+    // everything the Programador writes does.
     if (set.kind === 'farm') {
-      const made = await createFarm({
+      const made = await inSpanish(() => createFarm({
         name: v.name, locations: (v.locations || []).map((name) => ({ id: newLocationId(), name })),
-      }, author);
+      }, author));
       text = made?.id ? 'Farma dada de alta.' : '';
     } else if (set.kind === 'place') {
       const farm = farms.find((one) => one.id === set.farmId);
       if (!farm) throw new Error('Esa farma ya no existe.');
-      await addLocations(farm, v.names || []);
+      await inSpanish(() => addLocations(farm, v.names || []));
       text = `${(v.names || []).join(', ')} en ${farm.name}.`;
     } else {
       if (!client) throw new Error('Ese cliente ya no existe.');
       if (set.kind === 'charge') {
-        await addCharge({ client, amount: v.amount, reason: v.reason, date: set.on }, author);
+        await inSpanish(() => addCharge({ client, amount: v.amount, reason: v.reason, date: set.on }, author));
         text = 'Deuda agregada.';
       } else if (set.kind === 'payment') {
-        const receipt = await takePayment({
+        const receipt = await inSpanish(() => takePayment({
           client, pricing, amount: v.amount, method: v.method || 'cash', date: set.on, note: v.note || '',
-        }, author);
+        }, author));
         text = `Pago registrado${receipt?.folio ? `, recibo ${receipt.folio}` : ''}.`;
       } else if (set.kind === 'balance') {
-        await adjustBalance({ client, target: v.target, note: v.note }, author);
+        await inSpanish(() => adjustBalance({ client, target: v.target, note: v.note }, author));
         text = 'Saldo corregido.';
       }
     }

@@ -35,6 +35,7 @@ import { matchesFarm } from '../data/farms.js';
 import { mealsOn, extrasOf } from '../lib/pricing.js';
 import { money, plural } from '../lib/format.js';
 import { formatDayShort, WEEKDAYS_SHORT } from '../lib/dates.js';
+import { t } from '../lib/i18n.js';
 
 /**
  * Two words, and only two.
@@ -47,12 +48,12 @@ import { formatDayShort, WEEKDAYS_SHORT } from '../lib/dates.js';
  * page, which is one tap away and is where a correction can actually be made.
  */
 const STANDING = {
-  overdue: { label: 'ATRASADO', tone: 'bad' },
-  due: { label: 'ATRASADO', tone: 'bad' },
+  overdue: { label: t('ATRASADO'), tone: 'bad' },
+  due: { label: t('ATRASADO'), tone: 'bad' },
   // Money sitting on the fortnight still running is something for the panel to
   // put right, not something to argue about at the gate: they are not behind.
-  advance: { label: 'AL CORRIENTE', tone: 'ok' },
-  clear: { label: 'AL CORRIENTE', tone: 'ok' },
+  advance: { label: t('AL CORRIENTE'), tone: 'ok' },
+  clear: { label: t('AL CORRIENTE'), tone: 'ok' },
 };
 
 export function renderNotebook() {
@@ -62,13 +63,13 @@ export function renderNotebook() {
     const failure = firstError();
 
     screen({
-      title: 'Libreta',
+      title: t('Libreta'),
       subtitle: `${plural(active().length, 'cliente activo', 'clientes activos')}`,
       tab: 'notebook',
       sunken: true,
       sticky: h('div.searchbar',
         searchInput({
-          placeholder: 'Buscar cliente, rancho o ubicación…',
+          placeholder: t('Buscar cliente, rancho o ubicación…'),
           value: term,
           onInput: (value) => { term = value; redraw(); },
         })),
@@ -123,7 +124,7 @@ export function renderNotebook() {
         .filter((client) => !known.has(client.locationId))
         .filter((client) => farmMatches || matchesSearch(client, term));
       if (adrift.length) {
-        places.push({ place: { id: '', name: 'Sin ubicación' }, clients: adrift.sort(byName), orphan: true });
+        places.push({ place: { id: '', name: t('Sin ubicación') }, clients: adrift.sort(byName), orphan: true });
       }
 
       if (places.length) books.push({ farm, places });
@@ -153,7 +154,7 @@ export function renderNotebook() {
         h('span.book__pin', icon('pin')),
         h('h3.book__placename', place.name),
         h('span.book__placecount', plural(clients.length, 'cliente', 'clientes')),
-        orphan ? h('span.book__warn', 'Revisar') : null),
+        orphan ? h('span.book__warn', t('Revisar')) : null),
       h('div.book__people', clients.map(personCard)));
   }
 
@@ -188,7 +189,7 @@ export function renderNotebook() {
     // 3. What they have paid, and where that leaves them.
     h('div.person__money',
       h('div.person__pays',
-        h('span.person__payslabel', 'Pagos'),
+        h('span.person__payslabel', t('Pagos')),
         payments.length
           ? h('div.person__payslist',
               // One box per payment: the amount on top, the day under it. A
@@ -200,8 +201,8 @@ export function renderNotebook() {
           // may only mean "not lately". Saying "nunca ha pagado" from that
           // would be stating something this screen does not know.
           : h('span.person__none', tillIsWindowed()
-            ? 'Sin pagos recientes'
-            : 'Sin pagos registrados')),
+            ? t('Sin pagos recientes')
+            : t('Sin pagos registrados'))),
 
       h(`div.person__standing.is-${standing.tone}`,
         h('span.person__word', standing.label))),
@@ -212,7 +213,7 @@ export function renderNotebook() {
     //    after the name has been found.
     String(client.notes || '').trim()
       ? h('div.person__notes',
-          h('span.person__noteslabel', 'Notas'),
+          h('span.person__noteslabel', t('Notas')),
           h('p.person__notestext', client.notes.trim()))
       : null);
   }
@@ -225,8 +226,8 @@ export function renderNotebook() {
     return h('div.person__days',
       days.length
         ? days.map((weekday) => h('span.person__day', WEEKDAYS_SHORT[weekday]))
-        : h('span.person__none', 'Sin días'),
-      h('span.person__per', `${plural(client.mealsPerDay, 'comida', 'comidas')} al día`));
+        : h('span.person__none', t('Sin días')),
+      h('span.person__per', t('{meals} al día', { meals: plural(client.mealsPerDay, 'comida', 'comidas') })));
   }
 
   function extrasLine(client) {
@@ -235,21 +236,21 @@ export function renderNotebook() {
 
     return h('div.person__extras',
       extras.map((entry) => h('span.person__extra',
-        `+${entry.count} el ${WEEKDAYS_SHORT[entry.weekday]}`)));
+        t('+{count} el {day}', { count: entry.count, day: WEEKDAYS_SHORT[entry.weekday] }))));
   }
 
   function empty() {
     if (term) {
       return emptyState({
         icon: 'search',
-        title: 'Sin resultados',
-        text: `Nada coincide con “${term}”.`,
+        title: t('Sin resultados'),
+        text: t('Nada coincide con “{term}”.', { term }),
       });
     }
     return emptyState({
       icon: 'clipboard',
-      title: 'La libreta está vacía',
-      text: 'Aquí aparecen los clientes activos, ordenados por rancho y ubicación.',
+      title: t('La libreta está vacía'),
+      text: t('Aquí aparecen los clientes activos, ordenados por rancho y ubicación.'),
     });
   }
 

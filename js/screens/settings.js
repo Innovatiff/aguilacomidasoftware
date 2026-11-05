@@ -34,6 +34,8 @@ import { formatStamp, today, formatDayLong } from '../lib/dates.js';
 import { VERSION } from '../version.js';
 import { PAY_EVERY, payEveryOf } from '../lib/billing.js';
 import { errorText, toDate } from '../firebase.js';
+import { t } from '../lib/i18n.js';
+import { langSwitch } from '../ui/lang.js';
 
 export function renderSettings() {
   let team = [];
@@ -45,18 +47,19 @@ export function renderSettings() {
 
   function draw() {
     screen({
-      title: 'Ajustes',
+      title: t('Ajustes'),
       subtitle: session.displayName,
       tab: 'settings',
       sunken: true,
       body: h('div.page__inner.page__inner--flow.stack.stack-4',
+        languageCard(),
         pricesCard(),
         receiptCard(),
         profileCard(),
         teamCard(),
         numbersCard(),
         aboutCard(),
-        button('Cerrar sesión', { variant: 'danger-soft', block: true, icon: 'logout', onClick: leave })),
+        button(t('Cerrar sesión'), { variant: 'danger-soft', block: true, icon: 'logout', onClick: leave })),
     });
   }
 
@@ -74,37 +77,36 @@ export function renderSettings() {
     const missing = unpriced();
 
     return h('div.stack.stack-3',
-      sectionLabel('Precios por quincena', h('button.btn.btn--soft.btn--sm', {
+      sectionLabel(t('Precios por quincena'), h('button.btn.btn--soft.btn--sm', {
         type: 'button', onclick: editPrices,
-      }, 'Cambiar')),
+      }, t('Cambiar'))),
 
       list(store.pricing.tiers.map((tier) => itemRow({
         lead: h('span.item__ico', icon('utensils')),
-        title: `${plural(tier.mealsPerDay, 'comida', 'comidas')} al día`,
-        meta: `${countOn(tier.mealsPerDay)} con este plan`,
+        title: t('{meals} al día', { meals: plural(tier.mealsPerDay, 'comida', 'comidas') }),
+        meta: t('{clients} con este plan', { clients: countOn(tier.mealsPerDay) }),
         end: h('span.t-lg.w-700', money(tier.price)),
         chevron: false,
       })), { card: true }),
 
       card(defList([
-        defRow('Semana estándar', `${store.pricing.referenceDays} días de servicio`),
-        defRow('Comida extra o de menos', money(store.pricing.extraMealPrice)),
-        defRow('Pagan cada semana', `${weeklyCount()} de ${store.clients.length}`),
+        defRow(t('Semana estándar'), t('{days} días de servicio', { days: store.pricing.referenceDays })),
+        defRow(t('Comida extra o de menos'), money(store.pricing.extraMealPrice)),
+        defRow(t('Pagan cada semana'), t('{count} de {total}', { count: weeklyCount(), total: store.clients.length })),
       ])),
 
       h('p.t-xs.c-faint',
-        `El precio del plan cubre ${store.pricing.referenceDays} días de servicio. Quien come `
-        + 'menos días paga menos, y quien lleva comidas extra paga más, a ese precio por comida.'),
+        t('El precio del plan cubre {days} días de servicio. Quien come menos días paga menos, y quien lleva comidas extra paga más, a ese precio por comida.',
+          { days: store.pricing.referenceDays })),
 
       missing.length
-        ? alert(`${plural(missing.length, 'cliente', 'clientes')} sin plan: `
-          + `${[...new Set(missing.map((client) => client.mealsPerDay))].sort((a, b) => a - b)
-            .map((meals) => `${meals} al día`).join(', ')}. `
-          + 'Agrega ese precio o cámbiales las comidas por día; mientras tanto no se les puede cobrar.', 'warn')
+        ? alert(t('{clients} sin plan: {plans}. Agrega ese precio o cámbiales las comidas por día; mientras tanto no se les puede cobrar.', {
+          clients: plural(missing.length, 'cliente', 'clientes'),
+          plans: [...new Set(missing.map((client) => client.mealsPerDay))].sort((a, b) => a - b)
+            .map((meals) => t('{meals} al día', { meals })).join(', '),
+        }), 'warn')
         : h('p.t-xs.c-faint',
-            'Es lo que cuesta una quincena completa. Quien paga cada semana paga la mitad, dos '
-            + 'veces: es la misma comida al mismo precio por plato. Las facturas ya emitidas '
-            + 'conservan el precio con el que se emitieron.'));
+            t('Es lo que cuesta una quincena completa. Quien paga cada semana paga la mitad, dos veces: es la misma comida al mismo precio por plato. Las facturas ya emitidas conservan el precio con el que se emitieron.')));
   }
 
   /**
@@ -139,22 +141,21 @@ export function renderSettings() {
     const info = store.business || DEFAULT_BUSINESS;
 
     return h('div.stack.stack-3',
-      sectionLabel('Recibo impreso', h('button.btn.btn--soft.btn--sm', {
+      sectionLabel(t('Recibo impreso'), h('button.btn.btn--soft.btn--sm', {
         type: 'button', onclick: editReceipt,
-      }, icon('edit'), 'Editar')),
+      }, icon('edit'), t('Editar'))),
       card(h('div.stack.stack-3',
         defList([
-          defRow('Negocio', info.name),
-          info.address ? defRow('Dirección', info.address) : null,
-          info.city ? defRow('Ciudad', info.city) : null,
-          info.phone ? defRow('Teléfono', info.phone) : null,
-          info.email ? defRow('Correo', info.email) : null,
-          defRow('Pie', info.footer),
+          defRow(t('Negocio'), info.name),
+          info.address ? defRow(t('Dirección'), info.address) : null,
+          info.city ? defRow(t('Ciudad'), info.city) : null,
+          info.phone ? defRow(t('Teléfono'), info.phone) : null,
+          info.email ? defRow(t('Correo'), info.email) : null,
+          defRow(t('Pie'), info.footer),
         ].filter(Boolean)),
         h('p.t-xs.c-faint',
-          'Es lo que se imprime arriba de cada recibo, en la impresora del mostrador '
-          + '(papel de 3 pulgadas).'),
-        button('Imprimir una prueba', {
+          t('Es lo que se imprime arriba de cada recibo, en la impresora del mostrador (papel de 3 pulgadas).')),
+        button(t('Imprimir una prueba'), {
           variant: 'ghost', block: true, size: 'sm', icon: 'receipt', onClick: testPrint,
         }))));
   }
@@ -164,38 +165,37 @@ export function renderSettings() {
     const set = (key) => (event) => { draft[key] = event.target.value; };
 
     sheet({
-      title: 'Recibo impreso',
+      title: t('Recibo impreso'),
       build: (close) => h('form.stack.stack-4', {
         onsubmit: async (event) => {
           event.preventDefault();
           try {
             await saveBusiness(draft, { name: session.displayName });
-            toastOk('Recibo actualizado');
+            toastOk(t('Recibo actualizado'));
             close(true);
           } catch (error) { toastBad(errorText(error)); }
         },
       },
-      field({ label: 'Nombre del negocio', control: input({ value: draft.name, oninput: set('name') }) }),
-      field({ label: 'Dirección', control: input({ value: draft.address, oninput: set('address') }) }),
-      field({ label: 'Ciudad, provincia y código', control: input({ value: draft.city, oninput: set('city') }) }),
-      field({ label: 'Teléfono', control: input({ value: draft.phone, oninput: set('phone') }) }),
+      field({ label: t('Nombre del negocio'), control: input({ value: draft.name, oninput: set('name') }) }),
+      field({ label: t('Dirección'), control: input({ value: draft.address, oninput: set('address') }) }),
+      field({ label: t('Ciudad, provincia y código'), control: input({ value: draft.city, oninput: set('city') }) }),
+      field({ label: t('Teléfono'), control: input({ value: draft.phone, oninput: set('phone') }) }),
       field({
-        label: 'Correo',
-        hint: 'Déjalo vacío si no quieres que salga en el recibo.',
+        label: t('Correo'),
+        hint: t('Déjalo vacío si no quieres que salga en el recibo.'),
         control: input({ value: draft.email, oninput: set('email') }),
       }),
       field({
-        label: 'Pie del recibo',
-        hint: 'La línea de despedida. Ej. GRACIAS POR SU PAGO.',
+        label: t('Pie del recibo'),
+        hint: t('La línea de despedida. Ej. GRACIAS POR SU PAGO.'),
         control: input({ value: draft.footer, oninput: set('footer') }),
       }),
       field({
-        label: 'Dirección de la app del cliente',
-        hint: 'A donde lleva el código QR de las etiquetas de empaque: la página '
-          + 'donde el trabajador instala su propia app.',
+        label: t('Dirección de la app del cliente'),
+        hint: t('A donde lleva el código QR de las etiquetas de empaque: la página donde el trabajador instala su propia app.'),
         control: input({ value: draft.appUrl, oninput: set('appUrl'), type: 'url' }),
       }),
-      h('button.btn.btn--primary.btn--block.btn--lg', { type: 'submit' }, 'Guardar')),
+      h('button.btn.btn--primary.btn--block.btn--lg', { type: 'submit' }, t('Guardar'))),
     });
   }
 
@@ -209,14 +209,14 @@ export function renderSettings() {
   function testPrint() {
     printReceipt({
       id: 'prueba',
-      folio: 'R-PRUEBA-0000',
-      clientName: 'PRUEBA DE IMPRESION',
-      farmName: 'Rancho de prueba',
-      locationName: 'Casa 1',
+      folio: t('R-PRUEBA-0000'),
+      clientName: t('PRUEBA DE IMPRESION'),
+      farmName: t('Rancho de prueba'),
+      locationName: t('Casa 1'),
       amount: 75,
       method: 'cash',
       date: today(),
-      applied: [{ title: 'Quincena de prueba', amount: 75, kind: 'period' }],
+      applied: [{ title: t('Quincena de prueba'), amount: 75, kind: 'period' }],
       balanceAfter: 0,
       takenByName: session.displayName || '',
       at: new Date(),
@@ -228,26 +228,24 @@ export function renderSettings() {
       h('div.row',
         avatar(session.displayName, { size: 'lg' }),
         h('div.grow',
-          h('div.t-lg.w-700', session.displayName || 'Sin nombre'),
+          h('div.t-lg.w-700', session.displayName || t('Sin nombre')),
           h('div.t-sm.c-soft', session.email || ''),
-          h('div', { style: { marginTop: '6px' } }, badge('Administrador', 'brand', 'shield')))),
-      button('Editar mi perfil', { variant: 'ghost', size: 'sm', block: true, icon: 'edit', onClick: editProfile })));
+          h('div', { style: { marginTop: '6px' } }, badge(t('Administrador'), 'brand', 'shield')))),
+      button(t('Editar mi perfil'), { variant: 'ghost', size: 'sm', block: true, icon: 'edit', onClick: editProfile })));
   }
 
   function teamCard() {
     return h('div.stack.stack-3',
-      sectionLabel(`Equipo · ${team.length}`, h('button.btn.btn--soft.btn--sm', {
+      sectionLabel(t('Equipo · {count}', { count: team.length }), h('button.btn.btn--soft.btn--sm', {
         type: 'button', onclick: addMember,
-      }, 'Agregar')),
+      }, t('Agregar'))),
 
       team.length
         ? list(team.map(memberRow), { card: true })
-        : emptyState({ icon: 'users', title: 'Sólo tú', text: 'Nadie más puede entrar al panel.' }),
+        : emptyState({ icon: 'users', title: t('Sólo tú'), text: t('Nadie más puede entrar al panel.') }),
 
       h('p.t-xs.c-faint',
-        'Quien esté en esta lista con «Panel completo» ve todos los ranchos, sus datos de '
-        + 'contacto, sus entregas y todos los pagos. Una cuenta «Solo cocina» abre únicamente '
-        + 'Empaque: es la que va en las computadoras de la cocina. Toca a alguien para cambiarlo.'));
+        t('Quien esté en esta lista con «Panel completo» ve todos los ranchos, sus datos de contacto, sus entregas y todos los pagos. Una cuenta «Solo cocina» abre únicamente Empaque: es la que va en las computadoras de la cocina. Toca a alguien para cambiarlo.')));
   }
 
   function memberRow(person) {
@@ -258,30 +256,29 @@ export function renderSettings() {
     return itemRow({
       lead: avatar(person.name || person.email),
       title: person.name || person.email,
-      meta: [cocina ? 'Solo cocina' : 'Panel completo', person.email,
-        seen ? `visto ${formatStamp(seen)}` : 'nunca ha entrado']
+      meta: [cocina ? t('Solo cocina') : t('Panel completo'), person.email,
+        seen ? t('visto {when}', { when: formatStamp(seen) }) : t('nunca ha entrado')]
         .filter(Boolean).join(' · '),
       // Not yourself: an account that turns itself into a kitchen one is
       // sent out of the panel on the spot, with nobody left to undo it.
       onClick: isMe ? undefined : () => changeAccess(person),
       end: isMe
-        ? badge('Tú', 'brand')
+        ? badge(t('Tú'), 'brand')
         : h('button.btn.btn--sm.btn--ghost', {
             type: 'button',
             onclick: async (event) => {
               event.stopPropagation();
               if (!await confirm({
-                title: `Quitar a ${person.name || person.email}`,
-                message: 'Dejará de poder entrar al panel de inmediato. Su cuenta de acceso '
-                  + 'sigue existiendo; puedes volver a agregar el correo cuando quieras.',
-                confirmLabel: 'Quitar del equipo', tone: 'danger', icon: 'ban',
+                title: t('Quitar a {name}', { name: person.name || person.email }),
+                message: t('Dejará de poder entrar al panel de inmediato. Su cuenta de acceso sigue existiendo; puedes volver a agregar el correo cuando quieras.'),
+                confirmLabel: t('Quitar del equipo'), tone: 'danger', icon: 'ban',
               })) return;
               try {
                 await removeStaff(person.email);
-                toastOk('Acceso retirado');
+                toastOk(t('Acceso retirado'));
               } catch (error) { toastBad(errorText(error)); }
             },
-          }, 'Quitar'),
+          }, t('Quitar')),
       chevron: false,
     });
   }
@@ -291,24 +288,38 @@ export function renderSettings() {
     const active = activeClients().length;
 
     return h('div.stack.stack-3',
-      sectionLabel('Resumen'),
+      sectionLabel(t('Resumen')),
       statGrid([
-        stat({ label: 'Clientes activos', value: number(active), foot: `en ${plural(store.farms.length, 'rancho', 'ranchos')}` }),
-        stat({ label: 'Por cobrar', value: money(cash.outstanding, { round: true }), foot: `${store.outstanding.length} facturas` }),
+        stat({ label: t('Clientes activos'), value: number(active), foot: t('en {farms}', { farms: plural(store.farms.length, 'rancho', 'ranchos') }) }),
+        stat({ label: t('Por cobrar'), value: money(cash.outstanding, { round: true }), foot: t('{count} facturas', { count: store.outstanding.length }) }),
       ]));
   }
 
   // A declaration, not a const: the listeners below fire `draw()` the moment
   // they are set up, which is before a `const` further down would exist.
+  /*
+   * The language of this computer. First on the page, so whoever cannot read
+   * the one it is in finds the way out without reading anything else.
+   */
+  function languageCard() {
+    return h('div.stack.stack-3',
+      sectionLabel(t('Idioma')),
+      h('div.card.row', { style: { justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' } },
+        h('div',
+          h('div.w-650', t('Idioma de esta computadora')),
+          h('p.t-sm.c-soft', { style: { margin: '2px 0 0' } },
+            t('La pantalla, los reportes, los recibos y las etiquetas salen en este idioma.'))),
+        langSwitch()));
+  }
+
   function aboutCard() {
     return h('div.stack.stack-3',
-      sectionLabel('Empaque'),
+      sectionLabel(t('Empaque')),
       list([
         itemRow({
           lead: h('span.c-faint', icon('box')),
-          title: 'Libretas y usuarios de empaque',
-          meta: 'Qué ubicaciones van en cada libreta, y quién entra a la cocina con qué PIN '
-            + 'y qué puede hacer',
+          title: t('Libretas y usuarios de empaque'),
+          meta: t('Qué ubicaciones van en cada libreta, y quién entra a la cocina con qué PIN y qué puede hacer'),
           onClick: () => go('/empaque/ajustes'),
         }),
         // Only while there is anybody left to copy. Once it is done it stops
@@ -316,21 +327,21 @@ export function renderSettings() {
         pendingPreferences().length
           ? itemRow({
             lead: h('span.c-faint', icon('utensils')),
-            title: 'Copiar restricciones a preferencias',
-            meta: `${plural(pendingPreferences().length, 'persona', 'personas')} sin lista `
-              + 'de preferencias. Se copia lo que ya tienen en «No puede comer».',
+            title: t('Copiar restricciones a preferencias'),
+            meta: t('{people} sin lista de preferencias. Se copia lo que ya tienen en «No puede comer».',
+              { people: plural(pendingPreferences().length, 'persona', 'personas') }),
             onClick: seedPreferences,
           })
           : null,
       ].filter(Boolean), { card: true }),
 
-      sectionLabel('Acerca de'),
+      sectionLabel(t('Acerca de')),
       card(defList([
-        defRow('Aplicación', 'El Águila Cocina · Administración'),
-        defRow('Versión', `${VERSION.n} · ${formatDayLong(VERSION.day)}`),
-        defRow('Qué trae', VERSION.what),
-        defRow('Moneda', 'CAD'),
-        defRow('Ciclo de cobro', 'Semanal o quincenal, por cliente'),
+        defRow(t('Aplicación'), t('El Águila Cocina · Administración')),
+        defRow(t('Versión'), `${VERSION.n} · ${formatDayLong(VERSION.day)}`),
+        defRow(t('Qué trae'), VERSION.what),
+        defRow(t('Moneda'), 'CAD'),
+        defRow(t('Ciclo de cobro'), t('Semanal o quincenal, por cliente')),
       ])));
   }
 
@@ -359,21 +370,18 @@ export function renderSettings() {
   async function seedPreferences() {
     const waiting = pendingPreferences();
     await sheet({
-      title: 'Copiar restricciones a preferencias',
+      title: t('Copiar restricciones a preferencias'),
       build: (close) => h('div.stack.stack-3',
         h('p.t-sm.c-soft',
-          `${plural(waiting.length, 'persona tiene', 'personas tienen')} su lista de `
-          + '«No puede comer» pero todavía no tienen preferencias. Esto copia una a la otra, '
-          + 'una sola vez, sin borrar nada.'),
-        alert('Después hay que revisarlas. Las preferencias se imprimen en la etiqueta '
-          + 'y las alergias no: lo que de verdad sea una alergia hay que quitarlo de '
-          + 'preferencias en la ficha de esa persona.', 'warn', 'alert'),
-        asyncButton(`Copiar a ${plural(waiting.length, 'persona', 'personas')}`, {
+          t('{people} su lista de «No puede comer» pero todavía no tienen preferencias. Esto copia una a la otra, una sola vez, sin borrar nada.',
+            { people: plural(waiting.length, 'persona tiene', 'personas tienen') })),
+        alert(t('Después hay que revisarlas. Las preferencias se imprimen en la etiqueta y las alergias no: lo que de verdad sea una alergia hay que quitarlo de preferencias en la ficha de esa persona.'), 'warn', 'alert'),
+        asyncButton(t('Copiar a {people}', { people: plural(waiting.length, 'persona', 'personas') }), {
           variant: 'primary', block: true, size: 'lg',
           onClick: async () => {
             try {
               const done = await copyTagsToPreferences(waiting);
-              toastOk(`Copiado a ${plural(done, 'persona', 'personas')}`);
+              toastOk(t('Copiado a {people}', { people: plural(done, 'persona', 'personas') }));
               close(true);
             } catch (error) { toastBad(errorText(error)); }
           },
@@ -390,7 +398,7 @@ export function renderSettings() {
    */
   async function editPrices() {
     const result = await sheet({
-      title: 'Precios por quincena',
+      title: t('Precios por quincena'),
       build: (close) => {
         const draft = store.pricing.tiers.map((tier) => ({ ...tier }));
         let draftDays = store.pricing.referenceDays;
@@ -406,15 +414,15 @@ export function renderSettings() {
             ? Math.round((first.price / (draftDays * first.mealsPerDay)) * 100) / 100
             : 0;
           mount(rate, suggested
-            ? `${money(first.price)} ÷ ${draftDays} días = ${money(suggested)} por comida.`
-            : 'Escribe el primer plan para ver el cálculo.');
+            ? t('{price} ÷ {days} días = {rate} por comida.', { price: money(first.price), days: draftDays, rate: money(suggested) })
+            : t('Escribe el primer plan para ver el cálculo.'));
         };
 
         const paint = () => mount(rows, draft.map((tier, index) => h('div.card.card--tight',
           h('div.row',
             h('div.grow',
               field({
-                label: 'Comidas al día',
+                label: t('Comidas al día'),
                 control: input({
                   value: tier.mealsPerDay, type: 'number', inputmode: 'numeric', min: '1', step: '1',
                   oninput: (event) => { draft[index].mealsPerDay = Number(event.target.value); },
@@ -422,57 +430,55 @@ export function renderSettings() {
               })),
             h('div.grow',
               field({
-                label: 'Precio por quincena',
+                label: t('Precio por quincena'),
                 control: moneyInput({
                   value: tier.price,
                   oninput: (event) => { draft[index].price = Number(event.target.value); },
                 }),
               })),
             h('button.btn.btn--ghost.btn--sm.btn--icon', {
-              type: 'button', 'aria-label': 'Quitar plan',
+              type: 'button', 'aria-label': t('Quitar plan'),
               style: { marginTop: '18px' },
               onclick: () => {
                 const onIt = store.clients.filter(
                   (client) => Number(client.mealsPerDay) === Number(draft[index].mealsPerDay)).length;
                 if (onIt) {
-                  toastBad(`${plural(onIt, 'cliente está', 'clientes están')} en ese plan.`);
+                  toastBad(t('{clients} en ese plan.', { clients: plural(onIt, 'cliente está', 'clientes están') }));
                   return;
                 }
                 draft.splice(index, 1);
                 paint();
               },
             }, icon('x'))),
-          h('div.t-xs.c-faint', countOn(tier.mealsPerDay) + ' en este plan'))));
+          h('div.t-xs.c-faint', t('{clients} en este plan', { clients: countOn(tier.mealsPerDay) })))));
         paint();
         paintRate();
 
         return h('div.stack.stack-4',
-          h('p.t-sm.c-soft', 'Lo que cuesta una quincena completa en cada plan. A quien paga '
-            + 'cada semana se le cobra la mitad, cada semana. Se aplica a las facturas que se '
-            + 'emitan de aquí en adelante.'),
+          h('p.t-sm.c-soft', t('Lo que cuesta una quincena completa en cada plan. A quien paga cada semana se le cobra la mitad, cada semana. Se aplica a las facturas que se emitan de aquí en adelante.')),
           rows,
 
           h('div.divider'),
 
           h('div.row', { style: { gap: '12px', alignItems: 'flex-start' } },
             h('div.grow', field({
-              label: 'Días de la semana estándar',
-              hint: 'Los días que cubre el precio del plan.',
+              label: t('Días de la semana estándar'),
+              hint: t('Los días que cubre el precio del plan.'),
               control: input({
                 value: draftDays, type: 'number', inputmode: 'numeric', min: '1', max: '14', step: '1',
                 oninput: (event) => { draftDays = Number(event.target.value); paintRate(); },
               }),
             })),
             h('div.grow', field({
-              label: 'Comida extra',
-              hint: 'Lo que suma o resta una comida.',
+              label: t('Comida extra'),
+              hint: t('Lo que suma o resta una comida.'),
               control: moneyInput({
                 value: draftRate,
                 oninput: (event) => { draftRate = Number(event.target.value); },
               }),
             }))),
           rate,
-          button('Agregar un plan', {
+          button(t('Agregar un plan'), {
             variant: 'ghost', block: true, icon: 'plus',
             onClick: () => {
               const next = Math.max(0, ...draft.map((tier) => Number(tier.mealsPerDay) || 0)) + 1;
@@ -480,7 +486,7 @@ export function renderSettings() {
               paint();
             },
           }),
-          button('Guardar precios', {
+          button(t('Guardar precios'), {
             variant: 'primary', block: true,
             onClick: () => close({ tiers: draft, referenceDays: draftDays, extraMealPrice: draftRate }),
           }));
@@ -498,42 +504,39 @@ export function renderSettings() {
   async function changeAccess(person) {
     const cocina = person.role === 'cocina';
     const role = await sheet({
-      title: `Acceso de ${person.name || person.email}`,
+      title: t('Acceso de {name}', { name: person.name || person.email }),
       build: (close) => h('div.stack.stack-3',
         h('p.t-sm.c-soft', cocina
-          ? 'Ahora solo abre Empaque.'
-          : 'Ahora tiene el panel completo.'),
-        button('Panel completo', {
+          ? t('Ahora solo abre Empaque.')
+          : t('Ahora tiene el panel completo.')),
+        button(t('Panel completo'), {
           variant: cocina ? 'primary' : 'soft', block: true, icon: 'home',
           onClick: () => close('panel'),
         }),
-        button('Solo cocina (Empaque)', {
+        button(t('Solo cocina (Empaque)'), {
           variant: cocina ? 'soft' : 'primary', block: true, icon: 'box',
           onClick: () => close('cocina'),
         }),
-        h('p.t-xs.c-faint', 'Solo cocina: al entrar con esta cuenta, el panel manda la computadora '
-          + 'a Empaque. No ve cobros, clientes ni el equipo.')),
+        h('p.t-xs.c-faint', t('Solo cocina: al entrar con esta cuenta, el panel manda la computadora a Empaque. No ve cobros, clientes ni el equipo.'))),
     });
     if (!role || role === (cocina ? 'cocina' : 'panel')) return;
     try {
       await setStaffRole(person.email, role);
-      toastOk(role === 'cocina' ? 'Ahora solo abre Empaque' : 'Ahora tiene el panel completo');
+      toastOk(role === 'cocina' ? t('Ahora solo abre Empaque') : t('Ahora tiene el panel completo'));
     } catch (error) { toastBad(errorText(error)); }
   }
 
   async function addMember() {
     const result = await sheet({
-      title: 'Agregar al equipo',
+      title: t('Agregar al equipo'),
       build: (close) => {
         let email = '';
         let name = '';
         let role = 'panel';
         const warning = h('div');
         const paintWarning = () => mount(warning, role === 'cocina'
-          ? alert('Solo abre Empaque: es la cuenta para las computadoras de la cocina. No verá '
-            + 'cobros, clientes ni el equipo.', 'info')
-          : alert('Tendrá acceso completo: todos los ranchos, sus datos de contacto, '
-            + 'sus entregas y todos los pagos.', 'warn'));
+          ? alert(t('Solo abre Empaque: es la cuenta para las computadoras de la cocina. No verá cobros, clientes ni el equipo.'), 'info')
+          : alert(t('Tendrá acceso completo: todos los ranchos, sus datos de contacto, sus entregas y todos los pagos.'), 'warn'));
         paintWarning();
         const choice = h('div.row.row--wrap', { style: { gap: '8px' } });
         const paintChoice = () => mount(choice,
@@ -541,28 +544,28 @@ export function renderSettings() {
             type: 'button',
             'aria-pressed': role === value ? 'true' : 'false',
             onclick: () => { role = value; paintChoice(); paintWarning(); },
-          }, value === 'cocina' ? 'Solo cocina (Empaque)' : 'Panel completo')));
+          }, value === 'cocina' ? t('Solo cocina (Empaque)') : t('Panel completo'))));
         paintChoice();
         return h('div.stack.stack-4',
-          fieldGroup({ label: 'Acceso', control: choice }),
+          fieldGroup({ label: t('Acceso'), control: choice }),
           warning,
           field({
-            label: 'Correo',
-            hint: 'Con ese correo entra al panel. No necesita nada más.',
+            label: t('Correo'),
+            hint: t('Con ese correo entra al panel. No necesita nada más.'),
             control: input({
-              type: 'email', inputmode: 'email', placeholder: 'persona@aguila.ca',
+              type: 'email', inputmode: 'email', placeholder: t('persona@aguila.ca'),
               autofocus: true,
               oninput: (event) => { email = event.target.value; },
             }),
           }),
           field({
-            label: 'Nombre',
+            label: t('Nombre'),
             control: input({
-              placeholder: 'Cómo aparecerá en el equipo',
+              placeholder: t('Cómo aparecerá en el equipo'),
               oninput: (event) => { name = event.target.value; },
             }),
           }),
-          button('Agregar', {
+          button(t('Agregar'), {
             variant: 'primary', block: true,
             onClick: () => close({ email: email.trim(), name: name.trim(), role }),
           }));
@@ -571,35 +574,35 @@ export function renderSettings() {
     if (!result?.email) return;
 
     if (!isValidEmail(result.email)) {
-      toastBad('Ese correo no tiene un formato válido.');
+      toastBad(t('Ese correo no tiene un formato válido.'));
       return;
     }
     if (team.some((person) => normalizeEmail(person.email) === normalizeEmail(result.email))) {
-      toastBad('Ese correo ya está en el equipo.');
+      toastBad(t('Ese correo ya está en el equipo.'));
       return;
     }
 
     try {
       await addStaff(result.email, result.name, { name: session.displayName }, result.role);
-      toastOk('Agregado al equipo');
+      toastOk(t('Agregado al equipo'));
     } catch (error) { toastBad(errorText(error)); }
   }
 
   async function editProfile() {
     const result = await sheet({
-      title: 'Mi perfil',
+      title: t('Mi perfil'),
       build: (close) => {
         let name = session.profile?.name || session.staff?.name || '';
         let phone = session.profile?.phone || '';
         return h('div.stack.stack-4',
-          field({ label: 'Nombre', control: input({ value: name, oninput: (e) => { name = e.target.value; } }) }),
-          field({ label: 'Teléfono', control: input({ value: phone, type: 'tel', oninput: (e) => { phone = e.target.value; } }) }),
+          field({ label: t('Nombre'), control: input({ value: name, oninput: (e) => { name = e.target.value; } }) }),
+          field({ label: t('Teléfono'), control: input({ value: phone, type: 'tel', oninput: (e) => { phone = e.target.value; } }) }),
           field({
-            label: 'Correo',
-            hint: 'Es tu correo de acceso y no se puede cambiar desde aquí.',
+            label: t('Correo'),
+            hint: t('Es tu correo de acceso y no se puede cambiar desde aquí.'),
             control: input({ value: session.email || '', disabled: true }),
           }),
-          button('Guardar', {
+          button(t('Guardar'), {
             variant: 'primary', block: true,
             onClick: () => close({ name: name.trim(), phone: phone.trim() }),
           }));
@@ -609,15 +612,15 @@ export function renderSettings() {
 
     try {
       await updateOwnProfile(result);
-      toastOk('Perfil actualizado');
+      toastOk(t('Perfil actualizado'));
     } catch (error) { toastBad(errorText(error)); }
   }
 
   async function leave() {
     if (!await confirm({
-      title: 'Cerrar sesión',
-      message: '¿Seguro que quieres salir del panel?',
-      confirmLabel: 'Cerrar sesión', tone: 'danger', icon: 'logout',
+      title: t('Cerrar sesión'),
+      message: t('¿Seguro que quieres salir del panel?'),
+      confirmLabel: t('Cerrar sesión'), tone: 'danger', icon: 'logout',
     })) return;
     await signOutNow();
   }

@@ -6,12 +6,14 @@
  * Firestore; the Spanish text is presentation only and safe to reword.
  */
 
+import { t } from './i18n.js';
+
 /* --- Client --------------------------------------------------------------- */
 
 export const CLIENT_STATUS = {
-  active: { label: 'Activo',    tone: 'ok',    icon: 'check' },
-  paused: { label: 'En pausa',  tone: 'warn',  icon: 'pause' },
-  inactive: { label: 'Inactivo', tone: 'muted', icon: 'ban' },
+  active: { get label() { return t('Activo'); },    tone: 'ok',    icon: 'check' },
+  paused: { get label() { return t('En pausa'); },  tone: 'warn',  icon: 'pause' },
+  inactive: { get label() { return t('Inactivo'); }, tone: 'muted', icon: 'ban' },
 };
 
 export const clientStatusMeta = (status) => CLIENT_STATUS[status] || CLIENT_STATUS.active;
@@ -25,12 +27,12 @@ export const clientStatusMeta = (status) => CLIENT_STATUS[status] || CLIENT_STAT
  * which one it was — so it gets its own entry rather than being folded in.
  */
 export const PAYMENT_METHODS = {
-  cash:     { label: 'Efectivo',       icon: 'cash' },
-  debit:    { label: 'Débito',         icon: 'card' },
-  transfer: { label: 'Transferencia',  icon: 'card' },
-  cheque:   { label: 'Cheque',         icon: 'note' },
-  card:     { label: 'Tarjeta',        icon: 'card' },
-  other:    { label: 'Otro',           icon: 'wallet' },
+  cash:     { get label() { return t('Efectivo'); },       icon: 'cash' },
+  debit:    { get label() { return t('Débito'); },         icon: 'card' },
+  transfer: { get label() { return t('Transferencia'); },  icon: 'card' },
+  cheque:   { get label() { return t('Cheque'); },         icon: 'note' },
+  card:     { get label() { return t('Tarjeta'); },        icon: 'card' },
+  other:    { get label() { return t('Otro'); },           icon: 'wallet' },
 };
 
 export const paymentMethodMeta = (method) => PAYMENT_METHODS[method] || PAYMENT_METHODS.other;

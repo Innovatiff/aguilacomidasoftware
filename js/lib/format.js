@@ -1,5 +1,7 @@
 /** Number, money and name formatting. Currency is CAD across both apps. */
 
+import { t } from './i18n.js';
+
 export const CURRENCY = 'CAD';
 
 const money0 = new Intl.NumberFormat('en-CA', {
@@ -25,10 +27,15 @@ export function moneyFull(amount) {
 
 export const number = (value) => plain.format(Number(value) || 0);
 
-/** "3 comidas" / "1 comida" */
+/**
+ * "3 comidas" / "1 comida" · "3 meals" / "1 meal".
+ *
+ * The words are handed in in Spanish and put into the screen's language here,
+ * so every caller gets English for free: `plural(n, 'comida', 'comidas')`.
+ */
 export function plural(count, one, many) {
   const n = Number(count) || 0;
-  return `${number(n)} ${n === 1 ? one : many}`;
+  return `${number(n)} ${t(n === 1 ? one : many)}`;
 }
 
 /** Up to two initials for the avatar. */

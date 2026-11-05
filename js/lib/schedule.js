@@ -26,8 +26,10 @@
  *           or cancelled, failed, remind (a reminder waiting to be seen)
  */
 
-import { addDays, today as todayKey } from './dates.js';
+import { addDays, today as todayKey, weekdayShort } from './dates.js';
 import { sameDiet } from './diet.js';
+import { plural } from './format.js';
+import { t } from './i18n.js';
 
 /**
  * Every kind of change, in the order the office is offered them.
@@ -38,19 +40,19 @@ import { sameDiet } from './diet.js';
  *           status, new things, money
  */
 export const KINDS = {
-  meals:    { label: 'Comidas al día', sub: '1, 2 o 3', icon: 'utensils', client: true, ends: true, group: 'plan' },
-  days:     { label: 'Días que come', sub: 'Calendario semanal', icon: 'calendar', client: true, ends: true, group: 'plan' },
-  location: { label: 'Cambio de ubicación', sub: 'Otra casa u otra farma', icon: 'pin', client: true, ends: true, group: 'plan' },
-  diet:     { label: 'No puede comer', sub: 'Agregar o quitar', icon: 'noEat', client: true, ends: true, group: 'plan' },
-  info:     { label: 'Teléfono o notas', sub: 'Sus datos', icon: 'edit', client: true, ends: true, group: 'plan' },
-  status:   { label: 'Pausar o reactivar', sub: 'O darlo de baja', icon: 'pause', client: true, ends: true, group: 'who' },
-  start:    { label: 'Cliente nuevo', sub: 'Que empieza otro día', icon: 'userPlus', client: false, ends: true, group: 'who' },
-  farm:     { label: 'Farma nueva', sub: 'Con sus ubicaciones', icon: 'farm', client: false, ends: false, group: 'new' },
-  place:    { label: 'Ubicación nueva', sub: 'En una farma', icon: 'pin', client: false, ends: false, group: 'new' },
-  charge:   { label: 'Agregar deuda', sub: 'Un cargo ese día', icon: 'plus', client: true, ends: false, group: 'money' },
-  payment:  { label: 'Registrar un pago', sub: 'Con su recibo', icon: 'cash', client: true, ends: false, group: 'money' },
-  balance:  { label: 'Corregir saldo', sub: 'Dejarlo en lo correcto', icon: 'edit', client: true, ends: false, group: 'money' },
-  reminder: { label: 'Recordatorio', sub: 'Un aviso ese día', icon: 'bell', client: true, ends: false, group: 'money' },
+  meals:    { label: t('Comidas al día'), sub: t('1, 2 o 3'), icon: 'utensils', client: true, ends: true, group: 'plan' },
+  days:     { label: t('Días que come'), sub: t('Calendario semanal'), icon: 'calendar', client: true, ends: true, group: 'plan' },
+  location: { label: t('Cambio de ubicación'), sub: t('Otra casa u otra farma'), icon: 'pin', client: true, ends: true, group: 'plan' },
+  diet:     { label: t('No puede comer'), sub: t('Agregar o quitar'), icon: 'noEat', client: true, ends: true, group: 'plan' },
+  info:     { label: t('Teléfono o notas'), sub: t('Sus datos'), icon: 'edit', client: true, ends: true, group: 'plan' },
+  status:   { label: t('Pausar o reactivar'), sub: t('O darlo de baja'), icon: 'pause', client: true, ends: true, group: 'who' },
+  start:    { label: t('Cliente nuevo'), sub: t('Que empieza otro día'), icon: 'userPlus', client: false, ends: true, group: 'who' },
+  farm:     { label: t('Farma nueva'), sub: t('Con sus ubicaciones'), icon: 'farm', client: false, ends: false, group: 'new' },
+  place:    { label: t('Ubicación nueva'), sub: t('En una farma'), icon: 'pin', client: false, ends: false, group: 'new' },
+  charge:   { label: t('Agregar deuda'), sub: t('Un cargo ese día'), icon: 'plus', client: true, ends: false, group: 'money' },
+  payment:  { label: t('Registrar un pago'), sub: t('Con su recibo'), icon: 'cash', client: true, ends: false, group: 'money' },
+  balance:  { label: t('Corregir saldo'), sub: t('Dejarlo en lo correcto'), icon: 'edit', client: true, ends: false, group: 'money' },
+  reminder: { label: t('Recordatorio'), sub: t('Un aviso ese día'), icon: 'bell', client: true, ends: false, group: 'money' },
 };
 
 /** Kinds whose change lives on the client document and goes back on "until". */
@@ -60,46 +62,60 @@ export const isClientChange = (kind) => ON_CLIENT.has(kind);
 const STATUS_WORD = { active: 'activo', paused: 'en pausa', inactive: 'dado de baja' };
 const sorted = (days) => [...new Set((days || []).map(Number))].sort((a, b) => a - b);
 const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
-const WEEK = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+// The short day names of dates.js, asked at each call (2023-01-01 was a Sunday).
+const WEEK = (d) => weekdayShort(addDays('2023-01-01', d));
 const daysWord = (days) => {
   const list = sorted(days);
-  if (list.join() === '1,2,3,4,5,6') return 'lunes a sábado';
-  if (list.join() === '0,1,2,3,4,5,6') return 'todos los días';
-  if (list.join() === '1,2,3,4,5') return 'lunes a viernes';
-  return [1, 2, 3, 4, 5, 6, 0].filter((d) => list.includes(d)).map((d) => WEEK[d]).join(', ') || 'ningún día';
+  if (list.join() === '1,2,3,4,5,6') return t('lunes a sábado');
+  if (list.join() === '0,1,2,3,4,5,6') return t('todos los días');
+  if (list.join() === '1,2,3,4,5') return t('lunes a viernes');
+  return [1, 2, 3, 4, 5, 6, 0].filter((d) => list.includes(d)).map((d) => WEEK(d)).join(', ') || t('ningún día');
 };
-const meals = (n) => `${n} ${Number(n) === 1 ? 'comida' : 'comidas'}`;
+const meals = (n) => plural(n, 'comida', 'comidas');
+const dollars = (n) => `$${Number(n || 0).toFixed(2)}`;
 
 /** What a set does, in words: "pasa a 2 comidas". */
 export function changeWords(set, farms = []) {
   const v = set.value || {};
   switch (set.kind) {
-    case 'meals': return `pasa a ${meals(v.mealsPerDay)} al día`;
-    case 'days': return `come ${daysWord(v.deliveryDays)}`;
+    case 'meals': return t('pasa a {meals} al día', { meals: meals(v.mealsPerDay) });
+    case 'days': return t('come {days}', { days: daysWord(v.deliveryDays) });
     case 'location': {
       const farm = farms.find((one) => one.id === v.farmId);
       const place = (farm?.locations || []).find((one) => one.id === v.locationId);
-      return `se cambia a ${[farm?.name || v.farmName, place?.name || v.locationName].filter(Boolean).join(' · ')}`;
+      return t('se cambia a {place}', {
+        place: [farm?.name || v.farmName, place?.name || v.locationName].filter(Boolean).join(' · '),
+      });
     }
     case 'diet': return [
-      (v.add || []).length ? `no puede comer: ${v.add.join(', ')}` : '',
-      (v.remove || []).length ? `ya puede comer: ${v.remove.join(', ')}` : '',
+      (v.add || []).length ? t('no puede comer: {list}', { list: v.add.join(', ') }) : '',
+      (v.remove || []).length ? t('ya puede comer: {list}', { list: v.remove.join(', ') }) : '',
     ].filter(Boolean).join(' · ');
     case 'info': return [
-      v.phone !== undefined ? `teléfono ${v.phone || '(sin teléfono)'}` : '',
-      v.notes !== undefined ? `notas: «${v.notes || 'ninguna'}»` : '',
+      v.phone !== undefined ? t('teléfono {phone}', { phone: v.phone || t('(sin teléfono)') }) : '',
+      v.notes !== undefined ? t('notas: «{notes}»', { notes: v.notes || t('ninguna') }) : '',
     ].filter(Boolean).join(' · ');
-    case 'status': return v.status === 'active' ? 'vuelve a estar activo'
-      : v.status === 'paused' ? 'se pone en pausa' : 'se da de baja';
-    case 'start': return 'empieza';
-    case 'farm': return `se da de alta la farma ${v.name}${(v.locations || []).length ? ` (${v.locations.join(', ')})` : ''}`;
-    case 'place': return `se agrega ${v.names?.length > 1 ? 'las ubicaciones' : 'la ubicación'} ${(v.names || []).join(', ')}`
-      + `${set.farmName ? ` a ${set.farmName}` : ''}`;
-    case 'charge': return `se le carga $${Number(v.amount || 0).toFixed(2)} — ${v.reason || ''}`;
-    case 'payment': return `se registra su pago de $${Number(v.amount || 0).toFixed(2)}`;
-    case 'balance': return `su saldo queda en $${Number(v.target || 0).toFixed(2)} — ${v.note || ''}`;
-    case 'reminder': return v.amount ? `recordatorio: paga $${Number(v.amount).toFixed(2)}${v.note ? ` — ${v.note}` : ''}`
-      : `recordatorio: ${v.note || ''}`;
+    case 'status': return v.status === 'active' ? t('vuelve a estar activo')
+      : v.status === 'paused' ? t('se pone en pausa') : t('se da de baja');
+    case 'start': return t('empieza');
+    case 'farm': return `${t('se da de alta la farma {name}', { name: v.name })}`
+      + `${(v.locations || []).length ? ` (${v.locations.join(', ')})` : ''}`;
+    case 'place': {
+      const words = { names: (v.names || []).join(', '), farm: set.farmName };
+      if (set.farmName) {
+        return v.names?.length > 1 ? t('se agrega las ubicaciones {names} a {farm}', words)
+          : t('se agrega la ubicación {names} a {farm}', words);
+      }
+      return v.names?.length > 1 ? t('se agrega las ubicaciones {names}', words)
+        : t('se agrega la ubicación {names}', words);
+    }
+    case 'charge': return t('se le carga {amount} — {reason}', { amount: dollars(v.amount), reason: v.reason || '' });
+    case 'payment': return t('se registra su pago de {amount}', { amount: dollars(v.amount) });
+    case 'balance': return t('su saldo queda en {amount} — {note}', { amount: dollars(v.target), note: v.note || '' });
+    case 'reminder':
+      if (!v.amount) return t('recordatorio: {note}', { note: v.note || '' });
+      return v.note ? t('recordatorio: paga {amount} — {note}', { amount: dollars(v.amount), note: v.note })
+        : t('recordatorio: paga {amount}', { amount: dollars(v.amount) });
     default: return '';
   }
 }

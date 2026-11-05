@@ -16,6 +16,7 @@ import {
   db, doc, collection, getDoc, setDoc, deleteDoc, onSnapshot,
   query, orderBy, serverTimestamp, listData,
 } from '../firebase.js';
+import { t } from '../lib/i18n.js';
 
 const staffRef = () => collection(db, 'staff');
 const bootstrapRef = () => doc(db, 'config', 'bootstrap');
@@ -46,7 +47,7 @@ export function watchStaff(onData, onError) {
  */
 export async function addStaff(email, name, author, role = 'panel') {
   const key = normalizeEmail(email);
-  if (!isValidEmail(key)) throw new Error('Ese correo no tiene un formato válido.');
+  if (!isValidEmail(key)) throw new Error(t('Ese correo no tiene un formato válido.'));
 
   await setDoc(doc(db, 'staff', key), {
     email: key,
@@ -101,7 +102,7 @@ export async function isClaimed() {
  */
 export async function claimFirstAdmin(user, name) {
   const key = normalizeEmail(user.email);
-  if (!key) throw new Error('Esta cuenta no tiene un correo asociado.');
+  if (!key) throw new Error(t('Esta cuenta no tiene un correo asociado.'));
 
   await setDoc(bootstrapRef(), {
     ownerUid: user.uid,

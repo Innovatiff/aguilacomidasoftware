@@ -20,6 +20,7 @@ import { matchesFarm } from '../data/farms.js';
 import { matchesSearch } from '../data/clients.js';
 import { clientStatusMeta } from '../lib/model.js';
 import { money, plural, number } from '../lib/format.js';
+import { t } from '../lib/i18n.js';
 
 export function renderFarms() {
   let term = '';
@@ -28,15 +29,15 @@ export function renderFarms() {
     const failure = firstError();
 
     screen({
-      title: 'Ranchos',
-      subtitle: `${store.farms.length} ${store.farms.length === 1 ? 'rancho' : 'ranchos'} · ${plural(store.clients.length, 'cliente', 'clientes')}`,
+      title: t('Ranchos'),
+      subtitle: `${store.farms.length} ${store.farms.length === 1 ? t('rancho') : t('ranchos')} · ${plural(store.clients.length, 'cliente', 'clientes')}`,
       tab: 'farms',
       actions: [topbarButton('users', {
-        label: 'Todos los clientes', onClick: () => go('/clients'),
+        label: t('Todos los clientes'), onClick: () => go('/clients'),
       })],
       sticky: h('div.searchbar',
         searchInput({
-          placeholder: 'Buscar rancho o cliente…',
+          placeholder: t('Buscar rancho o cliente…'),
           value: term,
           onInput: (value) => { term = value; redraw(); },
         })),
@@ -44,7 +45,7 @@ export function renderFarms() {
         ? h('div.page__inner', dataErrorCard(failure.error, { onRetry: () => startStore() }))
         : store.loaded.farms && store.loaded.clients ? results() : skeletonRows(5),
       fab: h('button.fab', { type: 'button', onclick: () => go('/farms/new') },
-        icon('plus'), 'Rancho'),
+        icon('plus'), t('Rancho')),
     });
   };
 
@@ -67,7 +68,7 @@ export function renderFarms() {
       farms.length ? list(farms.map(farmRow), { card: false }) : null,
       people.length
         ? h('div.stack.stack-2',
-            sectionLabel(`Clientes · ${people.length}`),
+            sectionLabel(t('Clientes · {count}', { count: people.length })),
             list(people.slice(0, 12).map(personRow), { card: true }))
         : null);
   }
@@ -76,15 +77,15 @@ export function renderFarms() {
     if (term) {
       return emptyState({
         icon: 'search',
-        title: 'Sin resultados',
-        text: `Nada coincide con “${term}”.`,
+        title: t('Sin resultados'),
+        text: t('Nada coincide con “{term}”.', { term }),
       });
     }
     return emptyState({
       icon: 'farm',
-      title: 'Todavía no hay ranchos',
-      text: 'Registra el rancho primero: sus ubicaciones y su gente se agregan dentro.',
-      action: button('Registrar rancho', { icon: 'plus', onClick: () => go('/farms/new') }),
+      title: t('Todavía no hay ranchos'),
+      text: t('Registra el rancho primero: sus ubicaciones y su gente se agregan dentro.'),
+      action: button(t('Registrar rancho'), { icon: 'plus', onClick: () => go('/farms/new') }),
     });
   }
 
@@ -103,13 +104,13 @@ function farmRow(farm) {
     title: farm.name,
     meta: [
       plural(stats.active, 'cliente', 'clientes'),
-      places ? plural(places, 'ubicación', 'ubicaciones') : 'sin ubicaciones',
+      places ? plural(places, 'ubicación', 'ubicaciones') : t('sin ubicaciones'),
     ].join(' · '),
     end: [
       stats.balance > 0 ? badge(money(stats.balance, { round: true }), 'warn') : null,
       paused ? badge(clientStatusMeta(farm.status).label, clientStatusMeta(farm.status).tone) : null,
-      !places ? badge('Falta ubicación', 'bad') : null,
-      stats.meals ? h('span.t-xs.c-soft', `${number(stats.meals)} comidas/día`) : null,
+      !places ? badge(t('Falta ubicación'), 'bad') : null,
+      stats.meals ? h('span.t-xs.c-soft', t('{meals} comidas/día', { meals: number(stats.meals) })) : null,
     ].filter(Boolean),
     onClick: () => go(`/farms/${farm.id}`),
   });

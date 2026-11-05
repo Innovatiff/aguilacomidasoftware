@@ -33,15 +33,17 @@ import { store, farmById, clientsOfFarm, whenReady, isReady } from '../data/stor
 import { openChargeSheet } from '../ui/charge-sheet.js';
 import { openOpeningSheet } from '../ui/opening-sheet.js';
 import {
-  periodOf, payDayAfter, isPayDay, payDayOnOrAfter, payDaysInWords,
+  periodOf, payDayAfter, isPayDay, payDayOnOrAfter,
   PAY_EVERY, payEveryOf, periodWord, cadenceWord,
 } from '../lib/billing.js';
+import { payDaysWords } from '../lib/billing-words.js';
 import { chargeFor, tierFor, periodCharge, mealsOn } from '../lib/pricing.js';
 import {
   today, addDays, formatRange, formatDayLong, formatDay, weekdayOf, WEEKDAYS, capitalize,
 } from '../lib/dates.js';
 import { money, plural } from '../lib/format.js';
 import { errorText } from '../firebase.js';
+import { t } from '../lib/i18n.js';
 
 export async function renderClientForm(context) {
   const clientId = context.params.id;
@@ -51,7 +53,7 @@ export async function renderClientForm(context) {
   // are: opened straight from a link, the form waits for them rather than
   // drawing a farm with no houses.
   if (!isReady()) {
-    screen({ title: 'Cliente', backTo: '/clients', tab: 'clients', body: loading() });
+    screen({ title: t('Cliente'), backTo: '/clients', tab: 'clients', body: loading() });
     await whenReady();
   }
   let model = isNew
@@ -62,8 +64,8 @@ export async function renderClientForm(context) {
 
   if (!model) {
     screen({
-      title: 'Cliente', backTo: '/clients', tab: 'clients',
-      body: h('div.page__inner', alert('Este cliente ya no existe.', 'bad')),
+      title: t('Cliente'), backTo: '/clients', tab: 'clients',
+      body: h('div.page__inner', alert(t('Este cliente ya no existe.'), 'bad')),
     });
     return;
   }
@@ -92,7 +94,7 @@ export async function renderClientForm(context) {
   const farm = () => farmById(model.farmId);
 
   const draw = () => screen({
-    title: isNew ? 'Nuevo cliente' : 'Editar cliente',
+    title: isNew ? t('Nuevo cliente') : t('Editar cliente'),
     subtitle: isNew ? (farm()?.name || null) : model.name,
     backTo: isNew ? (model.farmId ? `/farms/${model.farmId}` : '/clients') : `/clients/${clientId}`,
     tab: 'clients',
@@ -116,31 +118,35 @@ export async function renderClientForm(context) {
   function cycleHint() {
     const day = model.cycleAnchor || payDayOnOrAfter(today());
     const period = periodOf({ ...model, cycleAnchor: day });
-    return `Se cobra en ${payDaysInWords()}. Su ${periodWord(model)} corre ahora del `
-      + `${formatDay(period.start)} al ${formatDay(period.end)}, `
-      + `y se paga el ${capitalize(WEEKDAYS[weekdayOf(payDayAfter(period))])} `
-      + `${formatDay(payDayAfter(period))}, cuando termine.`;
+    return t('Se cobra en {days}. Su {period} corre ahora del {start} al {end}, y se paga el {weekday} {day}, cuando termine.', {
+      days: payDaysWords(),
+      period: t(periodWord(model)),
+      start: formatDay(period.start),
+      end: formatDay(period.end),
+      weekday: capitalize(WEEKDAYS[weekdayOf(payDayAfter(period))]),
+      day: formatDay(payDayAfter(period)),
+    });
   }
 
   function validate() {
     errors = {};
-    if (!model.name?.trim()) errors.name = 'Escribe el nombre de la persona.';
-    if (!model.farmId) errors.farmId = 'Elige el rancho.';
-    if (!model.locationId) errors.locationId = 'Elige dónde está. Es obligatorio.';
-    if (!(Number(model.mealsPerDay) > 0)) errors.mealsPerDay = 'Debe ser mayor a cero.';
-    if (model.email && !isValidEmail(model.email)) errors.email = 'Ese correo no es válido.';
+    if (!model.name?.trim()) errors.name = t('Escribe el nombre de la persona.');
+    if (!model.farmId) errors.farmId = t('Elige el rancho.');
+    if (!model.locationId) errors.locationId = t('Elige dónde está. Es obligatorio.');
+    if (!(Number(model.mealsPerDay) > 0)) errors.mealsPerDay = t('Debe ser mayor a cero.');
+    if (model.email && !isValidEmail(model.email)) errors.email = t('Ese correo no es válido.');
     if (model.cycleAnchor && !isPayDay(model.cycleAnchor)) {
-      errors.cycleAnchor = `El periodo empieza en ${payDaysInWords()}.`;
+      errors.cycleAnchor = t('El periodo empieza en {days}.', { days: payDaysWords() });
     }
     if (model.endsOn && model.cycleAnchor && model.endsOn < model.cycleAnchor) {
-      errors.endsOn = 'No puede terminar antes de que empiece su periodo.';
+      errors.endsOn = t('No puede terminar antes de que empiece su periodo.');
     }
     return Object.keys(errors).length === 0;
   }
 
   async function save(event) {
     event.preventDefault();
-    if (!validate()) { draw(); toastBad('Revisa los campos marcados.'); return; }
+    if (!validate()) { draw(); toastBad(t('Revisa los campos marcados.')); return; }
 
     saving = true; draw();
     const author = { uid: session.uid, name: session.displayName };
@@ -149,7 +155,7 @@ export async function renderClientForm(context) {
       if (isNew) {
         const { id, email } = await createClient(model, farm(), author);
         await ensureConversation({ id, name: model.name });
-        toastOk('Cliente registrado');
+        toastOk(t('Cliente registrado'));
 
         const fresh = { ...model, id };
 
@@ -171,7 +177,7 @@ export async function renderClientForm(context) {
             }
           } else {
             const first = payDayAfter(periodOf(fresh));
-            toastOk(`Paga su primera ${periodWord(fresh)} el ${formatDay(first)}, cuando termine.`);
+            toastOk(t('Paga su primera {period} el {day}, cuando termine.', { period: t(periodWord(fresh)), day: formatDay(first) }));
           }
         }
 
@@ -198,7 +204,7 @@ export async function renderClientForm(context) {
           await updateClient(clientId, Object.fromEntries([...changed].map((key) => [key, model[key]])),
             original.email, farm());
         }
-        toastOk('Cambios guardados');
+        toastOk(t('Cambios guardados'));
         go(`/clients/${clientId}`, { replace: true });
       }
     } catch (error) {
@@ -215,11 +221,11 @@ export async function renderClientForm(context) {
    */
   async function offerOpeningBalance(client, author) {
     const wants = await confirm({
-      title: '¿Ya venía pagando?',
-      message: `Si ${client.name} ya era cliente antes del sistema, dinos cuándo pagó por última `
-        + 'vez y calculamos lo que quedó debiendo. Si empieza hoy, no hace falta.',
-      confirmLabel: 'Traer saldo del cuaderno',
-      cancelLabel: 'Empieza hoy',
+      title: t('¿Ya venía pagando?'),
+      message: t('Si {name} ya era cliente antes del sistema, dinos cuándo pagó por última vez y calculamos lo que quedó debiendo. Si empieza hoy, no hace falta.',
+        { name: client.name }),
+      confirmLabel: t('Traer saldo del cuaderno'),
+      cancelLabel: t('Empieza hoy'),
       icon: 'clipboard',
     });
     if (!wants) return 0;
@@ -236,11 +242,11 @@ export async function renderClientForm(context) {
    */
   async function offerPayment(client, author) {
     const wants = await confirm({
-      title: '¿Va a pagar ahora?',
-      message: `${client.name} quedó registrado con lo que debía en el cuaderno. `
-        + 'Si lo está pagando en este momento, cóbrale aquí mismo y se le manda su recibo.',
-      confirmLabel: 'Cobrar ahora',
-      cancelLabel: 'Después',
+      title: t('¿Va a pagar ahora?'),
+      message: t('{name} quedó registrado con lo que debía en el cuaderno. Si lo está pagando en este momento, cóbrale aquí mismo y se le manda su recibo.',
+        { name: client.name }),
+      confirmLabel: t('Cobrar ahora'),
+      cancelLabel: t('Después', { ctx: 'later' }),
       icon: 'cash',
     });
     if (!wants) return null;
@@ -255,15 +261,15 @@ export async function renderClientForm(context) {
 
     return h('form.page__inner.page__inner--narrow.stack.stack-4', { onsubmit: save, novalidate: true },
 
-      sectionLabel('Dónde come'),
+      sectionLabel(t('Dónde come')),
       card(h('div.stack.stack-4',
         field({
-          label: 'Rancho',
+          label: t('Rancho'),
           error: errors.farmId,
           control: select({
             value: model.farmId,
             options: [
-              { value: '', label: 'Elige el rancho…' },
+              { value: '', label: t('Elige el rancho…') },
               ...store.farms.map((row) => ({ value: row.id, label: row.name })),
             ],
             // Changing farm invalidates the chosen location: they belong to it.
@@ -272,80 +278,76 @@ export async function renderClientForm(context) {
         }),
         locationField())),
 
-      sectionLabel('La persona'),
+      sectionLabel(t('La persona')),
       card(h('div.stack.stack-4',
         field({
-          label: 'Nombre',
+          label: t('Nombre'),
           error: errors.name,
           control: input({
-            value: model.name, required: true, placeholder: 'Nombre y apellido',
+            value: model.name, required: true, placeholder: t('Nombre y apellido'),
             oninput: (e) => update({ name: e.target.value }),
           }),
         }),
         field({
-          label: 'Teléfono',
+          label: t('Teléfono'),
           control: input({
             value: model.phone, type: 'tel', inputmode: 'tel', placeholder: '(604) 555-0143',
             oninput: (e) => update({ phone: e.target.value }),
           }),
         }),
         field({
-          label: 'Correo para la app',
-          hint: 'Opcional. Con este correo entra a su app y ve su entrega y su cuenta. '
-            + 'Si todavía no tiene, déjalo vacío.',
+          label: t('Correo para la app'),
+          hint: t('Opcional. Con este correo entra a su app y ve su entrega y su cuenta. Si todavía no tiene, déjalo vacío.'),
           error: errors.email,
           control: input({
             value: model.email, type: 'email', inputmode: 'email',
-            placeholder: 'persona@correo.com',
+            placeholder: t('persona@correo.com'),
             oninput: (e) => update({ email: e.target.value }),
           }),
         }),
         // Not `field`: this control has buttons of its own, and a <label>
         // would hand their clicks to the text box instead.
         fieldGroup({
-          label: 'No puede comer',
-          hint: 'Alergias y lo que no puede llevar su comida. Sale en la pantalla de '
-            + 'empaque, en rojo, y en la lista de clientes. Nunca se imprime en la '
-            + 'etiqueta: eso viaja pegado a una caja.',
+          label: t('No puede comer'),
+          hint: t('Alergias y lo que no puede llevar su comida. Sale en la pantalla de empaque, en rojo, y en la lista de clientes. Nunca se imprime en la etiqueta: eso viaja pegado a una caja.'),
           control: tagEditor(),
         }),
 
         fieldGroup({
-          label: 'Preferencias',
-          hint: 'Lo que pidió, no lo que le hace daño: sin picante, sin cebolla. Esto sí '
-            + 'sale impreso en su etiqueta.',
-          control: tagEditor('preferencias', 'sin picante, sin cebolla…', 'utensils'),
+          label: t('Preferencias'),
+          hint: t('Lo que pidió, no lo que le hace daño: sin picante, sin cebolla. Esto sí sale impreso en su etiqueta.'),
+          control: tagEditor('preferencias', t('sin picante, sin cebolla…'), 'utensils'),
         }),
 
         field({
-          label: 'Notas',
+          label: t('Notas'),
           control: textarea({
-            value: model.notes, rows: 2, placeholder: 'Doble tortilla, quién recibe, cómo llegar…',
+            value: model.notes, rows: 2, placeholder: t('Doble tortilla, quién recibe, cómo llegar…'),
             oninput: (e) => update({ notes: e.target.value }),
           }),
         }))),
 
-      sectionLabel('Su servicio'),
+      sectionLabel(t('Su servicio')),
       card(h('div.stack.stack-4',
         field({
-          label: 'Plan',
+          label: t('Plan'),
           error: errors.mealsPerDay,
-          hint: `Cuántas comidas lleva al día. De ahí sale lo que paga por ${periodWord(model)}.`,
+          hint: t('Cuántas comidas lleva al día. De ahí sale lo que paga por {period}.', { period: t(periodWord(model)) }),
           control: planPicker(),
         }),
 
         // Not `field`: the week has a stepper on every row, and a <label>
         // would hand their clicks to whatever input it finds first.
         fieldGroup({
-          label: 'Su semana',
+          label: t('Su semana'),
           error: errors.deliveryDays,
-          hint: 'Los días que recibe y cuántas comidas cada día. El precio se ajusta solo.',
+          hint: t('Los días que recibe y cuántas comidas cada día. El precio se ajusta solo.'),
           control: weekEditor(),
         }),
         field({
-          label: '¿Desde cuándo come aquí?',
-          hint: `Decide desde qué ${periodWord(model)} se le cobra. El panel nunca le `
-            + `factura una ${periodWord(model)} que cerró antes de esta fecha.`,
+          label: t('¿Desde cuándo come aquí?'),
+          hint: t('Decide desde qué {period} se le cobra. El panel nunca le factura una {period} que cerró antes de esta fecha.',
+            { period: t(periodWord(model)) }),
           control: input({
             type: 'date',
             value: model.startedOn || today(),
@@ -354,20 +356,19 @@ export async function renderClientForm(context) {
           }),
         }),
         field({
-          label: '¿Cada cuánto paga?',
-          hint: 'Algunos cobran por semana y prefieren pagar por semana. Es la misma '
-            + 'comida y el mismo precio por plato — sólo cambia cada cuándo se cobra.',
+          label: t('¿Cada cuánto paga?'),
+          hint: t('Algunos cobran por semana y prefieren pagar por semana. Es la misma comida y el mismo precio por plato — sólo cambia cada cuándo se cobra.'),
           control: select({
             value: String(payEveryOf(model)),
             options: [
-              { value: String(PAY_EVERY.FORTNIGHT), label: 'Cada quincena — 14 días' },
-              { value: String(PAY_EVERY.WEEK), label: 'Cada semana — 7 días' },
+              { value: String(PAY_EVERY.FORTNIGHT), label: t('Cada quincena — 14 días') },
+              { value: String(PAY_EVERY.WEEK), label: t('Cada semana — 7 días') },
             ],
             onchange: (e) => updateAndRedraw({ payEvery: Number(e.target.value) }),
           }),
         }),
         field({
-          label: 'Día de pago',
+          label: t('Día de pago'),
           error: errors.cycleAnchor,
           hint: cycleHint(),
           control: input({
@@ -386,10 +387,8 @@ export async function renderClientForm(context) {
           }),
         }),
         field({
-          label: 'Último día que se le sirve',
-          hint: 'Sólo cuando ya se sabe que se va: "pagó y se queda hasta el jueves". '
-            + 'Desde el día siguiente deja de aparecer en la libreta y no se le factura. '
-            + 'Déjalo vacío si sigue.',
+          label: t('Último día que se le sirve'),
+          hint: t('Sólo cuando ya se sabe que se va: "pagó y se queda hasta el jueves". Desde el día siguiente deja de aparecer en la libreta y no se le factura. Déjalo vacío si sigue.'),
           control: h('div.stack.stack-2',
             input({
               type: 'date',
@@ -398,26 +397,26 @@ export async function renderClientForm(context) {
               onchange: (e) => updateAndRedraw({ endsOn: e.target.value || '' }),
             }),
             h('div.row.row--wrap', { style: { gap: '6px' } },
-              [['Hoy', 0], ['Mañana', 1], ['En 2 días', 2], ['En 7 días', 7]].map(
+              [[t('Hoy'), 0], [t('Mañana'), 1], [t('En 2 días'), 2], [t('En 7 días'), 7]].map(
                 ([label, days]) => button(label, {
                   variant: 'soft', size: 'sm',
                   onClick: () => updateAndRedraw({ endsOn: addDays(today(), days) }),
                 })),
               model.endsOn
-                ? button('Sin fecha', {
+                ? button(t('Sin fecha'), {
                     variant: 'ghost', size: 'sm',
                     onClick: () => updateAndRedraw({ endsOn: '' }),
                   })
                 : null)),
         }),
         field({
-          label: 'Estado',
+          label: t('Estado'),
           control: select({
             value: model.status,
             options: [
-              { value: 'active', label: 'Activo — recibe comida' },
-              { value: 'paused', label: 'En pausa — sin entregas por ahora' },
-              { value: 'inactive', label: 'Inactivo — ya no come aquí' },
+              { value: 'active', label: t('Activo — recibe comida') },
+              { value: 'paused', label: t('En pausa — sin entregas por ahora') },
+              { value: 'inactive', label: t('Inactivo — ya no come aquí') },
             ],
             onchange: (e) => update({ status: e.target.value }),
           }),
@@ -426,8 +425,8 @@ export async function renderClientForm(context) {
 
       h('div.stack.stack-2', { style: { marginTop: '8px' } },
         h('button.btn.btn--primary.btn--block.btn--lg', { type: 'submit' },
-          isNew ? 'Registrar cliente' : 'Guardar cambios'),
-        button('Cancelar', {
+          isNew ? t('Registrar cliente') : t('Guardar cambios')),
+        button(t('Cancelar'), {
           variant: 'ghost', block: true,
           onClick: () => back(model.farmId ? `/farms/${model.farmId}` : '/clients'),
         })),
@@ -446,20 +445,19 @@ export async function renderClientForm(context) {
 
     if (!current) {
       return field({
-        label: 'Ubicación',
-        control: select({ value: '', options: [{ value: '', label: 'Elige primero el rancho…' }], disabled: true }),
+        label: t('Ubicación'),
+        control: select({ value: '', options: [{ value: '', label: t('Elige primero el rancho…') }], disabled: true }),
       });
     }
 
     const places = current.locations || [];
     if (!places.length) {
       return field({
-        label: 'Ubicación',
+        label: t('Ubicación'),
         error: errors.locationId,
         control: h('div.stack.stack-3',
-          alert(`${current.name} todavía no tiene ubicaciones. Agrega una para poder registrar `
-            + 'gente ahí.', 'warn'),
-          button('Agregar ubicación', {
+          alert(t('{farm} todavía no tiene ubicaciones. Agrega una para poder registrar gente ahí.', { farm: current.name }), 'warn'),
+          button(t('Agregar ubicación'), {
             variant: 'ghost', block: true, icon: 'pin',
             onClick: () => go(`/farms/${current.id}`),
           })),
@@ -467,13 +465,13 @@ export async function renderClientForm(context) {
     }
 
     return field({
-      label: 'Ubicación',
-      hint: 'Dónde se le deja la comida. Obligatorio.',
+      label: t('Ubicación'),
+      hint: t('Dónde se le deja la comida. Obligatorio.'),
       error: errors.locationId,
       control: select({
         value: model.locationId,
         options: [
-          { value: '', label: 'Elige la ubicación…' },
+          { value: '', label: t('Elige la ubicación…') },
           ...places.map((place) => ({
             value: place.id,
             label: `${place.name} · ${plural(clientsAt(current.id, place.id), 'cliente', 'clientes')}`,
@@ -498,7 +496,7 @@ export async function renderClientForm(context) {
    * @param {string} placeholder
    * @param {string} glyph  the icon on a chosen chip
    */
-  function tagEditor(listField = 'tags', placeholder = 'sin pollo, sin espagueti…', glyph = 'ban') {
+  function tagEditor(listField = 'tags', placeholder = t('sin pollo, sin espagueti…'), glyph = 'ban') {
     const chosen = [...(model[listField] || [])];
     const wrap = h('div.stack.stack-2');
 
@@ -533,14 +531,14 @@ export async function renderClientForm(context) {
           ? h('div.tags',
               chosen.map((tag) => h('button.tag.tag--edit', {
                 type: 'button',
-                'aria-label': `Quitar ${tag}`,
+                'aria-label': t('Quitar {tag}', { tag }),
                 onclick: () => commit(chosen.filter((one) => one !== tag)),
               }, icon(glyph), tag, icon('x'))))
           : null,
 
         h('div.row', { style: { gap: '8px' } },
           h('div.grow', box),
-          button('Agregar', {
+          button(t('Agregar'), {
             variant: 'soft', size: 'sm',
             onClick: () => {
               const tag = cleanTag(box.value);
@@ -552,7 +550,7 @@ export async function renderClientForm(context) {
 
         suggestions.length
           ? h('div.stack.stack-1',
-              h('div.t-xs.c-faint', 'Ya se usan en la cocina:'),
+              h('div.t-xs.c-faint', t('Ya se usan en la cocina:')),
               h('div.tags', suggestions.map((entry) => h('button.tag.tag--pick', {
                 type: 'button',
                 onclick: () => commit([...chosen, entry.tag]),
@@ -598,22 +596,21 @@ export async function renderClientForm(context) {
             on
               ? h('div.week__count',
                   h('button.step', {
-                    type: 'button', 'aria-label': 'Quitar una comida',
+                    type: 'button', 'aria-label': t('Quitar una comida'),
                     disabled: extra <= 0,
                     onclick: () => setExtra(weekday, extra - 1),
                   }, '−'),
                   h('span.step__n', plural(meals, 'comida', 'comidas')),
                   h('button.step', {
-                    type: 'button', 'aria-label': 'Agregar una comida',
+                    type: 'button', 'aria-label': t('Agregar una comida'),
                     onclick: () => setExtra(weekday, extra + 1),
                   }, '+'))
-              : h('span.t-sm.c-faint', 'Sin servicio'),
+              : h('span.t-sm.c-faint', t('Sin servicio')),
 
             on && extra > 0 ? badge(`+${extra}`, 'warn') : null);
         })),
 
-        h('p.t-xs.c-faint', 'El plan da las comidas base de cada día; el + agrega comidas '
-          + 'extra en ese día de la semana, todas las semanas.'));
+        h('p.t-xs.c-faint', t('El plan da las comidas base de cada día; el + agrega comidas extra en ese día de la semana, todas las semanas.')));
     };
 
     const toggleDay = (weekday, on) => {
@@ -650,9 +647,11 @@ export async function renderClientForm(context) {
     // amount ends up on the counter.
     const known = store.pricing.tiers.map((tier) => ({
       value: String(tier.mealsPerDay),
-      label: `${plural(tier.mealsPerDay, 'comida', 'comidas')} al día · `
-        + `${money(periodCharge({ ...model, mealsPerDay: tier.mealsPerDay }, store.pricing).base)}`
-        + ` por ${periodWord(model)}`,
+      label: t('{meals} al día · {price} por {period}', {
+        meals: plural(tier.mealsPerDay, 'comida', 'comidas'),
+        price: money(periodCharge({ ...model, mealsPerDay: tier.mealsPerDay }, store.pricing).base),
+        period: t(periodWord(model)),
+      }),
     }));
     const current = String(Number(model.mealsPerDay) || '');
     const offList = current && !known.some((option) => option.value === current);
@@ -661,24 +660,23 @@ export async function renderClientForm(context) {
       select({
         value: current,
         options: [
-          { value: '', label: 'Elige el plan…' },
+          { value: '', label: t('Elige el plan…') },
           ...known,
           ...(offList
-            ? [{ value: current, label: `${plural(model.mealsPerDay, 'comida', 'comidas')} al día · sin precio` }]
+            ? [{ value: current, label: t('{meals} al día · sin precio', { meals: plural(model.mealsPerDay, 'comida', 'comidas') }) }]
             : []),
         ],
         onchange: (event) => updateAndRedraw({ mealsPerDay: Number(event.target.value) }),
       }),
       offList
-        ? alert('Ese plan no tiene precio. Agrégalo en Ajustes → Precios o elige otro; '
-          + 'mientras tanto no se le puede cobrar.', 'warn')
+        ? alert(t('Ese plan no tiene precio. Agrégalo en Ajustes → Precios o elige otro; mientras tanto no se le puede cobrar.'), 'warn')
         : null);
   }
 
   /** What this person gets, what it costs, and why it costs that. */
   function previewCard() {
     const current = farm();
-    if (!current) return alert('Elige el rancho para ver sus condiciones.', 'info');
+    if (!current) return alert(t('Elige el rancho para ver sus condiciones.'), 'info');
 
     const terms = termsOf(current);
     const period = periodOf({ ...model, cycleAnchor: terms.cycleAnchor });
@@ -686,69 +684,66 @@ export async function renderClientForm(context) {
     const priced = !!tierFor(store.pricing, model.mealsPerDay);
 
     return h('div.stack.stack-3',
-      alert(`Horario y ciclo de ${current.name}. Para cambiarlos, edita el rancho.`, 'info'),
+      alert(t('Horario y ciclo de {farm}. Para cambiarlos, edita el rancho.', { farm: current.name }), 'info'),
       card(defList([
-        defRow('Horario', terms.deliveryWindow || '—'),
-        defRow('Inicio del ciclo', formatDayLong(terms.cycleAnchor)),
+        defRow(t('Horario'), terms.deliveryWindow || '—'),
+        defRow(t('Inicio del ciclo'), formatDayLong(terms.cycleAnchor)),
         ...chargeRows(charge, priced),
-        defRow('Paga', capitalize(cadenceWord(model))),
-        defRow(`${capitalize(periodWord(model))} ${formatRange(period.start, period.end)}`,
-          priced ? money(charge.amount) : 'Sin precio', { total: true }),
+        defRow(t('Paga'), capitalize(t(cadenceWord(model)))),
+        defRow(`${capitalize(t(periodWord(model)))} ${formatRange(period.start, period.end)}`,
+          priced ? money(charge.amount) : t('Sin precio'), { total: true }),
       ])));
   }
 
   function noFarms() {
     return h('div.page__inner', emptyState({
       icon: 'farm',
-      title: 'Primero registra un rancho',
-      text: 'Los clientes viven dentro de un rancho y de una de sus ubicaciones, así que el '
-        + 'rancho va primero.',
-      action: button('Registrar rancho', { icon: 'plus', onClick: () => go('/farms/new') }),
+      title: t('Primero registra un rancho'),
+      text: t('Los clientes viven dentro de un rancho y de una de sus ubicaciones, así que el rancho va primero.'),
+      action: button(t('Registrar rancho'), { icon: 'plus', onClick: () => go('/farms/new') }),
     }));
   }
 
   function dangerZone() {
     return h('div.stack.stack-3', { style: { marginTop: '8px' } },
-      sectionLabel('Zona delicada'),
+      sectionLabel(t('Zona delicada')),
       model.status === 'active'
-        ? button('Poner en pausa', {
+        ? button(t('Poner en pausa'), {
             variant: 'ghost', block: true, icon: 'pause',
             onClick: async () => {
               if (!await confirm({
-                title: 'Poner en pausa',
-                message: 'Deja de aparecer en las rutas nuevas. Sus facturas y su historial se conservan.',
-                confirmLabel: 'Poner en pausa', icon: 'pause',
+                title: t('Poner en pausa'),
+                message: t('Deja de aparecer en las rutas nuevas. Sus facturas y su historial se conservan.'),
+                confirmLabel: t('Poner en pausa'), icon: 'pause',
               })) return;
               try {
                 await setClientStatus(clientId, 'paused', model);
-                toastOk('Cliente en pausa');
+                toastOk(t('Cliente en pausa'));
                 go(`/clients/${clientId}`);
               } catch (error) { toastBad(errorText(error)); }
             },
           })
-        : button('Reactivar cliente', {
+        : button(t('Reactivar cliente'), {
             variant: 'ok', block: true, icon: 'play',
             onClick: async () => {
               try {
                 await setClientStatus(clientId, 'active', model);
-                toastOk('Cliente reactivado');
+                toastOk(t('Cliente reactivado'));
                 go(`/clients/${clientId}`);
               } catch (error) { toastBad(errorText(error)); }
             },
           }),
-      button('Eliminar cliente', {
+      button(t('Eliminar cliente'), {
         variant: 'danger-soft', block: true, icon: 'ban',
         onClick: async () => {
           if (!await confirm({
-            title: `Eliminar ${model.name}`,
-            message: 'Se borra la ficha y el acceso de su correo a la app. Sólo se puede con quien '
-              + 'no tiene facturas ni pagos: a quien ya tiene historial se le desactiva. Esta acción '
-              + 'no se puede deshacer.',
-            confirmLabel: 'Eliminar definitivamente', tone: 'danger', icon: 'alert',
+            title: t('Eliminar {name}', { name: model.name }),
+            message: t('Se borra la ficha y el acceso de su correo a la app. Sólo se puede con quien no tiene facturas ni pagos: a quien ya tiene historial se le desactiva. Esta acción no se puede deshacer.'),
+            confirmLabel: t('Eliminar definitivamente'), tone: 'danger', icon: 'alert',
           })) return;
           try {
             await deleteClient(clientId, model.email);
-            toastOk('Cliente eliminado');
+            toastOk(t('Cliente eliminado'));
             go(model.farmId ? `/farms/${model.farmId}` : '/clients', { replace: true });
           } catch (error) {
             toastBad(errorText(error));

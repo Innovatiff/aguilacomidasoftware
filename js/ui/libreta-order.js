@@ -44,6 +44,7 @@ import { sheet } from './overlay.js';
 import { sortable } from './sortable.js';
 import { plural } from '../lib/format.js';
 import { allPlaces, orderedPlaces, freePlaces } from '../lib/packing.js';
+import { t } from '../lib/i18n.js';
 
 /**
  * @param {object}   options
@@ -143,9 +144,9 @@ export async function arrangeSheet({
 
   const search = input({
     type: 'search',
-    placeholder: 'Buscar ubicación o farma',
+    placeholder: t('Buscar ubicación o farma'),
     autocomplete: 'off',
-    'aria-label': 'Buscar ubicación o farma',
+    'aria-label': t('Buscar ubicación o farma'),
     oninput: () => { query = fold(search.value).split(/\s+/).filter(Boolean); paint(); },
     onkeydown: (event) => {
       if (event.key !== 'Enter') return;
@@ -171,7 +172,7 @@ export async function arrangeSheet({
   function numberBox(one, at) {
     const box = h('input.pkorder__num', {
       type: 'number', min: 1, max: order.length, value: at + 1, inputmode: 'numeric',
-      'aria-label': `Número nuevo para ${one.place.name}`,
+      'aria-label': t('Número nuevo para {place}', { place: one.place.name }),
     });
     const done = (apply) => {
       if (editing !== one.key) return;
@@ -204,9 +205,10 @@ export async function arrangeSheet({
         ? h('button.pkorder__grip', {
           type: 'button',
           'data-grip': '',
-          title: 'Arrastrar para mover',
-          'aria-label': `Mover ${one.place.name} de ${one.farm.name}. `
-            + 'Usa las flechas del teclado para subirla o bajarla.',
+          title: t('Arrastrar para mover'),
+          'aria-label': t('Mover {place} de {farm}. Usa las flechas del teclado para subirla o bajarla.', {
+            place: one.place.name, farm: one.farm.name,
+          }),
         }, icon('grip'))
         : null,
       editing === one.key
@@ -214,25 +216,25 @@ export async function arrangeSheet({
         : h('button.pkorder__n', {
           type: 'button',
           'data-part': 'number',
-          title: 'Toca para mandarla a otro número',
-          'aria-label': `Número ${at + 1}. Toca para mandarla a otro número.`,
+          title: t('Toca para mandarla a otro número'),
+          'aria-label': t('Número {n}. Toca para mandarla a otro número.', { n: at + 1 }),
           onclick: () => { editing = one.key; paint(); },
         }, String(at + 1)),
       h('span.pkorder__text',
         h('span.pkorder__place', one.place.name,
-          one.adopted || freeKeys.has(one.key) ? h('span.pkpool__free', 'Nueva') : null),
+          one.adopted || freeKeys.has(one.key) ? h('span.pkpool__free', t('Nueva')) : null),
         h('span.pkorder__farm', `${one.farm.name} · `
-          + `${count ? plural(count, 'cliente', 'clientes') : 'sin clientes'}`)),
+          + `${count ? plural(count, 'cliente', 'clientes') : t('sin clientes')}`)),
       whole
         ? [
           h('button.pkorder__step', {
             type: 'button', disabled: at === 0, 'data-part': 'up',
-            'aria-label': `Subir ${one.place.name}`,
+            'aria-label': t('Subir {place}', { place: one.place.name }),
             onclick: () => { step(one.key, -1); paint(); },
           }, icon('chevronU')),
           h('button.pkorder__step', {
             type: 'button', disabled: at === order.length - 1, 'data-part': 'down',
-            'aria-label': `Bajar ${one.place.name}`,
+            'aria-label': t('Bajar {place}', { place: one.place.name }),
             onclick: () => { step(one.key, 1); paint(); },
           }, icon('chevronD')),
         ]
@@ -240,8 +242,8 @@ export async function arrangeSheet({
       h('button.pkorder__out', {
         type: 'button',
         'data-part': 'out',
-        title: 'Quitar del orden',
-        'aria-label': `Quitar ${one.place.name} del orden`,
+        title: t('Quitar del orden'),
+        'aria-label': t('Quitar {place} del orden', { place: one.place.name }),
         onclick: () => { remove(one.key); paint(); },
       }, icon('x')));
   }
@@ -259,13 +261,13 @@ export async function arrangeSheet({
         return h('button.pkpool__item', {
           type: 'button',
           dataset: { key: one.key },
-          title: 'Ponerla al final del orden',
+          title: t('Ponerla al final del orden'),
           onclick: () => { add(one.key); paint(); },
         },
         icon('plus'),
         h('span.pkpool__place', one.place.name),
         // Not in any libreta yet: taking it puts it in this one.
-        freeKeys.has(one.key) ? h('span.pkpool__free', 'Nueva') : null,
+        freeKeys.has(one.key) ? h('span.pkpool__free', t('Nueva')) : null,
         // How many people live there, with the people icon so a bare number
         // is not left to guess at; nothing at all for an empty house.
         count
@@ -282,8 +284,8 @@ export async function arrangeSheet({
     mount(list, shown.length
       ? shown.map(row)
       : h('li.pkord__empty', order.length
-        ? 'Ninguna del orden coincide con la búsqueda.'
-        : 'Todavía no hay ninguna. Toca las de «Por acomodar» en el orden en que se empacan.'));
+        ? t('Ninguna del orden coincide con la búsqueda.')
+        : t('Todavía no hay ninguna. Toca las de «Por acomodar» en el orden en que se empacan.')));
 
     const rest = waiting();
     const restShown = rest.filter(matches);
@@ -291,17 +293,18 @@ export async function arrangeSheet({
     mount(shelfBox, restShown.length
       ? shelfFor(restShown)
       : h('p.pkord__empty', rest.length
-        ? 'Ninguna por acomodar coincide con la búsqueda.'
-        : 'Todas están en el orden.'));
+        ? t('Ninguna por acomodar coincide con la búsqueda.')
+        : t('Todas están en el orden.')));
 
     // Its own locations left on the shelf still go in, at the end; new ones
     // left there stay out of every libreta, as they were.
     const ownLeft = rest.filter((one) => !freeKeys.has(one.key)).length;
     const newLeft = rest.length - ownLeft;
     leftover.textContent = [
-      ownLeft ? `${plural(ownLeft, 'ubicación sin acomodar se va', 'ubicaciones sin acomodar se van')} `
-        + 'al final, en el orden de siempre.' : '',
-      newLeft ? `${plural(newLeft, 'nueva se queda', 'nuevas se quedan')} sin libreta.` : '',
+      ownLeft ? t('{places} al final, en el orden de siempre.', {
+        places: plural(ownLeft, 'ubicación sin acomodar se va', 'ubicaciones sin acomodar se van'),
+      }) : '',
+      newLeft ? t('{places} sin libreta.', { places: plural(newLeft, 'nueva se queda', 'nuevas se quedan') }) : '',
     ].filter(Boolean).join(' ');
     leftover.hidden = !rest.length;
 
@@ -331,40 +334,36 @@ export async function arrangeSheet({
   paint();
 
   const saved = await sheet({
-    title: title || `Orden de ${line.name}`,
+    title: title || t('Orden de {line}', { line: line.name }),
     wide: true,
     build: () => h('div.pkord',
-      h('p.pkord__intro', 'Así se empaca esta libreta, de arriba abajo, ubicación por '
-        + 'ubicación. Nada se guarda hasta «Guardar orden».'
-        + (free.length ? ' Las ubicaciones que no están en ninguna libreta salen en «Por '
-          + 'acomodar» marcadas Nueva: tócala y entra a esta libreta en ese lugar.' : '')),
+      h('p.pkord__intro', t('Así se empaca esta libreta, de arriba abajo, ubicación por ubicación. Nada se guarda hasta «Guardar orden».')
+        + (free.length ? ` ${t('Las ubicaciones que no están en ninguna libreta salen en «Por acomodar» marcadas Nueva: tócala y entra a esta libreta en ese lugar.')}` : '')),
       h('div.pkord__tools',
         search,
         h('button.btn.btn--ghost.btn--sm', {
           type: 'button',
-          title: 'Pasar todas a «Por acomodar» para armar el orden tocándolas',
+          title: t('Pasar todas a «Por acomodar» para armar el orden tocándolas'),
           onclick: () => { order = []; editing = null; paint(); search.focus(); },
-        }, icon('refresh'), 'Empezar de cero'),
+        }, icon('refresh'), t('Empezar de cero')),
         h('button.btn.btn--ghost.btn--sm', {
           type: 'button',
           onclick: () => { order = book(); editing = null; paint(); },
-        }, icon('farm'), 'Ordenar por farma')),
+        }, icon('farm'), t('Ordenar por farma'))),
       h('div.pkord__cols',
-        h('section.pkord__col', { 'aria-label': 'El orden' },
+        h('section.pkord__col', { 'aria-label': t('El orden') },
           h('div.pkord__head',
-            h('span.pkord__title', 'El orden'), placedCount),
-          h('p.pkord__hint', 'Toca el número para mandarla a otro lugar, o arrástrala '
-            + 'de la manija. ✕ la regresa a «Por acomodar».'),
+            h('span.pkord__title', t('El orden')), placedCount),
+          h('p.pkord__hint', t('Toca el número para mandarla a otro lugar, o arrástrala de la manija. ✕ la regresa a «Por acomodar».')),
           list),
-        h('section.pkord__col.pkord__col--shelf', { 'aria-label': 'Por acomodar' },
+        h('section.pkord__col.pkord__col--shelf', { 'aria-label': t('Por acomodar') },
           h('div.pkord__head',
-            h('span.pkord__title', 'Por acomodar'), waitingCount),
-          h('p.pkord__hint', 'Tócalas en el orden en que se empacan: cada una se va al '
-            + 'final del orden.'),
+            h('span.pkord__title', t('Por acomodar')), waitingCount),
+          h('p.pkord__hint', t('Tócalas en el orden en que se empacan: cada una se va al final del orden.')),
           shelfBox))),
     foot: (close) => h('div.pkord__foot',
       leftover,
-      button('Guardar orden', {
+      button(t('Guardar orden'), {
         variant: 'primary', size: 'lg', block: true, onClick: () => close(true),
       })),
   });

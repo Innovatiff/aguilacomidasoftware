@@ -21,6 +21,7 @@ import {
   writeBatch, runTransaction, initializeFirestore,
   persistentLocalCache, persistentMultipleTabManager,
 } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js';
+import { t } from './lib/i18n.js';
 
 export const firebaseConfig = {
   apiKey: 'AIzaSyCFpk456SCzwjzvqydvBahmXuvcpW7Wx54',
@@ -109,18 +110,18 @@ export const listData = (snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() 
 export function authMessage(error) {
   const code = String(error?.code || '');
   const messages = {
-    'auth/invalid-email': 'El correo no tiene un formato válido.',
-    'auth/user-disabled': 'Esta cuenta está desactivada. Contacta a la cocina.',
-    'auth/user-not-found': 'No encontramos una cuenta con ese correo.',
-    'auth/wrong-password': 'Contraseña incorrecta.',
-    'auth/invalid-credential': 'Correo o contraseña incorrectos.',
-    'auth/email-already-in-use': 'Ya existe una cuenta con ese correo.',
-    'auth/weak-password': 'La contraseña debe tener al menos 6 caracteres.',
-    'auth/too-many-requests': 'Demasiados intentos. Espera un momento e inténtalo de nuevo.',
-    'auth/network-request-failed': 'Sin conexión. Revisa tu internet.',
-    'auth/requires-recent-login': 'Por seguridad, vuelve a iniciar sesión para hacer este cambio.',
+    'auth/invalid-email': t('El correo no tiene un formato válido.'),
+    'auth/user-disabled': t('Esta cuenta está desactivada. Contacta a la cocina.'),
+    'auth/user-not-found': t('No encontramos una cuenta con ese correo.'),
+    'auth/wrong-password': t('Contraseña incorrecta.'),
+    'auth/invalid-credential': t('Correo o contraseña incorrectos.'),
+    'auth/email-already-in-use': t('Ya existe una cuenta con ese correo.'),
+    'auth/weak-password': t('La contraseña debe tener al menos 6 caracteres.'),
+    'auth/too-many-requests': t('Demasiados intentos. Espera un momento e inténtalo de nuevo.'),
+    'auth/network-request-failed': t('Sin conexión. Revisa tu internet.'),
+    'auth/requires-recent-login': t('Por seguridad, vuelve a iniciar sesión para hacer este cambio.'),
   };
-  return messages[code] || 'Algo salió mal. Inténtalo de nuevo.';
+  return messages[code] || t('Algo salió mal. Inténtalo de nuevo.');
 }
 
 /**
@@ -139,9 +140,9 @@ export const errorText = (error) =>
 
 export function dbMessage(error) {
   const code = String(error?.code || '');
-  if (code === 'permission-denied') return 'No tienes permiso para hacer esto.';
-  if (code === 'unavailable') return 'Sin conexión. Los cambios se guardarán al reconectar.';
-  if (code === 'not-found') return 'El registro ya no existe.';
+  if (code === 'permission-denied') return t('No tienes permiso para hacer esto.');
+  if (code === 'unavailable') return t('Sin conexión. Los cambios se guardarán al reconectar.');
+  if (code === 'not-found') return t('El registro ya no existe.');
   /*
    * Firestore's daily free allowance, spent. It reads as a bug at the counter —
    * "quota exceeded" over somebody's cash — when it is the base de datos
@@ -150,8 +151,7 @@ export function dbMessage(error) {
    * and writes it down.
    */
   if (code === 'resource-exhausted') {
-    return 'La base de datos llegó a su límite diario. Anota el pago en papel y '
-      + 'regístralo cuando se restablezca (a medianoche). No se cobró nada.';
+    return t('La base de datos llegó a su límite diario. Anota el pago en papel y regístralo cuando se restablezca (a medianoche). No se cobró nada.');
   }
-  return 'No se pudo guardar. Inténtalo de nuevo.';
+  return t('No se pudo guardar. Inténtalo de nuevo.');
 }

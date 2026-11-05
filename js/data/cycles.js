@@ -30,6 +30,7 @@ import {
 } from '../lib/billing.js';
 import { periodCharge } from '../lib/pricing.js';
 import { today } from '../lib/dates.js';
+import { t } from '../lib/i18n.js';
 
 /** How many closed periods back to look. Beyond this it is history, not a task. */
 const LOOK_BACK = 4;
@@ -190,7 +191,7 @@ export async function issueAll(rows, author) {
 export function byFarm(rows) {
   const farms = new Map();
   for (const row of rows) {
-    const name = row.client.farmName || 'Sin rancho';
+    const name = row.client.farmName || t('Sin rancho');
     const entry = farms.get(name) || { name, count: 0, amount: 0 };
     entry.count += 1;
     entry.amount = round2(entry.amount + row.amount);

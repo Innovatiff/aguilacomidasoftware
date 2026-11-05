@@ -28,6 +28,7 @@ import {
   normalizePacking, ABILITIES, pinTakenBy,
 } from '../lib/packing.js';
 import { today } from '../lib/dates.js';
+import { t } from '../lib/i18n.js';
 
 const packingRef = () => doc(db, 'config', 'packing');
 const packersRef = () => collection(db, 'packers');
@@ -118,16 +119,16 @@ export async function savePacker({
 }, author, others = []) {
   const clean = String(name || '').trim().replace(/\s+/g, ' ');
   const number = String(pin || '').replace(/\D/g, '');
-  if (!clean) throw new Error('Escribe el nombre de la persona.');
-  if (number.length < 4) throw new Error('El PIN debe tener al menos 4 dígitos.');
-  if (number.length > 8) throw new Error('El PIN no puede tener más de 8 dígitos.');
+  if (!clean) throw new Error(t('Escribe el nombre de la persona.'));
+  if (number.length < 4) throw new Error(t('El PIN debe tener al menos 4 dígitos.'));
+  if (number.length > 8) throw new Error(t('El PIN no puede tener más de 8 dígitos.'));
 
   const clash = active ? pinTakenBy(others, number, id) : null;
   if (clash) {
     throw new Error(String(clash.pin).trim() === number
-      ? `Ese PIN ya lo usa ${clash.name}. Escoge otro.`
-      : `Ese PIN empieza igual que el de ${clash.name}, y al teclear uno se entraría con el otro. `
-        + 'Escoge otro.');
+      ? t('Ese PIN ya lo usa {name}. Escoge otro.', { name: clash.name })
+      : t('Ese PIN empieza igual que el de {name}, y al teclear uno se entraría con el otro. Escoge otro.',
+        { name: clash.name }));
   }
 
   const permissions = {};

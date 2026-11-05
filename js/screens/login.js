@@ -18,6 +18,8 @@ import { signIn, resetPassword, session } from '../data/session.js';
 import { isClaimed, claimFirstAdmin } from '../data/staff.js';
 import { authMessage, errorText } from '../firebase.js';
 import { versionLabel } from '../version.js';
+import { t } from '../lib/i18n.js';
+import { langSwitch } from '../ui/lang.js';
 
 export function renderAuth(host) {
   let mode = 'signin';   // 'signin' | 'reset'
@@ -46,9 +48,9 @@ export function renderAuth(host) {
         return;
       }
       await resetPassword(values.email);
-      notice = 'Te enviamos un correo para restablecer tu contraseña.';
+      notice = t('Te enviamos un correo para restablecer tu contraseña.');
       mode = 'signin';
-      toastOk('Correo enviado');
+      toastOk(t('Correo enviado'));
     } catch (err) {
       error = authMessage(err);
     }
@@ -60,14 +62,14 @@ export function renderAuth(host) {
   function view() {
     const copy = mode === 'signin'
       ? {
-          lede: 'Panel de la cocina',
-          sub: 'Clientes, entregas y cobros del día en un solo lugar.',
-          cta: 'Entrar',
+          lede: t('Panel de la cocina'),
+          sub: t('Clientes, entregas y cobros del día en un solo lugar.'),
+          cta: t('Entrar'),
         }
       : {
-          lede: 'Recuperar acceso',
-          sub: 'Te enviaremos un enlace para crear una contraseña nueva.',
-          cta: 'Enviar enlace',
+          lede: t('Recuperar acceso'),
+          sub: t('Te enviaremos un enlace para crear una contraseña nueva.'),
+          cta: t('Enviar enlace'),
         };
 
     return h('div.auth',
@@ -78,29 +80,30 @@ export function renderAuth(host) {
           notice ? alert(notice, 'ok') : null,
 
           field({
-            label: 'Correo',
+            label: t('Correo'),
             control: input({
               name: 'email', type: 'email', required: true, autocomplete: 'email',
-              inputmode: 'email', placeholder: 'tu@correo.com',
+              inputmode: 'email', placeholder: t('tu@correo.com'),
             }),
           }),
 
-          mode === 'signin' ? field({ label: 'Contraseña', control: passwordInput() }) : null,
+          mode === 'signin' ? field({ label: t('Contraseña'), control: passwordInput() }) : null,
 
           h('button.btn.btn--primary.btn--block.btn--lg', { type: 'submit', disabled: busy },
             busy ? h('span.spinner.spinner--light') : null,
-            busy ? 'Un momento…' : copy.cta),
+            busy ? t('Un momento…') : copy.cta),
 
           mode === 'signin'
             ? h('button.btn.btn--quiet.btn--block', { type: 'button', onclick: () => set('reset') },
-                'Olvidé mi contraseña')
+                t('Olvidé mi contraseña'))
             : h('button.btn.btn--quiet.btn--block', { type: 'button', onclick: () => set('signin') },
-                'Volver')),
+                t('Volver'))),
 
         h('p.t-xs.c-faint.center', { style: { marginTop: '20px', lineHeight: '1.5' } },
-          'Las cuentas del equipo las agrega un administrador desde el panel. '
-          + 'Si necesitas acceso, pídeselo.'),
-        h('p.t-xs.c-faint.center', { style: { marginTop: '8px' } }, versionLabel())));
+          t('Las cuentas del equipo las agrega un administrador desde el panel. Si necesitas acceso, pídeselo.')),
+        h('p.t-xs.c-faint.center', { style: { marginTop: '8px' } }, versionLabel()),
+        // Before anybody has signed in, so the screen can be read from the start.
+        h('div.center', { style: { marginTop: '16px' } }, langSwitch())));
   }
 
   draw();
@@ -111,7 +114,7 @@ const hero = (lede, sub) => h('div.auth__hero',
     h('span', { style: { color: 'var(--brand-500)' } }, icon('eagle')),
     h('div',
       h('div.auth__name', 'El Águila Cocina'),
-      h('div.auth__tag', 'Administración'))),
+      h('div.auth__tag', t('Administración')))),
   h('h1.auth__lede', lede),
   h('p.auth__sub', sub));
 
@@ -123,13 +126,13 @@ function passwordInput() {
   });
 
   const toggle = h('button.input-group__icon', {
-    type: 'button', 'aria-label': 'Mostrar contraseña',
+    type: 'button', 'aria-label': t('Mostrar contraseña'),
     style: { left: 'auto', right: '12px', pointerEvents: 'auto', background: 'none' },
     onclick: () => {
       const showing = box.type === 'text';
       box.type = showing ? 'password' : 'text';
       mount(toggle, icon(showing ? 'eye' : 'eyeOff'));
-      toggle.setAttribute('aria-label', showing ? 'Mostrar contraseña' : 'Ocultar contraseña');
+      toggle.setAttribute('aria-label', showing ? t('Mostrar contraseña') : t('Ocultar contraseña'));
     },
   }, icon('eye'));
 
@@ -174,14 +177,14 @@ export function renderNoAccess(host, { name, email, onSignOut }) {
     try {
       await claimFirstAdmin(session.user, name);
       handedOff = true;
-      toastOk('Listo, ya eres administrador');
+      toastOk(t('Listo, ya eres administrador'));
       // The staff watcher sees the new document and swaps in the panel.
     } catch (err) {
       busy = false;
       // Somebody claimed the seat between our check and our write.
       claimed = true;
       error = err?.code === 'permission-denied'
-        ? 'Alguien más creó la primera cuenta hace un momento. Pídele que te agregue al equipo.'
+        ? t('Alguien más creó la primera cuenta hace un momento. Pídele que te agregue al equipo.')
         : errorText(err);
       draw();
     }
@@ -190,7 +193,7 @@ export function renderNoAccess(host, { name, email, onSignOut }) {
   function view() {
     if (claimed === null) {
       return h('div.auth',
-        hero('Un momento', 'Estamos revisando el estado de tu cuenta.'),
+        hero(t('Un momento'), t('Estamos revisando el estado de tu cuenta.')),
         h('div.auth__body', h('div.loading', h('div.spinner.spinner--lg'))));
     }
     return claimed ? waitingView() : founderView();
@@ -200,43 +203,40 @@ export function renderNoAccess(host, { name, email, onSignOut }) {
     h('div.row',
       avatar(name || email || '?'),
       h('div.grow',
-        h('div.w-650', name || 'Tu cuenta'),
+        h('div.w-650', name || t('Tu cuenta')),
         h('div.t-sm.c-soft', email || ''))));
 
   /* --- Nobody runs the panel yet ------------------------------------------ */
 
   function founderView() {
     return h('div.auth',
-      hero('Instalación nueva',
-        'Todavía no hay ningún administrador. Esta cuenta puede ser la primera.'),
+      hero(t('Instalación nueva'),
+        t('Todavía no hay ningún administrador. Esta cuenta puede ser la primera.')),
       h('div.auth__body.stack.stack-4',
         error ? alert(error, 'bad') : null,
         accountCard(),
 
         h('div.card',
           h('p.t-sm.c-soft', { style: { lineHeight: '1.5' } },
-            'Como administrador verás todos los ranchos, sus datos de contacto, '
-            + 'sus entregas y todos los pagos. También podrás agregar al resto '
-            + 'del equipo desde Ajustes.')),
+            t('Como administrador verás todos los ranchos, sus datos de contacto, sus entregas y todos los pagos. También podrás agregar al resto del equipo desde Ajustes.'))),
 
-        alert('Esto sólo se puede hacer una vez. Después, cada persona nueva se '
-          + 'agrega desde Ajustes → Equipo.', 'warn'),
+        alert(t('Esto sólo se puede hacer una vez. Después, cada persona nueva se agrega desde Ajustes → Equipo.'), 'warn'),
 
         h('button.btn.btn--primary.btn--block.btn--lg', {
           type: 'button', disabled: busy, onclick: claim,
         },
           busy ? h('span.spinner.spinner--light') : icon('shield'),
-          busy ? 'Un momento…' : 'Empezar como administrador'),
+          busy ? t('Un momento…') : t('Empezar como administrador')),
 
-        button('Cerrar sesión', { variant: 'quiet', block: true, icon: 'logout', onClick: onSignOut })));
+        button(t('Cerrar sesión'), { variant: 'quiet', block: true, icon: 'logout', onClick: onSignOut })));
   }
 
   /* --- The team exists; this address is not on it -------------------------- */
 
   function waitingView() {
     return h('div.auth',
-      hero('Sin acceso al panel',
-        'Entraste correctamente, pero este correo todavía no está en el equipo.'),
+      hero(t('Sin acceso al panel'),
+        t('Entraste correctamente, pero este correo todavía no está en el equipo.')),
       h('div.auth__body.stack.stack-4',
         error ? alert(error, 'bad') : null,
         accountCard(),
@@ -245,17 +245,16 @@ export function renderNoAccess(host, { name, email, onSignOut }) {
           h('div.stack.stack-3',
             h('div.row',
               h('span', { style: { color: 'var(--brand-500)' } }, icon('shield')),
-              h('div.w-650', 'Cómo se habilita')),
+              h('div.w-650', t('Cómo se habilita'))),
             h('p.t-sm.c-soft', { style: { lineHeight: '1.5' } },
-              'Pídele a alguien del equipo que abra el panel y agregue este correo en'),
+              t('Pídele a alguien del equipo que abra el panel y agregue este correo en')),
             h('div.t-sm.w-600', { style: { color: 'var(--brand-700)' } },
-              'Ajustes → Equipo → Agregar'),
-            h('p.t-sm.c-soft', 'Toma un par de segundos y no hace falta tocar nada más.'))),
+              t('Ajustes → Equipo → Agregar')),
+            h('p.t-sm.c-soft', t('Toma un par de segundos y no hace falta tocar nada más.')))),
 
-        alert('Esta pantalla se actualiza sola en cuanto te agreguen. '
-          + 'Puedes cerrar la aplicación mientras tanto.', 'info'),
+        alert(t('Esta pantalla se actualiza sola en cuanto te agreguen. Puedes cerrar la aplicación mientras tanto.'), 'info'),
 
-        button('Cerrar sesión', { variant: 'ghost', block: true, icon: 'logout', onClick: onSignOut })));
+        button(t('Cerrar sesión'), { variant: 'ghost', block: true, icon: 'logout', onClick: onSignOut })));
   }
 
   draw();

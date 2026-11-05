@@ -31,11 +31,15 @@ import {
 import { openScheduleFlow } from '../ui/schedule-flow.js';
 import { KINDS, changeWords } from '../lib/schedule.js';
 import {
-  today, addDays, daysBetween, formatDay, formatDayLong, weekdayName, capitalize, humanDelta, dayOf,
+  today, addDays, daysBetween, formatDayLong, capitalize, humanDelta, dayOf,
 } from '../lib/dates.js';
 import { toDate, errorText } from '../firebase.js';
+import { t, tx } from '../lib/i18n.js';
 
 const author = () => ({ uid: session.uid, name: session.displayName });
+
+/** "lunes 26 de octubre" · "Monday, October 26" */
+const dayWords = (day) => formatDayLong(day, { year: false });
 
 /** A set left "applying" this long is not going to finish by itself. */
 const STALE_MS = 15 * 60 * 1000;
@@ -45,27 +49,38 @@ const stale = (set) => (set.state === 'applying' || set.state === 'reverting')
 /** "Juan Pérez — pasa a 2 comidas al día" */
 export function setTitle(set) {
   const who = set.clientName || set.value?.name || set.farmName || '';
-  const what = set.kind === 'start' ? 'empieza' : changeWords(set, store.farms);
+  const what = set.kind === 'start' ? t('empieza') : changeWords(set, store.farms);
   return who ? `${who} — ${what}` : capitalize(what);
 }
 
 /** "Desde el lunes 26 de octubre · hasta el viernes 30" */
 export function setWhen(set) {
-  const on = `${weekdayName(set.on)} ${formatDay(set.on)}`;
-  const lead = set.kind === 'start' ? 'Empieza el'
-    : KINDS[set.kind]?.ends ? 'Desde el' : 'El';
-  return `${lead} ${on}${set.until ? ` · hasta el ${weekdayName(set.until)} ${formatDay(set.until)}` : ''}`;
+  const on = { day: dayWords(set.on) };
+  const lead = set.kind === 'start' ? t('Empieza el {day}', on)
+    : KINDS[set.kind]?.ends ? t('Desde el {day}', on) : t('El {day}', on);
+  return `${lead}${set.until ? ` · ${t('hasta el {day}', { day: dayWords(set.until) })}` : ''}`;
+}
+
+/**
+ * What came of it, in the screen's language. The Programador wrote it in
+ * Spanish; "Casa 1, Casa 2 en Mucci Farms." has names on both sides, so it is
+ * put into words here rather than by a pattern every stored line would meet.
+ */
+function resultWords(set) {
+  const text = set.result?.text || '';
+  const place = set.kind === 'place' && !set.result?.skipped && /^(.*) en (.*)\.$/.exec(text);
+  return place ? t('{names} en {farm}.', { names: place[1], farm: place[2] }) : tx(text);
 }
 
 const STATE = {
-  pending: ['Programado', 'brand'],
-  applying: ['Aplicándose', 'warn'],
-  reverting: ['Regresando', 'warn'],
-  active: ['Aplicado', 'ok'],
-  done: ['Hecho', 'ok'],
-  remind: ['Para hoy', 'info'],
-  failed: ['No se pudo', 'bad'],
-  cancelled: ['Cancelado', 'muted'],
+  pending: [t('Programado'), 'brand'],
+  applying: [t('Aplicándose'), 'warn'],
+  reverting: [t('Regresando'), 'warn'],
+  active: [t('Aplicado'), 'ok'],
+  done: [t('Hecho'), 'ok'],
+  remind: [t('Para hoy'), 'info'],
+  failed: [t('No se pudo'), 'bad'],
+  cancelled: [t('Cancelado'), 'muted'],
 };
 
 export function renderSchedule() {
@@ -88,8 +103,8 @@ export function renderSchedule() {
 
   function draw() {
     screen({
-      title: 'Programador',
-      subtitle: 'Cambios que se hacen solos en su día',
+      title: t('Programador'),
+      subtitle: t('Cambios que se hacen solos en su día'),
       tab: 'programador',
       body: body(),
     });
@@ -104,9 +119,8 @@ export function renderSchedule() {
       .find((error) => error?.code === 'permission-denied');
     if (refused) {
       return h('div.page__inner.stack.stack-4', alert(
-        'Falta publicar las reglas del Programador. En la consola de Firebase: Firestore → Reglas, '
-        + 'pega el archivo firestore.rules completo y Publicar. Hasta entonces no se puede guardar ni '
-        + 'aplicar nada programado.', 'bad', 'lock'));
+        t('Falta publicar las reglas del Programador. En la consola de Firebase: Firestore → Reglas, pega el archivo firestore.rules completo y Publicar. Hasta entonces no se puede guardar ni aplicar nada programado.'),
+        'bad', 'lock'));
     }
     if (!store.loaded.schedule && !history.length) return skeletonRows(4);
 
@@ -124,10 +138,9 @@ export function renderSchedule() {
     if (!sets.length) {
       return h('div.page__inner', emptyState({
         icon: 'clock',
-        title: 'Todavía no hay nada programado',
-        text: 'Deja un cambio para el día en que empieza —dos comidas desde el lunes, otra ubicación '
-          + 'desde el 28, sin pasta del 1 al 10, un pago el viernes— y el sistema lo hace solo ese día.',
-        action: button('Programar un cambio', { variant: 'primary', size: 'lg', icon: 'plus', onClick: () => plan() }),
+        title: t('Todavía no hay nada programado'),
+        text: t('Deja un cambio para el día en que empieza —dos comidas desde el lunes, otra ubicación desde el 28, sin pasta del 1 al 10, un pago el viernes— y el sistema lo hace solo ese día.'),
+        action: button(t('Programar un cambio'), { variant: 'primary', size: 'lg', icon: 'plus', onClick: () => plan() }),
       }));
     }
 
@@ -140,110 +153,110 @@ export function renderSchedule() {
 
     return h('div.page__inner.stack.stack-5',
       h('div.sched__intro',
-        h('p.t-sm.c-soft', 'Cada cambio se hace solo en su día: lo aplica la primera computadora '
-          + 'que se abra —la de la oficina o la de la cocina—, antes de empacar.'),
-        button('Programar un cambio', { variant: 'primary', icon: 'plus', onClick: () => plan() })),
+        h('p.t-sm.c-soft', t('Cada cambio se hace solo en su día: lo aplica la primera computadora que se abra —la de la oficina o la de la cocina—, antes de empacar.')),
+        button(t('Programar un cambio'), { variant: 'primary', icon: 'plus', onClick: () => plan() })),
 
       review.length
-        ? h('div.stack.stack-2', sectionLabel(`Para revisar · ${review.length}`),
+        ? h('div.stack.stack-2', sectionLabel(t('Para revisar · {count}', { count: review.length })),
           list(review.map((set) => row(set, day)), { card: true }))
         : null,
 
       coming.length
-        ? h('div.stack.stack-3', sectionLabel(`Próximos · ${coming.length}`),
+        ? h('div.stack.stack-3', sectionLabel(t('Próximos · {count}', { count: coming.length })),
           [...byDay.entries()].map(([on, rows]) => h('div.stack.stack-2',
-            h('div.sched__day', capitalize(`${weekdayName(on)} ${formatDay(on)}`),
-              h('span.c-soft', ` · ${on === day ? 'hoy' : humanDelta(daysBetween(day, on))}`)),
+            h('div.sched__day', capitalize(dayWords(on)),
+              h('span.c-soft', ` · ${on === day ? t('hoy') : humanDelta(daysBetween(day, on))}`)),
             list(rows.map((set) => row(set, day)), { card: true }))))
-        : h('div.stack.stack-2', sectionLabel('Próximos'),
-          h('p.t-sm.c-soft', 'Nada esperando su día.')),
+        : h('div.stack.stack-2', sectionLabel(t('Próximos')),
+          h('p.t-sm.c-soft', t('Nada esperando su día.'))),
 
       back.length
-        ? h('div.stack.stack-2', sectionLabel(`Aplicados, con fecha de regreso · ${back.length}`),
+        ? h('div.stack.stack-2', sectionLabel(t('Aplicados, con fecha de regreso · {count}', { count: back.length })),
           list(back.map((set) => row(set, day)), { card: true }))
         : null,
 
       done.length
-        ? h('div.stack.stack-2', sectionLabel('Hechos'),
+        ? h('div.stack.stack-2', sectionLabel(t('Hechos')),
           list(done.map((set) => row(set, day)), { card: true }))
         : null,
 
       cancelled.length
-        ? h('div.stack.stack-2', sectionLabel('Cancelados'),
+        ? h('div.stack.stack-2', sectionLabel(t('Cancelados')),
           list(cancelled.map((set) => row(set, day)), { card: true }))
         : null);
   }
 
   function row(set, day) {
-    const [word, tone] = stale(set) ? ['Revisar', 'bad'] : STATE[set.state] || STATE.pending;
+    const [word, tone] = stale(set) ? [t('Revisar'), 'bad'] : STATE[set.state] || STATE.pending;
     const meta = [
       setWhen(set),
-      set.state === 'active' && set.until ? `regresa el ${weekdayName(addDays(set.until, 1))} ${formatDay(addDays(set.until, 1))}` : '',
-      set.state === 'failed' ? set.error : '',
-      set.result?.skipped ? set.result.text : '',
-      set.createdByName ? `programó ${set.createdByName}` : '',
+      set.state === 'active' && set.until ? t('regresa el {day}', { day: dayWords(addDays(set.until, 1)) }) : '',
+      set.state === 'failed' ? tx(set.error) : '',
+      set.result?.skipped ? resultWords(set) : '',
+      set.createdByName ? t('programó {name}', { name: set.createdByName }) : '',
     ].filter(Boolean).join(' · ');
     return itemRow({
       lead: h(`span.sched__ico.sched__ico--${KINDS[set.kind]?.group || 'plan'}`, icon(KINDS[set.kind]?.icon || 'clock')),
       title: setTitle(set),
       meta,
-      end: badge(set.state === 'pending' && set.on === day ? 'Hoy' : word, tone),
+      end: badge(set.state === 'pending' && set.on === day ? t('Hoy') : word, tone),
       onClick: () => details(set),
     });
   }
 
   async function details(set) {
     const choice = await sheet({
-      title: KINDS[set.kind]?.label || 'Programado',
+      title: KINDS[set.kind]?.label || t('Programado'),
       build: (close) => h('div.stack.stack-4',
         defList([
-          defRow('Qué', capitalize(setTitle(set))),
-          defRow('Cuándo', setWhen(set)),
-          set.until ? defRow('Después', `El ${weekdayName(addDays(set.until, 1))} ${formatDay(addDays(set.until, 1))} `
-            + `${set.kind === 'start' ? 'queda en pausa' : 'regresa a como estaba'}`) : null,
-          defRow('Estado', (STATE[set.state] || STATE.pending)[0]),
-          set.result?.text ? defRow('Resultado', set.result.text) : null,
-          set.error ? defRow('Por qué no', set.error) : null,
-          defRow('Lo programó', `${set.createdByName || '—'}${dayOf(set.createdAt) ? ` · ${formatDayLong(dayOf(set.createdAt))}` : ''}`),
-          set.appliedByName ? defRow('Lo aplicó', set.appliedByName) : null,
+          defRow(t('Qué'), capitalize(setTitle(set))),
+          defRow(t('Cuándo'), setWhen(set)),
+          set.until ? defRow(t('Después'), set.kind === 'start'
+            ? t('El {day} queda en pausa', { day: dayWords(addDays(set.until, 1)) })
+            : t('El {day} regresa a como estaba', { day: dayWords(addDays(set.until, 1)) })) : null,
+          defRow(t('Estado'), (STATE[set.state] || STATE.pending)[0]),
+          set.result?.text ? defRow(t('Resultado'), resultWords(set)) : null,
+          set.error ? defRow(t('Por qué no'), tx(set.error)) : null,
+          defRow(t('Lo programó'), `${set.createdByName || '—'}${dayOf(set.createdAt) ? ` · ${formatDayLong(dayOf(set.createdAt))}` : ''}`),
+          set.appliedByName ? defRow(t('Lo aplicó'), set.appliedByName) : null,
         ].filter(Boolean)),
         set.state === 'pending'
-          ? button('Cancelar', { variant: 'danger-soft', block: true, icon: 'ban', onClick: () => close('cancel') })
+          ? button(t('Cancelar'), { variant: 'danger-soft', block: true, icon: 'ban', onClick: () => close('cancel') })
           : null,
         set.state === 'active' && set.until
-          ? button('Regresarlo ya', { variant: 'soft', block: true, icon: 'refresh', onClick: () => close('end') })
+          ? button(t('Regresarlo ya'), { variant: 'soft', block: true, icon: 'refresh', onClick: () => close('end') })
           : null,
         set.state === 'failed'
-          ? button('Intentar otra vez', { variant: 'primary', block: true, icon: 'refresh', onClick: () => close('retry') })
+          ? button(t('Intentar otra vez'), { variant: 'primary', block: true, icon: 'refresh', onClick: () => close('retry') })
           : null,
         set.state === 'remind' || set.state === 'failed' || stale(set)
-          ? button(set.state === 'remind' ? 'Hecho' : 'Ya lo revisé', {
+          ? button(set.state === 'remind' ? t('Hecho') : t('Ya lo revisé'), {
             variant: 'soft', block: true, icon: 'check', onClick: () => close('close'),
           })
           : null,
         set.clientId
-          ? button('Ver su ficha', { variant: 'ghost', block: true, icon: 'users', onClick: () => close('client') })
+          ? button(t('Ver su ficha'), { variant: 'ghost', block: true, icon: 'users', onClick: () => close('client') })
           : null),
     });
     if (!choice) return;
     try {
       if (choice === 'cancel') {
         if (!await confirm({
-          title: 'Cancelar lo programado',
-          message: `${capitalize(setTitle(set))}. ${setWhen(set)}. No se va a hacer.`,
-          confirmLabel: 'Sí, cancelarlo', tone: 'danger', icon: 'ban',
+          title: t('Cancelar lo programado'),
+          message: t('{what}. {when}. No se va a hacer.', { what: capitalize(setTitle(set)), when: setWhen(set) }),
+          confirmLabel: t('Sí, cancelarlo'), tone: 'danger', icon: 'ban',
         })) return;
         await cancelSet(set, author());
-        toastOk('Cancelado');
+        toastOk(t('Cancelado'));
       } else if (choice === 'end') {
         await endNow(set);
-        toastOk('Regresa en un momento');
+        toastOk(t('Regresa en un momento'));
       } else if (choice === 'retry') {
         await retrySet(set);
-        toastOk('Se intenta otra vez');
+        toastOk(t('Se intenta otra vez'));
       } else if (choice === 'close') {
         await closeSet(set, author());
-        toastOk('Listo');
+        toastOk(t('Listo'));
       } else if (choice === 'client') {
         go(`/clients/${set.clientId}`);
       }

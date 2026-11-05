@@ -94,6 +94,13 @@
   font-size: 17px; font-weight: 700; color: #cfd5dd;
   white-space: nowrap;
 }
+/* The language switch, at the end of the bar, in the bar's own colours. */
+.pos__lang { margin-left: 12px; flex: none; }
+.pos__lang .langsw { background: transparent; border-color: rgba(255, 255, 255, .22); }
+.pos__lang .langsw__ico { display: none; }
+.pos__lang .langsw__opt { color: #cfd5dd; }
+.pos__lang .langsw__opt:hover { color: #ffffff; }
+.pos__lang .langsw__opt.is-active { background: rgba(255, 255, 255, .2); color: #ffffff; }
 /* Which update this is: small, after the date, never in the way. */
 .pos__ver {
   margin-left: 14px;

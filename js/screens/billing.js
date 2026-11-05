@@ -29,6 +29,7 @@ import {
 import { today, humanDelta, daysBetween } from '../lib/dates.js';
 import { money, moneyFull, number, plural } from '../lib/format.js';
 import { errorText } from '../firebase.js';
+import { t, tx } from '../lib/i18n.js';
 
 export function renderBilling(context) {
   let filter = context.query.filter || 'all';
@@ -38,27 +39,27 @@ export function renderBilling(context) {
 
   const draw = () => {
     screen({
-      title: 'Cobranza',
-      subtitle: `${money(moneyStats().outstanding, { round: true })} por cobrar`,
+      title: t('Cobranza'),
+      subtitle: t('{amount} por cobrar', { amount: money(moneyStats().outstanding, { round: true }) }),
       backTo: '/clients',
       tab: 'clients',
-      actions: [topbarButton('receipt', { label: 'Cerrar periodos', onClick: closeCycle })],
+      actions: [topbarButton('receipt', { label: t('Cerrar periodos'), onClick: closeCycle })],
       sunken: true,
       sticky: h('div.searchbar.searchbar--sunken',
         chips(filters(), filter, (value) => { filter = value; draw(); })),
       body: store.loaded.outstanding ? body() : skeletonRows(5),
       fab: h('button.fab', { type: 'button', onclick: () => go('/cobrar') },
-        icon('cash'), 'Cobrar'),
+        icon('cash'), t('Cobrar')),
     });
   };
 
   function filters() {
     const rows = store.outstanding;
     return [
-      { value: 'all', label: 'Pendientes', count: rows.length },
-      { value: 'overdue', label: 'Vencidas', count: rows.filter((r) => invoiceStatus(r, today()) === 'overdue').length },
-      { value: 'due', label: 'Por pagar', count: rows.filter((r) => invoiceStatus(r, today()) === 'due').length },
-      { value: 'paid', label: 'Pagadas', count: settled.length },
+      { value: 'all', label: t('Pendientes'), count: rows.length },
+      { value: 'overdue', label: t('Vencidas'), count: rows.filter((r) => invoiceStatus(r, today()) === 'overdue').length },
+      { value: 'due', label: t('Por pagar'), count: rows.filter((r) => invoiceStatus(r, today()) === 'due').length },
+      { value: 'paid', label: t('Pagadas'), count: settled.length },
     ];
   }
 
@@ -68,19 +69,21 @@ export function renderBilling(context) {
     return h('div.page__inner.stack.stack-4',
       // The counter is the first thing on the money screen: most of what comes
       // in arrives with somebody standing at the store, not by chasing.
-      button('Cobrar en la tienda', {
+      button(t('Cobrar en la tienda'), {
         variant: 'dark', block: true, icon: 'cash', onClick: () => go('/cobrar'),
       }),
 
       statGrid([
         stat({
-          label: 'Por cobrar', value: money(cash.outstanding, { round: true }),
-          foot: `${store.outstanding.length} ${store.outstanding.length === 1 ? 'factura' : 'facturas'}`,
+          label: t('Por cobrar'), value: money(cash.outstanding, { round: true }),
+          foot: `${store.outstanding.length} ${store.outstanding.length === 1 ? t('factura') : t('facturas')}`,
           tone: cash.outstanding > 0 ? 'accent' : 'ok',
         }),
         stat({
-          label: 'Vencido', value: money(cash.overdue, { round: true }),
-          foot: cash.overdueCount ? `${cash.overdueCount} ${cash.overdueCount === 1 ? 'factura' : 'facturas'}` : 'Ninguna',
+          label: t('Vencido'), value: money(cash.overdue, { round: true }),
+          foot: cash.overdueCount
+            ? `${cash.overdueCount} ${cash.overdueCount === 1 ? t('factura') : t('facturas')}`
+            : t('Ninguna'),
           tone: cash.overdue > 0 ? 'bad' : 'ok',
         }),
       ]),
@@ -100,10 +103,10 @@ export function renderBilling(context) {
     if (!rows.length) {
       return emptyState({
         icon: 'shield',
-        title: filter === 'all' ? 'Nadie debe nada' : 'Nada en este filtro',
+        title: filter === 'all' ? t('Nadie debe nada') : t('Nada en este filtro'),
         text: filter === 'all'
-          ? 'Todas las facturas emitidas están pagadas.'
-          : 'Prueba con otro filtro para ver el resto de las facturas.',
+          ? t('Todas las facturas emitidas están pagadas.')
+          : t('Prueba con otro filtro para ver el resto de las facturas.'),
       });
     }
 
@@ -127,7 +130,7 @@ export function renderBilling(context) {
       if (!farms.has(farmId)) {
         farms.set(farmId, {
           farmId,
-          farmName: client?.farmName || farmById(farmId)?.name || 'Sin rancho',
+          farmName: client?.farmName || farmById(farmId)?.name || t('Sin rancho'),
           people: [],
           balance: 0,
         });
@@ -171,19 +174,19 @@ export function renderBilling(context) {
 
   function settledList() {
     if (!settled.length) {
-      return emptyState({ icon: 'receipt', title: 'Sin pagos registrados', text: 'Los periodos saldados aparecerán aquí.' });
+      return emptyState({ icon: 'receipt', title: t('Sin pagos registrados'), text: t('Los periodos saldados aparecerán aquí.') });
     }
     return h('div.stack.stack-3',
-      sectionLabel('Últimas facturas pagadas'),
+      sectionLabel(t('Últimas facturas pagadas')),
       list(settled.map((invoice) => itemRow({
         lead: avatar(invoice.clientName, { size: 'sm' }),
         title: invoice.clientName,
-        meta: `${invoiceTitle(invoice)}`
-          + `${isCharge(invoice) ? ' · deuda' : ` · ${number(invoice.meals)} comidas`}`
+        meta: `${tx(invoiceTitle(invoice))}`
+          + `${isCharge(invoice) ? ` · ${t('deuda')}` : ` · ${t('{n} comidas', { n: number(invoice.meals) })}`}`
           + `${invoice.farmName ? ` · ${invoice.farmName}` : ''}`,
         end: [
           h('span.w-700', money(invoice.amount, { round: true })),
-          badge('Pagado', 'ok'),
+          badge(t('Pagado'), 'ok'),
         ],
         onClick: () => go(`/invoices/${invoice.id}`),
       })), { card: true }));
@@ -195,12 +198,13 @@ export function renderBilling(context) {
     const days = humanDelta(daysBetween(today(), invoice.dueDate));
 
     return itemRow({
-      title: invoiceTitle(invoice),
-      meta: `${status === 'overdue' ? 'Venció' : 'Vence'} ${days} · ${moneyFull(invoice.amount)}`
-        + `${isCharge(invoice) ? ' · deuda agregada' : ''}`,
+      title: tx(invoiceTitle(invoice)),
+      meta: `${status === 'overdue' ? t('Venció {when}', { when: days }) : t('Vence {when}', { when: days })}`
+        + ` · ${moneyFull(invoice.amount)}`
+        + `${isCharge(invoice) ? ` · ${t('deuda agregada')}` : ''}`,
       end: [
         h('span.w-700', money(balance, { round: true })),
-        badge(STATUS_LABEL[status], STATUS_TONE[status]),
+        badge(t(STATUS_LABEL[status]), STATUS_TONE[status]),
       ],
       onClick: () => go(`/invoices/${invoice.id}`),
     });
@@ -225,26 +229,26 @@ export function renderBilling(context) {
     }
 
     if (!pending.rows.length) {
-      toastBad('No hay periodos cerrados sin facturar.');
+      toastBad(t('No hay periodos cerrados sin facturar.'));
       return;
     }
 
     const confirmed = await sheet({
-      title: 'Cerrar periodos',
+      title: t('Cerrar periodos'),
       build: (close) => h('div.stack.stack-4',
-        alert(`Se emitirán ${plural(pending.rows.length, 'factura', 'facturas')} por `
-          + `${moneyFull(pending.total)}, al precio de cada plan.`, 'brand', 'receipt'),
+        alert(t('Se emitirán {invoices} por {amount}, al precio de cada plan.', {
+          invoices: plural(pending.rows.length, 'factura', 'facturas'), amount: moneyFull(pending.total),
+        }), 'brand', 'receipt'),
         pending.unpriced.length
-          ? alert(`${plural(pending.unpriced.length, 'cliente queda', 'clientes quedan')} fuera por `
-            + 'no tener precio en su plan. Revísalo en Ajustes → Precios.', 'warn')
+          ? alert(t('{clients} fuera por no tener precio en su plan. Revísalo en Ajustes → Precios.',
+            { clients: plural(pending.unpriced.length, 'cliente queda', 'clientes quedan') }), 'warn')
           : null,
         card(defList(billingByFarm(pending.rows).map((farm) => defRow(
           farm.name,
           `${plural(farm.count, 'factura', 'facturas')} · ${money(farm.amount)}`,
         )))),
-        h('p.t-xs.c-faint', 'Sólo se factura a los clientes activos, y sólo los periodos que '
-          + 'todavía no tienen factura. Cada quien con el suyo: semanal o quincenal.'),
-        button('Emitir facturas', { variant: 'primary', block: true, onClick: () => close(true) })),
+        h('p.t-xs.c-faint', t('Sólo se factura a los clientes activos, y sólo los periodos que todavía no tienen factura. Cada quien con el suyo: semanal o quincenal.')),
+        button(t('Emitir facturas'), { variant: 'primary', block: true, onClick: () => close(true) })),
     });
     if (!confirmed) return;
 

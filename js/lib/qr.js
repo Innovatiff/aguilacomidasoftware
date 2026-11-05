@@ -22,6 +22,8 @@
  * account for.
  */
 
+import { t } from './i18n.js';
+
 /* --- GF(256), the field the error correction lives in ----------------------- */
 
 const EXP = new Uint8Array(512);
@@ -455,7 +457,7 @@ export function qrMatrix(text) {
   const bytes = new TextEncoder().encode(String(text ?? ''));
   const version = versionFor(bytes.length);
   if (!version) {
-    throw new Error(`No cabe en un QR: ${bytes.length} bytes, el máximo son ${qrCapacity()}.`);
+    throw new Error(t('No cabe en un QR: {bytes} bytes, el máximo son {max}.', { bytes: bytes.length, max: qrCapacity() }));
   }
 
   const { codewords, remainderBits } = capacityOf(version);
@@ -470,13 +472,13 @@ export function qrMatrix(text) {
    * So it is a build error instead.
    */
   if (codewords !== TOTAL[version]) {
-    throw new Error(`QR versión ${version}: conté ${codewords} palabras y la norma dice ${TOTAL[version]}.`);
+    throw new Error(t('QR versión {version}: conté {count} palabras y la norma dice {expected}.', { version, count: codewords, expected: TOTAL[version] }));
   }
 
   const dataCount = codewords - EC_PER_BLOCK[version] * BLOCKS[version];
   const payload = interleave(dataCodewords(bytes, version, dataCount), version);
   if (payload.length !== codewords) {
-    throw new Error(`QR versión ${version}: armé ${payload.length} palabras de ${codewords}.`);
+    throw new Error(t('QR versión {version}: armé {count} palabras de {total}.', { version, count: payload.length, total: codewords }));
   }
 
   const size = sizeOf(version);

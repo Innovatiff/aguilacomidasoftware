@@ -20,6 +20,7 @@ import { button } from './kit.js';
 import { printStickers } from './print.js';
 import { plural } from '../lib/format.js';
 import { errorText } from '../firebase.js';
+import { t } from '../lib/i18n.js';
 
 /**
  * @param {object} options
@@ -40,7 +41,7 @@ export function specialLabel({
   let close = () => {};
 
   const summary = h('div.spl__sum');
-  const go = button('Imprimir etiqueta', {
+  const go = button(t('Imprimir etiqueta'), {
     variant: 'primary', size: 'lg', block: true, icon: 'printer', disabled: true,
     onClick: () => send(),
   });
@@ -55,8 +56,10 @@ export function specialLabel({
     const people = picked();
     const plates = people.reduce((sum, one) => sum + (Number(one.plates) || 0), 0);
     summary.textContent = people.length
-      ? `Lleva ${plural(people.length, 'persona', 'personas')} · ${plural(plates, 'comida', 'comidas')}`
-      : 'Toca a las personas que van en esta bolsa.';
+      ? t('Lleva {people} · {meals}', {
+        people: plural(people.length, 'persona', 'personas'), meals: plural(plates, 'comida', 'comidas'),
+      })
+      : t('Toca a las personas que van en esta bolsa.');
     go.disabled = !people.length;
   }
 
@@ -78,10 +81,10 @@ export function specialLabel({
           lineId,
         },
       });
-      toastOk('Etiqueta especial impresa');
+      toastOk(t('Etiqueta especial impresa'));
       close(true);
     } catch (error) {
-      toastBad(`No se pudo imprimir la etiqueta: ${errorText(error)}`);
+      toastBad(t('No se pudo imprimir la etiqueta: {error}', { error: errorText(error) }));
     }
   }
 
@@ -96,22 +99,21 @@ export function specialLabel({
     },
     h('span.spl__check', icon('check')),
     h('span.spl__name', one.name),
-    one.plates > 1 ? h('span.spl__x', `${one.plates} comidas`) : null,
-    one.id === here ? h('span.spl__here', 'Aquí vas') : null);
+    one.plates > 1 ? h('span.spl__x', t('{n} comidas', { n: one.plates })) : null,
+    one.id === here ? h('span.spl__here', t('Aquí vas')) : null);
     rows.set(one.id, row);
     return row;
   };
 
   return sheet({
-    title: 'Etiqueta especial',
+    title: t('Etiqueta especial'),
     build: (done) => {
       close = done;
       const body = h('div.spl',
-        h('p.spl__lead', 'Para una bolsa que no es de cuatro: toca a quién lleva, y sale una '
-          + 'etiqueta con la farma, la ubicación y sus nombres.'),
+        h('p.spl__lead', t('Para una bolsa que no es de cuatro: toca a quién lleva, y sale una etiqueta con la farma, la ubicación y sus nombres.')),
         h('div.spl__farm', farm?.name || ''),
         groups.map((group) => h('div.spl__group',
-          h('div.spl__place', group.place?.id ? group.place.name : 'Sin ubicación'),
+          h('div.spl__place', group.place?.id ? group.place.name : t('Sin ubicación')),
           group.people.map(person))));
       refresh();
       // Opens on the person on the screen: in a farm of thirty, the bag being

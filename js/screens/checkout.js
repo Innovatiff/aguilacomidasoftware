@@ -31,6 +31,7 @@ import { periodWord } from '../lib/billing.js';
 import { money, plural } from '../lib/format.js';
 import { today, formatDayLong, formatTime } from '../lib/dates.js';
 import { paymentMethodMeta } from '../lib/model.js';
+import { t } from '../lib/i18n.js';
 
 export function renderCheckout() {
   let term = '';
@@ -43,15 +44,15 @@ export function renderCheckout() {
 
   function draw() {
     screen({
-      title: 'Cobrar',
+      title: t('Cobrar'),
       subtitle: formatDayLong(today()),
       tab: 'clients',
       backTo: '/clients',
-      actions: [topbarButton('receipt', { label: 'Cobranza', onClick: () => go('/billing') })],
+      actions: [topbarButton('receipt', { label: t('Cobranza'), onClick: () => go('/billing') })],
       sunken: true,
       sticky: h('div.searchbar',
         searchInput({
-          placeholder: 'Nombre del cliente…',
+          placeholder: t('Nombre del cliente…'),
           value: term,
           onInput: (value) => { term = value; redraw(); },
         })),
@@ -87,8 +88,8 @@ export function renderCheckout() {
     if (!rows.length) {
       return emptyState({
         icon: 'search',
-        title: 'Sin resultados',
-        text: `Nadie coincide con “${term}”. Prueba con el apellido o el rancho.`,
+        title: t('Sin resultados'),
+        text: t('Nadie coincide con “{term}”. Prueba con el apellido o el rancho.', { term }),
       });
     }
 
@@ -109,10 +110,10 @@ export function renderCheckout() {
       end: [
         owes
           ? badge(money(billing.balance, { round: true }), billing.status === 'overdue' ? 'bad' : 'warn')
-          : badge('Al corriente', 'ok'),
+          : badge(t('Al corriente'), 'ok'),
         h('span.t-xs.c-soft', fortnight
-          ? `${money(fortnight)}/${periodWord(client)}`
-          : 'sin precio'),
+          ? `${money(fortnight)}/${t(periodWord(client))}`
+          : t('sin precio')),
       ],
       onClick: () => charge(client),
     });
@@ -138,37 +139,37 @@ export function renderCheckout() {
         h('div.row',
           h('span.item__ico', icon('search')),
           h('div.grow',
-            h('div.w-650', 'Busca al cliente'),
-            h('div.t-sm.c-soft', 'Escribe su nombre arriba para cobrarle.'))))),
+            h('div.w-650', t('Busca al cliente')),
+            h('div.t-sm.c-soft', t('Escribe su nombre arriba para cobrarle.')))))),
 
       statGrid([
         stat({
-          label: 'Cobrado hoy',
+          label: t('Cobrado hoy'),
           value: money(taken, { round: true }),
           foot: `${plural(receipts.length, 'recibo', 'recibos')}`,
           tone: taken > 0 ? 'ok' : null,
         }),
         stat({
-          label: 'Por cobrar',
+          label: t('Por cobrar'),
           value: money(moneyStats().outstanding, { round: true }),
-          foot: 'Lo ya servido y las deudas',
+          foot: t('Lo ya servido y las deudas'),
           onClick: () => go('/billing'),
         }),
       ]),
 
       owing.length
         ? h('div.stack.stack-3',
-            sectionLabel(`Con adeudo · ${owing.length}`,
-              h('span.t-sm.c-soft', 'Tócalos para cobrar')),
+            sectionLabel(t('Con adeudo · {count}', { count: owing.length }),
+              h('span.t-sm.c-soft', t('Tócalos para cobrar'))),
             list(owing.slice(0, 12).map(clientRow), { card: true }))
-        : alert('Nadie debe nada ahora mismo.', 'ok'),
+        : alert(t('Nadie debe nada ahora mismo.'), 'ok'),
 
       receipts.length
         ? h('div.stack.stack-3',
-            sectionLabel('Recibos de hoy'),
+            sectionLabel(t('Recibos de hoy')),
             list(receipts.map(
               (row) => receiptRow(row, cancelledIds(receipts).has(row.id))), { card: true }))
-        : alert('Todavía no se ha cobrado nada hoy.', 'info'));
+        : alert(t('Todavía no se ha cobrado nada hoy.'), 'info'));
   }
 
   /**
@@ -192,9 +193,9 @@ export function renderCheckout() {
       end: [
         h(`span.w-700${reversal || wasCancelled ? '.c-bad' : ''}${wasCancelled ? '.is-void' : ''}`,
           money(receipt.amount)),
-        reversal ? badge('Cancelación', 'bad') : wasCancelled ? badge('Cancelado', 'bad') : null,
+        reversal ? badge(t('Cancelación'), 'bad') : wasCancelled ? badge(t('Cancelado'), 'bad') : null,
         // Kept whole, a cuenta, when it could not be spread over their bills.
-        receipt.held && !reversal && !wasCancelled ? badge('Por revisar', 'warn') : null,
+        receipt.held && !reversal && !wasCancelled ? badge(t('Por revisar'), 'warn') : null,
       ].filter(Boolean),
       onClick: () => go(`/receipts/${receipt.id}`),
     });

@@ -1077,6 +1077,29 @@ del cambio; si no se puede guardar, el cambio del cliente sí se guarda.
    botón **Crear el índice de mensajes en Firebase**: tócalo, confirma en la
    consola y espera unos minutos. Hasta entonces se ve todo menos los mensajes.
 
+### Español · English
+
+El panel y la cocina se pueden ver **en español o en inglés**. El botón
+**ES · EN** está abajo en el menú de la izquierda, en **Ajustes**, en la
+pantalla de entrada y en la cocina.
+
+- **Es de cada computadora**, no de la cuenta: la oficina puede trabajar en
+  inglés mientras la cocina empaca en español. Se queda como lo dejaste
+  aunque cierres el navegador.
+- **Lo impreso sale en el idioma de la pantalla**: el reporte, las listas, los
+  recibos (tickets) y las etiquetas. Si la computadora está en inglés, todo
+  sale en inglés; si está en español, todo en español.
+- **Lo que se guarda o se le manda al cliente sigue en español**: los mensajes
+  automáticos que le llegan al cliente, las líneas de Movimientos, lo que hizo
+  el Programador. Las otras computadoras y la app de los clientes leen lo
+  mismo; en una computadora en inglés se muestra traducido.
+- **Lo que escribe la gente no se traduce**: nombres, notas, mensajes,
+  nombres de farmas y ubicaciones.
+
+Para programadores: cada texto que se lee pasa por `t('…')` (`js/lib/i18n.js`)
+con el español como clave; el inglés está en `js/lib/i18n-en.js`. Un texto sin
+inglés todavía se ve en español, nunca vacío.
+
 ### 11. Correr en local
 
 No hay dependencias ni build. Cualquier servidor estático sirve:

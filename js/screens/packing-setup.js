@@ -45,6 +45,7 @@ import { lifetime } from '../ui/shell.js';
 import { plural } from '../lib/format.js';
 import { errorText } from '../firebase.js';
 import { kitchen } from '../lib/mode.js';
+import { t } from '../lib/i18n.js';
 
 export function renderPackingSetup() {
   /*
@@ -57,14 +58,13 @@ export function renderPackingSetup() {
    */
   if (kitchen()) {
     screen({
-      title: 'Configurar el empaque',
+      title: t('Configurar el empaque'),
       backTo: '/rapido',
       body: h('div.page__inner', emptyState({
         icon: 'lock',
-        title: 'Esto se configura desde el panel',
-        text: 'Las libretas, los usuarios y lo que puede hacer cada uno los cambia el '
-          + 'encargado desde el panel de administración, no desde esta computadora.',
-        action: button('Volver al menú', {
+        title: t('Esto se configura desde el panel'),
+        text: t('Las libretas, los usuarios y lo que puede hacer cada uno los cambia el encargado desde el panel de administración, no desde esta computadora.'),
+        action: button(t('Volver al menú'), {
           variant: 'primary', size: 'lg', icon: 'chevronL', onClick: () => go('/rapido'),
         }),
       })),
@@ -87,8 +87,8 @@ export function renderPackingSetup() {
   function paint() {
     if (!life.alive()) return;
     screen({
-      title: 'Configurar el empaque',
-      subtitle: 'Las libretas, los usuarios y lo que puede hacer cada uno',
+      title: t('Configurar el empaque'),
+      subtitle: t('Las libretas, los usuarios y lo que puede hacer cada uno'),
       backTo: '/empaque',
       tab: 'packing',
       sunken: true,
@@ -110,47 +110,46 @@ export function renderPackingSetup() {
 
     return h('div.stack.stack-5',
       unplaced.length
-        ? alert(`${plural(unplaced.length, 'ubicación no está', 'ubicaciones no están')} en `
-          + 'ninguna libreta. Nadie va a empacar a su gente: '
-          + `${unplaced.map((one) => `${one.farm.name} · ${one.place.name}`).join(', ')}.`,
+        ? alert(t('{places} en ninguna libreta. Nadie va a empacar a su gente: {list}.', {
+          places: plural(unplaced.length, 'ubicación no está', 'ubicaciones no están'),
+          list: unplaced.map((one) => `${one.farm.name} · ${one.place.name}`).join(', '),
+        }),
         'bad', 'alert')
         : null,
       adopted.length
-        ? alert(`${plural(adopted.length, 'ubicación nueva se empaca', 'ubicaciones nuevas se empacan')} `
-          + 'por ahora con el resto de su farma: '
-          + `${adopted.map((one) => `${one.farm.name} · ${one.place.name} en ${one.line.name}`).join(', ')}. `
-          + 'Escógelas en su libreta, o ponlas en orden, y quedan para siempre.', 'warn', 'pin')
+        ? alert(t('{places} por ahora con el resto de su farma: {list}. Escógelas en su libreta, o ponlas en orden, y quedan para siempre.', {
+          places: plural(adopted.length, 'ubicación nueva se empaca', 'ubicaciones nuevas se empacan'),
+          list: adopted.map((one) => t('{farm} · {place} en {line}', {
+            farm: one.farm.name, place: one.place.name, line: one.line.name,
+          })).join(', '),
+        }), 'warn', 'pin')
         : null,
 
       clashes.length
-        ? alert(`Hay ${plural(clashes.length, 'número repetido', 'números repetidos')}. `
-          + 'Dos personas con el mismo número hacen que el nombre en la lista sea '
-          + 'una moneda al aire.', 'bad', 'alert')
+        ? alert(t('Hay {count}. Dos personas con el mismo número hacen que el nombre en la lista sea una moneda al aire.', {
+          count: plural(clashes.length, 'número repetido', 'números repetidos'),
+        }), 'bad', 'alert')
         : null,
 
       h('div.stack.stack-3',
-        sectionLabel('Las etiquetas'),
+        sectionLabel(t('Las etiquetas')),
         printCard()),
 
       h('div.stack.stack-3',
-        sectionLabel('Las libretas'),
-        h('p.rnote', 'Cada ubicación va en una sola libreta, y las de una misma farma pueden '
-          + 'repartirse entre las dos. Para mover una, primero quítala de la libreta donde '
-          + 'está y después escógela en la otra.'),
+        sectionLabel(t('Las libretas')),
+        h('p.rnote', t('Cada ubicación va en una sola libreta, y las de una misma farma pueden repartirse entre las dos. Para mover una, primero quítala de la libreta donde está y después escógela en la otra.')),
         setup.lines.map(lineCard)),
 
       h('div.stack.stack-3',
-        sectionLabel(`Usuarios · ${packers.length}`, h('button.btn.btn--soft.btn--sm', {
+        sectionLabel(t('Usuarios · {n}', { n: packers.length }), h('button.btn.btn--soft.btn--sm', {
           type: 'button', onclick: () => editPacker(null),
-        }, icon('userPlus'), 'Nuevo usuario')),
-        h('p.rnote', 'Cada persona entra a la computadora de la cocina con su PIN, y ve '
-          + 'solo los botones que tiene permitidos.'),
+        }, icon('userPlus'), t('Nuevo usuario'))),
+        h('p.rnote', t('Cada persona entra a la computadora de la cocina con su PIN, y ve solo los botones que tiene permitidos.')),
         packers.length ? packerList() : emptyState({
           icon: 'users',
-          title: 'Todavía no hay usuarios',
-          text: 'Crea uno por persona: su nombre, un PIN de cuatro dígitos y lo que '
-            + 'puede hacer. Con eso ya entra a la computadora de la cocina.',
-          action: button('Nuevo usuario', {
+          title: t('Todavía no hay usuarios'),
+          text: t('Crea uno por persona: su nombre, un PIN de cuatro dígitos y lo que puede hacer. Con eso ya entra a la computadora de la cocina.'),
+          action: button(t('Nuevo usuario'), {
             variant: 'primary', icon: 'userPlus', onClick: () => editPacker(null),
           }),
         })));
@@ -172,28 +171,22 @@ export function renderPackingSetup() {
     return card(h('div.stack.stack-3',
       h('div.row.row--between',
         h('div',
-          h('div.w-700', 'Imprimir las etiquetas solas'),
+          h('div.w-700', t('Imprimir las etiquetas solas')),
           h('div.t-sm.c-soft', on
-            ? 'Cada cuatro personas de una misma ubicación sale la etiqueta de su bolsa '
-              + '—la farma y la ubicación—, y cada persona saca una por comida, sin tocar '
-              + 'nada. Para pausarla en una sola computadora está el interruptor de arriba '
-              + 'a la derecha, al empacar.'
-            : 'Apagado: nadie imprime nada durante el empaque, en ninguna computadora.')),
+            ? t('Cada cuatro personas de una misma ubicación sale la etiqueta de su bolsa —la farma y la ubicación—, y cada persona saca una por comida, sin tocar nada. Para pausarla en una sola computadora está el interruptor de arriba a la derecha, al empacar.')
+            : t('Apagado: nadie imprime nada durante el empaque, en ninguna computadora.'))),
         h('button.btn.btn--soft', {
           type: 'button',
           onclick: async () => {
             try {
               await setAutoPrint(!on, author());
-              toastOk(on ? 'Ya no se imprimen solas' : 'Ahora se imprimen solas');
+              toastOk(on ? t('Ya no se imprimen solas') : t('Ahora se imprimen solas'));
             } catch (error) { toastBad(errorText(error)); }
           },
-        }, on ? 'Apagar' : 'Encender')),
+        }, on ? t('Apagar') : t('Encender'))),
 
       on
-        ? alert('Para que salga sin preguntar nada, Chrome tiene que abrirse con '
-          + '--kiosk-printing y la impresora de etiquetas tiene que ser la '
-          + 'predeterminada de esa computadora. Sin eso, cada etiqueta abre un '
-          + 'cuadro de diálogo.', 'info', 'printer')
+        ? alert(t('Para que salga sin preguntar nada, Chrome tiene que abrirse con --kiosk-printing y la impresora de etiquetas tiene que ser la predeterminada de esa computadora. Sin eso, cada etiqueta abre un cuadro de diálogo.'), 'info', 'printer')
         : null));
   }
 
@@ -214,17 +207,17 @@ export function renderPackingSetup() {
             ? `${plural(farms.size, 'farma', 'farmas')} · `
               + `${plural(mine.length, 'ubicación', 'ubicaciones')} · `
               + `${plural(people, 'cliente', 'clientes')}`
-            : 'Sin ubicaciones')),
+            : t('Sin ubicaciones'))),
         h('button.btn.btn--ghost.btn--sm', {
           type: 'button', onclick: () => renameLine(line),
-        }, icon('edit'), 'Nombre')),
+        }, icon('edit'), t('Nombre'))),
 
       // Whose libreta it is: Empacar opens it for them without asking.
       (() => {
         const owners = (packers || []).filter((one) => one.active !== false && one.lineId === line.id)
           .map((one) => one.name);
         return owners.length
-          ? h('div.t-sm.c-soft', icon('users'), ` La empaca ${owners.join(' y ')}`)
+          ? h('div.t-sm.c-soft', icon('users'), ` ${t('La empaca {names}', { names: owners.join(` ${t('y')} `) })}`)
           : null;
       })(),
 
@@ -234,16 +227,16 @@ export function renderPackingSetup() {
         // because the order they are in is the order they are packed in.
         ? h('div.pkchips', mine.map((one, at) =>
           h('span.pkchip', h('b.pkchip__n', String(at + 1)), `${one.farm.name} · ${one.place.name}`,
-            one.adopted ? h('span.pkpool__free', 'Nueva') : null)))
-        : h('p.t-sm.c-soft', 'Todavía no le has puesto ubicaciones.'),
+            one.adopted ? h('span.pkpool__free', t('Nueva')) : null)))
+        : h('p.t-sm.c-soft', t('Todavía no le has puesto ubicaciones.')),
 
       h('div.pkline-actions',
-        button('Escoger sus ubicaciones', {
+        button(t('Escoger sus ubicaciones'), {
           variant: 'soft', block: true, icon: 'pin', onClick: () => pickPlaces(line),
         }),
         // Only worth offering once there is something to put in order.
         mine.length > 1
-          ? button('Orden de empaque', {
+          ? button(t('Orden de empaque'), {
             variant: 'soft', block: true, icon: 'sort', onClick: () => orderPlaces(line),
           })
           : null)));
@@ -263,10 +256,10 @@ export function renderPackingSetup() {
   async function renameLine(line) {
     const box = input({ value: line.name, maxlength: 30 });
     const name = await sheet({
-      title: 'Nombre de la libreta',
+      title: t('Nombre de la libreta'),
       build: (close) => h('div.stack.stack-4',
-        field({ label: 'Cómo se llama', control: box }),
-        button('Guardar', {
+        field({ label: t('Cómo se llama'), control: box }),
+        button(t('Guardar'), {
           variant: 'primary', size: 'lg', block: true, onClick: () => close(box.value),
         })),
     });
@@ -275,7 +268,7 @@ export function renderPackingSetup() {
     const next = setup.lines.map((row) => (row.id === line.id ? { ...row, name } : row));
     try {
       await savePacking(next, author());
-      toastOk('Listo');
+      toastOk(t('Listo'));
     } catch (error) { toastBad(errorText(error)); }
   }
 
@@ -338,10 +331,10 @@ export function renderPackingSetup() {
           h('div.grow',
             h('div.pkgroup__name', farm.name),
             h('div.pkgroup__meta', [
-              mine === here.length ? 'Toda la farma'
-                : mine ? `${mine} de ${here.length}`
-                  : 'Ninguna',
-              locked.length ? `${locked.length} en ${heldElsewhere(locked[0]).name}` : null,
+              mine === here.length ? t('Toda la farma')
+                : mine ? t('{n} de {total}', { n: mine, total: here.length })
+                  : t('Ninguna'),
+              locked.length ? t('{n} en {line}', { n: locked.length, line: heldElsewhere(locked[0]).name }) : null,
             ].filter(Boolean).join(' · '))),
 
           // Nothing to press when the whole farm belongs to the other one.
@@ -356,7 +349,7 @@ export function renderPackingSetup() {
                 }
                 paintRows();
               },
-            }, allFree ? 'Quitar todo' : 'Toda la farma')
+            }, allFree ? t('Quitar todo') : t('Toda la farma'))
             : null),
 
         h('div.stack.stack-2', here.map((one) => {
@@ -371,8 +364,9 @@ export function renderPackingSetup() {
               // when a thumb lands on it reads as a broken screen; this one
               // says what to do instead.
               if (other) {
-                toastBad(`${one.place.name} está en ${other.name}. `
-                  + 'Quítala de ahí primero y luego escógela aquí.');
+                toastBad(t('{place} está en {line}. Quítala de ahí primero y luego escógela aquí.', {
+                  place: one.place.name, line: other.name,
+                }));
                 return;
               }
               if (on) chosen.delete(one.key); else chosen.add(one.key);
@@ -383,21 +377,19 @@ export function renderPackingSetup() {
           h('span.grow',
             h('span.pkpick__name', one.place.name),
             h('span.pkpick__meta',
-              (count ? plural(count, 'cliente', 'clientes') : 'Sin clientes')
-              + (other ? ` · está en ${other.name}` : ''))),
+              (count ? plural(count, 'cliente', 'clientes') : t('Sin clientes'))
+              + (other ? ` · ${t('está en {line}', { line: other.name })}` : ''))),
           other ? badge(other.name, 'muted') : null);
         })));
     }).filter(Boolean));
     paintRows();
 
     const done = await sheet({
-      title: `Ubicaciones de ${line.name}`,
+      title: t('Ubicaciones de {line}', { line: line.name }),
       build: (close) => h('div.stack.stack-4',
-        h('p.t-sm.c-soft', 'Toca las ubicaciones que van en esta libreta. Las de una misma '
-          + 'farma pueden repartirse entre las dos. Lo que ya tiene la otra sale con '
-          + 'candado: para traerlo, quítalo de allá primero.'),
+        h('p.t-sm.c-soft', t('Toca las ubicaciones que van en esta libreta. Las de una misma farma pueden repartirse entre las dos. Lo que ya tiene la otra sale con candado: para traerlo, quítalo de allá primero.')),
         rows,
-        button('Guardar', {
+        button(t('Guardar'), {
           variant: 'primary', size: 'lg', block: true, onClick: () => close(true),
         })),
     });
@@ -435,7 +427,7 @@ export function renderPackingSetup() {
 
     try {
       await savePacking(next, author());
-      toastOk('Libreta guardada');
+      toastOk(t('Libreta guardada'));
     } catch (error) { toastBad(errorText(error)); }
   }
 
@@ -458,7 +450,7 @@ export function renderPackingSetup() {
       : row));
     try {
       await savePacking(next, author());
-      toastOk('Orden guardado');
+      toastOk(t('Orden guardado'));
     } catch (error) { toastBad(errorText(error)); }
   }
 
@@ -479,12 +471,12 @@ export function renderPackingSetup() {
       return itemRow({
         lead: avatar(packer.name),
         title: packer.name,
-        meta: off ? 'Sin acceso' : [
-          'PIN ••••',
+        meta: off ? t('Sin acceso') : [
+          t('PIN ••••'),
           abilitiesInWords(packer),
-          lineOf(setup.lines, packer.lineId) ? `Libreta: ${lineOf(setup.lines, packer.lineId).name}` : '',
+          lineOf(setup.lines, packer.lineId) ? t('Libreta: {name}', { name: lineOf(setup.lines, packer.lineId).name }) : '',
         ].filter(Boolean).join(' · '),
-        end: off ? badge('Desactivado', 'muted') : null,
+        end: off ? badge(t('Desactivado'), 'muted') : null,
         onClick: () => editPacker(packer),
       });
     }), { card: true });
@@ -506,11 +498,11 @@ export function renderPackingSetup() {
    */
   async function editPacker(packer) {
     const name = input({
-      value: packer?.name || '', placeholder: 'Nombre y apellido', autocomplete: 'off',
+      value: packer?.name || '', placeholder: t('Nombre y apellido'), autocomplete: 'off',
     });
     const pin = input({
       value: packer?.pin || '', inputmode: 'numeric', maxlength: 8, autocomplete: 'off',
-      placeholder: '4 dígitos', pattern: '[0-9]*',
+      placeholder: t('4 dígitos'), pattern: '[0-9]*',
       // Digits only, as they are typed — a letter in a PIN is a PIN nobody
       // can type on the kitchen's keypad.
       oninput: (event) => { event.target.value = event.target.value.replace(/\D/g, ''); },
@@ -543,14 +535,14 @@ export function renderPackingSetup() {
       const sharing = others.filter((one) => one.active !== false && one.lineId && one.lineId === lineId)
         .map((one) => one.name);
       lineHint.textContent = line
-        ? `Al tocar Empacar entra directo a ${line.name}.`
-          + `${sharing.length ? ` También la tiene ${sharing.join(' y ')}.` : ''}`
-        : 'Al tocar Empacar escoge cuál libreta va a empacar.';
+        ? t('Al tocar Empacar entra directo a {line}.', { line: line.name })
+          + `${sharing.length ? ` ${t('También la tiene {names}.', { names: sharing.join(` ${t('y')} `) })}` : ''}`
+        : t('Al tocar Empacar escoge cuál libreta va a empacar.');
     };
     const lineBox = select({
       value: lineId,
       options: [
-        { value: '', label: 'Ninguna: escoge al empacar' },
+        { value: '', label: t('Ninguna: escoge al empacar') },
         ...setup.lines.map((line) => ({ value: line.id, label: line.name })),
       ],
       onchange: (event) => { lineId = event.target.value; paintLineHint(); },
@@ -558,40 +550,38 @@ export function renderPackingSetup() {
     paintLineHint();
 
     const saved = await sheet({
-      title: packer ? 'Editar usuario' : 'Nuevo usuario',
+      title: packer ? t('Editar usuario') : t('Nuevo usuario'),
       build: (close) => h('div.stack.stack-5',
         h('div.stack.stack-4',
-          field({ label: 'Nombre', control: name }),
+          field({ label: t('Nombre'), control: name }),
           field({
-            label: 'PIN',
-            hint: 'Con esto entra a la computadora de la cocina. De 4 a 8 números, '
-              + 'y cada persona tiene el suyo.',
+            label: t('PIN'),
+            hint: t('Con esto entra a la computadora de la cocina. De 4 a 8 números, y cada persona tiene el suyo.'),
             control: pin,
           }),
           // With what they may do: the libreta Empacar opens for them.
           h('label.field',
-            h('span.field__label', 'Su libreta'),
+            h('span.field__label', t('Su libreta')),
             lineBox,
             lineHint)),
 
         h('div.stack.stack-3',
           h('div.row.row--between',
             h('div',
-              h('div.w-700', 'Qué puede hacer'),
-              h('div.t-sm.c-soft', 'Lo que no tenga permitido no le aparece en el menú.')),
+              h('div.w-700', t('Qué puede hacer')),
+              h('div.t-sm.c-soft', t('Lo que no tenga permitido no le aparece en el menú.'))),
             h('div.btn-group',
-              button('Todo', { variant: 'ghost', size: 'sm', onClick: () => setAll(true) }),
-              button('Nada', { variant: 'ghost', size: 'sm', onClick: () => setAll(false) }))),
+              button(t('Todo'), { variant: 'ghost', size: 'sm', onClick: () => setAll(true) }),
+              button(t('Nada'), { variant: 'ghost', size: 'sm', onClick: () => setAll(false) }))),
           card(switches)),
 
-        card(switchRow('Activo', {
+        card(switchRow(t('Activo'), {
           checked: active,
           onChange: (value) => { active = value; },
-          hint: 'Apágalo cuando alguien deje de trabajar aquí. Su PIN deja de servir, '
-            + 'y lo que ya empacó queda guardado con su nombre.',
+          hint: t('Apágalo cuando alguien deje de trabajar aquí. Su PIN deja de servir, y lo que ya empacó queda guardado con su nombre.'),
         })),
 
-        asyncButton(packer ? 'Guardar cambios' : 'Crear usuario', {
+        asyncButton(packer ? t('Guardar cambios') : t('Crear usuario'), {
           variant: 'primary', size: 'lg', block: true,
           onClick: async () => {
             try {
@@ -604,14 +594,13 @@ export function renderPackingSetup() {
         }),
 
         packer
-          ? button('Eliminar usuario', {
+          ? button(t('Eliminar usuario'), {
             variant: 'danger-soft', block: true, icon: 'ban',
             onClick: async () => {
               const sure = await confirm({
-                title: `¿Eliminar a ${packer.name}?`,
-                message: 'Su PIN deja de servir. Las mañanas que ya empacó siguen guardadas '
-                  + 'con su nombre. Si solo va a dejar de venir un tiempo, mejor desactívalo.',
-                confirmLabel: 'Eliminar', tone: 'danger', icon: 'alert',
+                title: t('¿Eliminar a {name}?', { name: packer.name }),
+                message: t('Su PIN deja de servir. Las mañanas que ya empacó siguen guardadas con su nombre. Si solo va a dejar de venir un tiempo, mejor desactívalo.'),
+                confirmLabel: t('Eliminar'), tone: 'danger', icon: 'alert',
               });
               if (!sure) return;
               try { await removePacker(packer.id); close(true); }
@@ -620,7 +609,7 @@ export function renderPackingSetup() {
           })
           : null),
     });
-    if (saved) toastOk(packer ? 'Usuario actualizado' : 'Usuario creado');
+    if (saved) toastOk(packer ? t('Usuario actualizado') : t('Usuario creado'));
   }
 
   const unsubscribe = subscribe(paint);

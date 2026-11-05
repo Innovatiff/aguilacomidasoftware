@@ -39,25 +39,30 @@ import { emptyState, button } from './ui/kit.js';
 import { kitchen } from './lib/mode.js';
 import { seatedPacker } from './data/packing.js';
 import { setActor } from './data/movements.js';
+import { t } from './lib/i18n.js';
+
+// The window's name, in the language of this computer (the pages are written
+// with the Spanish one).
+document.title = kitchen() ? t('El Águila · Empaque') : t('El Águila Cocina · Administración');
 
 // Who each movement is written down as: in the kitchen the person who typed
 // their number, at the counter the account that is signed in.
 setActor(() => (kitchen() ? seatedPacker()?.name : '') || session.displayName || '');
 
 const TABS = [
-  { id: 'home',     path: '/',         label: 'Inicio',   icon: 'home' },
-  { id: 'notebook', path: '/libreta',  label: 'Libreta',  icon: 'clipboard' },
-  { id: 'farms',    path: '/farms',    label: 'Ranchos',  icon: 'farm' },
-  { id: 'clients',  path: '/clients',  label: 'Clientes', icon: 'users' },
-  { id: 'messages', path: '/messages', label: 'Mensajes', icon: 'chat' },
+  { id: 'home',     path: '/',         label: t('Inicio'),   icon: 'home' },
+  { id: 'notebook', path: '/libreta',  label: t('Libreta'),  icon: 'clipboard' },
+  { id: 'farms',    path: '/farms',    label: t('Ranchos'),  icon: 'farm' },
+  { id: 'clients',  path: '/clients',  label: t('Clientes'), icon: 'users' },
+  { id: 'messages', path: '/messages', label: t('Mensajes'), icon: 'chat' },
   // These two go last, so nothing above them moves. The counter's staff reach
   // for the same four places a hundred times a day and know where they are by
   // position; Reportes and Empaque are opened once, deliberately, by someone
   // who will read the label before pressing it.
-  { id: 'reports',  path: '/reportes', label: 'Reportes', icon: 'chart' },
-  { id: 'packing',  path: '/empaque',  label: 'Empaque',  icon: 'box' },
+  { id: 'reports',  path: '/reportes', label: t('Reportes'), icon: 'chart' },
+  { id: 'packing',  path: '/empaque',  label: t('Empaque'),  icon: 'box' },
   // Last, for the same reason: what is already there does not move.
-  { id: 'programador', path: '/programador', label: 'Programador', icon: 'clock' },
+  { id: 'programador', path: '/programador', label: t('Programador'), icon: 'clock' },
 ];
 
 const host = $('#app');
@@ -130,7 +135,7 @@ function enter(next) {
     // job, and a rail offering Clientes, Reportes and Mensajes next to it is
     // both a distraction and a way to end up somewhere nobody meant to go.
     tabs: kitchen() ? [] : TABS,
-    brand: { name: 'El Águila', sub: kitchen() ? 'Empaque' : 'Administración' },
+    brand: { name: 'El Águila', sub: kitchen() ? t('Empaque') : t('Administración') },
   });
   startStore();
   if (!kitchen()) stopBadge = subscribe(() => setTabBadge('messages', unreadCount()));
@@ -220,12 +225,12 @@ function registerRoutes() {
 
   setNotFound(() => {
     screen({
-      title: 'No encontrado',
+      title: t('No encontrado'),
       body: emptyState({
         icon: 'search',
-        title: 'Esta pantalla no existe',
-        text: 'El enlace puede estar mal escrito o la pantalla ya no está disponible.',
-        action: button('Ir al inicio', { onClick: () => go('/') }),
+        title: t('Esta pantalla no existe'),
+        text: t('El enlace puede estar mal escrito o la pantalla ya no está disponible.'),
+        action: button(t('Ir al inicio'), { onClick: () => go('/') }),
       }),
     });
   });

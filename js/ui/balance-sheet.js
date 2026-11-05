@@ -26,6 +26,7 @@ import { postSystemMessage } from '../data/chat.js';
 import { balanceOf, invoiceTitle, isCharge, round2 } from '../lib/billing.js';
 import { money, moneyFull } from '../lib/format.js';
 import { errorText } from '../firebase.js';
+import { t, tx, inSpanish } from '../lib/i18n.js';
 
 /**
  * Reasons that save typing, not reasons that stand in for it.
@@ -48,7 +49,7 @@ export function openBalanceSheet({ client, invoices = [], author }) {
   const balance = round2(open.reduce((sum, invoice) => sum + balanceOf(invoice), 0));
 
   return sheet({
-    title: 'Corregir el saldo',
+    title: t('Corregir el saldo'),
     build: (close) => {
       let target = String(balance);
       let note = '';
@@ -66,7 +67,7 @@ export function openBalanceSheet({ client, invoices = [], author }) {
       });
 
       const noteBox = input({
-        placeholder: 'Ej. la quincena de agosto se cobró doble',
+        placeholder: t('Ej. la quincena de agosto se cobró doble'),
         maxlength: 90,
         oninput: (event) => { note = event.target.value; repaint(); },
       });
@@ -90,14 +91,16 @@ export function openBalanceSheet({ client, invoices = [], author }) {
         const moved = Math.abs(difference) > 0.005;
 
         mount(submit, icon('edit'),
-          moved ? `Dejar su saldo en ${money(wanted)}` : 'Corregir el saldo');
+          moved ? t('Dejar su saldo en {amount}', { amount: money(wanted) }) : t('Corregir el saldo'));
         submit.disabled = busy || !moved || !note.trim() || wanted < 0;
 
         mount(after, !moved
-          ? 'Escribe el saldo correcto.'
+          ? t('Escribe el saldo correcto.')
           : difference > 0
-            ? `Se le suman ${money(difference)}: de ${money(balance)} a ${moneyFull(wanted)}.`
-            : `Se le bajan ${money(-difference)}: de ${money(balance)} a ${moneyFull(wanted)}.`);
+            ? t('Se le suman {amount}: de {from} a {to}.',
+              { amount: money(difference), from: money(balance), to: moneyFull(wanted) })
+            : t('Se le bajan {amount}: de {from} a {to}.',
+              { amount: money(-difference), from: money(balance), to: moneyFull(wanted) }));
 
         // What it is about to touch, before it touches it. A correction that
         // silently reshuffles four bills is one nobody can check afterwards.
@@ -108,8 +111,8 @@ export function openBalanceSheet({ client, invoices = [], author }) {
       function preview(difference) {
         if (difference > 0) {
           return h('div.stack.stack-1',
-            h('div.t-xs.upper.c-faint.w-700', 'Se agrega'),
-            h('p.t-sm.c-soft', `Una deuda nueva de ${money(difference)} con esa nota.`));
+            h('div.t-xs.upper.c-faint.w-700', t('Se agrega')),
+            h('p.t-sm.c-soft', t('Una deuda nueva de {amount} con esa nota.', { amount: money(difference) })));
         }
 
         let left = round2(-difference);
@@ -123,16 +126,16 @@ export function openBalanceSheet({ client, invoices = [], author }) {
         }
 
         return h('div.stack.stack-1',
-          h('div.t-xs.upper.c-faint.w-700', 'Se baja de'),
+          h('div.t-xs.upper.c-faint.w-700', t('Se baja de')),
           rows.length
             ? h('div.stack.stack-1', rows.map(([invoice, give]) => h('div.row.row--between',
-                h('span.t-sm.truncate', invoiceTitle(invoice)
-                  + (isCharge(invoice) ? ' (deuda)' : '')),
+                h('span.t-sm.truncate', tx(invoiceTitle(invoice))
+                  + (isCharge(invoice) ? ` (${t('deuda')})` : '')),
                 h('span.t-sm.w-600', `−${money(give)}`))))
             : null,
           left > 0.005
-            ? alert(`No se pueden bajar ${money(left)}: esa parte ya está pagada. `
-              + 'Para devolverla hay que cancelar el pago.', 'warn')
+            ? alert(t('No se pueden bajar {amount}: esa parte ya está pagada. Para devolverla hay que cancelar el pago.',
+              { amount: money(left) }), 'warn')
             : null);
       }
 
@@ -142,15 +145,15 @@ export function openBalanceSheet({ client, invoices = [], author }) {
           if (busy) return;
 
           const wanted = round2(Number(target) || 0);
-          if (!note.trim()) { toastBad('Escribe por qué cambia el saldo.'); return; }
+          if (!note.trim()) { toastBad(t('Escribe por qué cambia el saldo.')); return; }
           if (Math.abs(round2(wanted - balance)) < 0.005) {
-            toastBad('Ese es el saldo que ya tiene.');
+            toastBad(t('Ese es el saldo que ya tiene.'));
             return;
           }
 
           busy = true;
           submit.disabled = true;
-          mount(submit, h('span.spinner.spinner--light'), 'Corrigiendo…');
+          mount(submit, h('span.spinner.spinner--light'), t('Corrigiendo…'));
 
           try {
             const result = await adjustBalance(
@@ -158,7 +161,7 @@ export function openBalanceSheet({ client, invoices = [], author }) {
             // Not awaited: offline, a chat message only settles once the
             // internet is back.
             if (tell) announce(client, balance, wanted, note.trim()).catch(() => {});
-            toastOk(`Saldo corregido · ${money(wanted)}`);
+            toastOk(t('Saldo corregido · {amount}', { amount: money(wanted) }));
             close(result);
           } catch (error) {
             busy = false;
@@ -170,34 +173,35 @@ export function openBalanceSheet({ client, invoices = [], author }) {
 
       h('div.card.card--tight',
         defList([
-          defRow('Cliente', client.name),
-          defRow('Dónde', [client.farmName, client.locationName].filter(Boolean).join(' · ') || '—'),
-          defRow('Debe hoy', balance > 0.005 ? money(balance) : 'Nada', { total: true }),
+          defRow(t('Cliente'), client.name),
+          defRow(t('Dónde'), [client.farmName, client.locationName].filter(Boolean).join(' · ') || '—'),
+          defRow(t('Debe hoy'), balance > 0.005 ? money(balance) : t('Nada'), { total: true }),
         ])),
 
       field({
-        label: '¿Cuánto debe en realidad?',
-        hint: 'Escribe el total correcto, no la diferencia.',
+        label: t('¿Cuánto debe en realidad?'),
+        hint: t('Escribe el total correcto, no la diferencia.'),
         control: h('div.stack.stack-2',
           amountBox,
           balance > 0.005
             ? h('div.row.row--wrap', { style: { gap: '6px' } },
-                button('No debe nada', {
+                button(t('No debe nada'), {
                   variant: 'soft', size: 'sm', onClick: () => setTarget(0),
                 }),
-                button(`La mitad ${money(round2(balance / 2))}`, {
+                button(t('La mitad {amount}', { amount: money(round2(balance / 2)) }), {
                   variant: 'soft', size: 'sm', onClick: () => setTarget(round2(balance / 2)),
                 }))
             : null),
       }),
 
       field({
-        label: '¿Por qué?',
-        hint: 'Queda guardado en cada cuenta que se toque, con tu nombre y la fecha.',
+        label: t('¿Por qué?'),
+        hint: t('Queda guardado en cada cuenta que se toque, con tu nombre y la fecha.'),
         control: h('div.stack.stack-2',
           noteBox,
           h('div.row.row--wrap', { style: { gap: '6px' } },
-            COMMON.map((text) => button(text, {
+            // The words go into the box in Spanish: the client reads them in their app.
+            COMMON.map((text) => button(t(text), {
               variant: 'soft', size: 'sm', onClick: () => setNote(text),
             })))),
       }),
@@ -205,15 +209,13 @@ export function openBalanceSheet({ client, invoices = [], author }) {
       after,
       plan,
 
-      switchRow('Avisarle por mensaje', {
+      switchRow(t('Avisarle por mensaje'), {
         checked: tell,
-        hint: 'Le llega a su app con el saldo nuevo y el motivo.',
+        hint: t('Le llega a su app con el saldo nuevo y el motivo.'),
         onChange: (value) => { tell = value; },
       }),
 
-      alert('No borra nada: cada cuenta guarda lo que decía antes, lo que dice ahora, quién lo '
-        + 'cambió y por qué. Lo que ya está pagado no se toca — para devolver dinero hay que '
-        + 'cancelar el pago.', 'info'),
+      alert(t('No borra nada: cada cuenta guarda lo que decía antes, lo que dice ahora, quién lo cambió y por qué. Lo que ya está pagado no se toca — para devolver dinero hay que cancelar el pago.'), 'info'),
 
       submit);
 
@@ -225,8 +227,9 @@ export function openBalanceSheet({ client, invoices = [], author }) {
 
 /** Tells the client, in their own thread, what moved and why. */
 async function announce(client, before, afterBalance, note) {
-  const text = `Corregimos su saldo: de ${moneyFull(before)} a ${moneyFull(afterBalance)}. `
-    + `Motivo: ${note}. Si algo no cuadra, escríbanos por aquí.`;
+  // In Spanish whatever the screen shows: it goes to the client's app.
+  const text = inSpanish(() => `Corregimos su saldo: de ${moneyFull(before)} a ${moneyFull(afterBalance)}. `
+    + `Motivo: ${note}. Si algo no cuadra, escríbanos por aquí.`);
 
   try {
     await postSystemMessage(client.id, text, {

@@ -23,6 +23,7 @@ import { balanceOf, periodWord } from '../lib/billing.js';
 import { money, moneyFull } from '../lib/format.js';
 import { formatDayLong, today } from '../lib/dates.js';
 import { errorText } from '../firebase.js';
+import { t, inSpanish } from '../lib/i18n.js';
 
 /**
  * Reasons that save typing, not reasons that stand in for it.
@@ -44,7 +45,7 @@ export function openDebtSheet({ client, invoices = [], author }) {
   const word = periodWord(client);
 
   return sheet({
-    title: 'Agregar deuda',
+    title: t('Agregar deuda'),
     build: (close) => {
       let amount = '';
       let reason = '';
@@ -63,7 +64,7 @@ export function openDebtSheet({ client, invoices = [], author }) {
       });
 
       const reasonBox = input({
-        placeholder: 'Ej. una caja de refrescos',
+        placeholder: t('Ej. una caja de refrescos'),
         maxlength: 80,
         oninput: (event) => { reason = event.target.value; repaint(); },
       });
@@ -77,12 +78,12 @@ export function openDebtSheet({ client, invoices = [], author }) {
 
       function repaint() {
         const value = Number(amount) || 0;
-        mount(submit, icon('plus'), value > 0 ? `Agregar deuda de ${money(value)}` : 'Agregar deuda');
+        mount(submit, icon('plus'), value > 0 ? t('Agregar deuda de {amount}', { amount: money(value) }) : t('Agregar deuda'));
         submit.disabled = busy || !(value > 0) || !reason.trim();
 
         mount(after, value > 0
-          ? `Su saldo pasa de ${money(balance)} a ${moneyFull(round2(balance + value))}.`
-          : 'Escribe cuánto debe.');
+          ? t('Su saldo pasa de {from} a {to}.', { from: money(balance), to: moneyFull(round2(balance + value)) })
+          : t('Escribe cuánto debe.'));
       }
 
       const form = h('form.stack.stack-4', {
@@ -91,12 +92,12 @@ export function openDebtSheet({ client, invoices = [], author }) {
           if (busy) return;
 
           const value = Number(amount);
-          if (!(value > 0)) { toastBad('El monto debe ser mayor a cero.'); return; }
-          if (!reason.trim()) { toastBad('Escribe de qué es la deuda.'); return; }
+          if (!(value > 0)) { toastBad(t('El monto debe ser mayor a cero.')); return; }
+          if (!reason.trim()) { toastBad(t('Escribe de qué es la deuda.')); return; }
 
           busy = true;
           submit.disabled = true;
-          mount(submit, h('span.spinner.spinner--light'), 'Agregando…');
+          mount(submit, h('span.spinner.spinner--light'), t('Agregando…'));
 
           try {
             const charge = await addCharge(
@@ -104,7 +105,7 @@ export function openDebtSheet({ client, invoices = [], author }) {
             // Not awaited: offline, a chat message only settles once the
             // internet is back.
             if (tell) announce(charge, client, round2(balance + value)).catch(() => {});
-            toastOk(`Deuda agregada · ${money(value)}`);
+            toastOk(t('Deuda agregada · {amount}', { amount: money(value) }));
             close(charge);
           } catch (error) {
             busy = false;
@@ -116,30 +117,31 @@ export function openDebtSheet({ client, invoices = [], author }) {
 
       h('div.card.card--tight',
         defList([
-          defRow('Cliente', client.name),
-          defRow('Dónde', [client.farmName, client.locationName].filter(Boolean).join(' · ') || '—'),
-          defRow('Debe hoy', balance > 0.005 ? money(balance) : 'Nada', { total: true }),
+          defRow(t('Cliente'), client.name),
+          defRow(t('Dónde'), [client.farmName, client.locationName].filter(Boolean).join(' · ') || '—'),
+          defRow(t('Debe hoy'), balance > 0.005 ? money(balance) : t('Nada'), { total: true }),
         ])),
 
       field({
-        label: 'Monto de la deuda',
+        label: t('Monto de la deuda'),
         control: amountBox,
       }),
 
       field({
-        label: '¿De qué es?',
-        hint: 'Lo verá el cliente en su app, junto al monto.',
+        label: t('¿De qué es?'),
+        hint: t('Lo verá el cliente en su app, junto al monto.'),
         control: h('div.stack.stack-2',
           reasonBox,
           h('div.row.row--wrap', { style: { gap: '6px' } },
-            COMMON.map((text) => button(text, {
+            // The words go into the box in Spanish: the client reads them in their app.
+            COMMON.map((text) => button(t(text), {
               variant: 'soft', size: 'sm', onClick: () => setReason(text),
             })))),
       }),
 
       field({
-        label: 'Fecha',
-        hint: 'El día en que se generó la deuda, no el día en que la escribes.',
+        label: t('Fecha'),
+        hint: t('El día en que se generó la deuda, no el día en que la escribes.'),
         control: input({
           type: 'date', value: date, max: today(),
           onchange: (event) => { date = event.target.value || today(); },
@@ -148,14 +150,14 @@ export function openDebtSheet({ client, invoices = [], author }) {
 
       after,
 
-      switchRow('Avisarle por mensaje', {
+      switchRow(t('Avisarle por mensaje'), {
         checked: tell,
-        hint: 'Le llega a su app con el monto y el motivo.',
+        hint: t('Le llega a su app con el monto y el motivo.'),
         onChange: (value) => { tell = value; },
       }),
 
-      alert(`Se suma a lo que debe y se cobra como cualquier otro cobro de la ${word}. `
-        + 'Mientras no tenga pagos aplicados, se puede quitar desde la misma deuda.', 'info'),
+      alert(t('Se suma a lo que debe y se cobra como cualquier otro cobro de la {period}. Mientras no tenga pagos aplicados, se puede quitar desde la misma deuda.',
+        { period: t(word) }), 'info'),
 
       submit);
 
@@ -167,9 +169,10 @@ export function openDebtSheet({ client, invoices = [], author }) {
 
 /** Tells the client, in their own thread, what was added and why. */
 async function announce(charge, client, balanceAfter) {
-  const text = `Se agregó un cargo de ${moneyFull(charge.amount)} a su cuenta: ${charge.reason} `
+  // In Spanish whatever the screen shows: it goes to the client's app.
+  const text = inSpanish(() => `Se agregó un cargo de ${moneyFull(charge.amount)} a su cuenta: ${charge.reason} `
     + `(${formatDayLong(charge.periodStart)}). Su saldo queda en ${moneyFull(balanceAfter)}. `
-    + 'Si hay algún error, escríbanos por aquí.';
+    + 'Si hay algún error, escríbanos por aquí.');
 
   try {
     await postSystemMessage(client.id, text, {

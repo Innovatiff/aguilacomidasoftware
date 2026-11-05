@@ -23,6 +23,7 @@ import { money, number, plural } from '../lib/format.js';
 import { formatDayLong, formatTime, formatDayShort } from '../lib/dates.js';
 import { rangeTitle, rangeSpan } from '../lib/periods.js';
 import { debtWord } from '../lib/report.js';
+import { t } from '../lib/i18n.js';
 
 /* --- Building blocks -------------------------------------------------------- */
 
@@ -59,9 +60,9 @@ function till(methods) {
     .reduce((total, m) => total + m.takings, 0);
 
   return h('div.rep__till',
-    figure('Efectivo', money(of('cash'))),
-    figure('Débito', money(of('debit'))),
-    figure('Otras formas', money(others)));
+    figure(t('Efectivo'), money(of('cash'))),
+    figure(t('Débito'), money(of('debit'))),
+    figure(t('Otras formas'), money(others)));
 }
 
 /* --- The sheet -------------------------------------------------------------- */
@@ -83,81 +84,85 @@ export function reportSheet(report, { business = {}, by = '' } = {}) {
         h('div.rep__sub', [business.address, business.city].filter(Boolean).join(' · ')),
         business.phone ? h('div.rep__sub', `Tel. ${business.phone}`) : null),
       h('div.rep__stamp',
-        h('div.rep__kind', 'Reporte'),
+        h('div.rep__kind', t('Reporte')),
         h('div.rep__period', rangeTitle(range)),
         h('div.rep__sub', `${rangeSpan(range)} · ${plural(days.span, 'día', 'días')}`
-          + (days.running ? ` · ${days.elapsed} transcurridos` : '')))),
+          + (days.running ? ` · ${t('{count} transcurridos', { count: days.elapsed })}` : '')))),
 
     /* --- What came in. The first thing anybody looks for, so the biggest. */
     h('div.rep__hero',
-      h('div.rep__hero-k', 'Se cobró en este periodo'),
+      h('div.rep__hero-k', t('Se cobró en este periodo')),
       h('div.rep__hero-v', money(cash.collected)),
       h('div.rep__hero-n', counts.payments
-        ? `${plural(counts.payments, 'pago', 'pagos')} de ${plural(counts.payers, 'persona', 'personas')}`
-        : 'No se recibió ningún pago')),
+        ? t('{payments} de {people}', {
+          payments: plural(counts.payments, 'pago', 'pagos'), people: plural(counts.payers, 'persona', 'personas'),
+        })
+        : t('No se recibió ningún pago'))),
 
     till(report.methods),
 
     /* --- The period's accounts ------------------------------------------ */
     h('section.rep__block',
-      band('Las cuentas de este periodo'),
+      band(t('Las cuentas de este periodo')),
       h('div.rep__cols',
         h('div.rep__col',
-          row('Se facturó', money(cash.billed), { strong: true }),
-          row('Deudas agregadas a mano', money(cash.added)),
-          row('Emitido en total', money(cash.issued))),
+          row(t('Se facturó'), money(cash.billed), { strong: true }),
+          row(t('Deudas agregadas a mano'), money(cash.added)),
+          row(t('Emitido en total'), money(cash.issued))),
         h('div.rep__col',
-          row('Pagos recibidos', money(cash.takings), { strong: true }),
-          row('Pagos cancelados', signed(cash.refunds)),
+          row(t('Pagos recibidos'), money(cash.takings), { strong: true }),
+          row(t('Pagos cancelados'), signed(cash.refunds)),
           row(debtWord(cash.change), money(Math.abs(cash.change)))))),
 
     /* --- How many of each thing ----------------------------------------- */
     h('section.rep__block',
-      band('El periodo en números'),
+      band(t('El periodo en números')),
       h('div.rep__cols',
         h('div.rep__col',
-          row('Pagos recibidos', number(counts.payments)),
-          row('Personas que pagaron', number(counts.payers)),
-          row('Pagos cancelados', number(counts.refunds))),
+          row(t('Pagos recibidos'), number(counts.payments)),
+          row(t('Personas que pagaron'), number(counts.payers)),
+          row(t('Pagos cancelados'), number(counts.refunds))),
         h('div.rep__col',
-          row('Facturas emitidas', number(counts.bills)),
-          row('Comidas facturadas', number(counts.meals)),
+          row(t('Facturas emitidas'), number(counts.bills)),
+          row(t('Comidas facturadas'), number(counts.meals)),
           // Just "por día": how many days that is over is on the masthead, and
           // a label long enough to wrap makes its row a different height from
           // the two beside it.
-          row('Promedio por día', money(days.elapsed ? cash.collected / days.elapsed : 0))),
+          row(t('Promedio por día'), money(days.elapsed ? cash.collected / days.elapsed : 0))),
         h('div.rep__col',
-          row('Clientes activos', number(people.active)),
+          row(t('Clientes activos'), number(people.active)),
           // Lo que la cocina pone en la estufa un día cualquiera. No es lo
           // mismo que "comidas facturadas", que es lo vendido en todo el
           // periodo; esto es contra lo que se compra el mandado.
-          row('Comidas al día', number(people.meals)),
-          row('Clientes dados de alta', number(people.added)),
-          row('Clientes que terminaron', number(people.ended))))),
+          row(t('Comidas al día'), number(people.meals)),
+          row(t('Clientes dados de alta'), number(people.added)),
+          row(t('Clientes que terminaron'), number(people.ended))))),
 
     /* --- Today's photograph, kept clearly apart from the period --------- */
     h('section.rep__block',
-      band('Lo que se debe hoy', formatDayLong(report.day)),
-      h('p.rep__note', 'Esto no es del periodo: es lo que se debe en este momento, '
-        + 'contando todas las facturas abiertas de cualquier fecha.'),
+      band(t('Lo que se debe hoy'), formatDayLong(report.day)),
+      h('p.rep__note', t('Esto no es del periodo: es lo que se debe en este momento, contando todas las facturas abiertas de cualquier fecha.')),
       h('div.rep__till',
-        figure('Por cobrar', money(standing.owed),
+        figure(t('Por cobrar'), money(standing.owed),
           plural(standing.debtors.length, 'cliente debe', 'clientes deben')),
-        figure('De eso, vencido', money(standing.overdue),
+        figure(t('De eso, vencido'), money(standing.overdue),
           plural(standing.overdueCount, 'factura', 'facturas')),
-        figure('Todavía en plazo', money(standing.dueSoon), 'Sin vencer'))),
+        figure(t('Todavía en plazo'), money(standing.dueSoon), t('Sin vencer')))),
 
     report.pricingChanged
-      ? h('p.rep__note', `Nota: la lista de precios cambió el `
-          + `${formatDayShort(report.pricingChanged.date)}, dentro de este periodo`
-          + `${report.pricingChanged.byName ? `, la cambió ${report.pricingChanged.byName}` : ''}. `
-          + 'Las facturas emitidas antes de ese día conservan el precio que tenían.')
+      ? h('p.rep__note', report.pricingChanged.byName
+        ? t('Nota: la lista de precios cambió el {day}, dentro de este periodo, la cambió {name}. Las facturas emitidas antes de ese día conservan el precio que tenían.', {
+          day: formatDayShort(report.pricingChanged.date), name: report.pricingChanged.byName,
+        })
+        : t('Nota: la lista de precios cambió el {day}, dentro de este periodo. Las facturas emitidas antes de ese día conservan el precio que tenían.', {
+          day: formatDayShort(report.pricingChanged.date),
+        }))
       : null,
 
     /* --- Footer ---------------------------------------------------------- */
     h('div.rep__foot',
       h('span', `${business.name || 'El Águila Cocina'} · ${rangeSpan(range)}`),
-      h('span', `Impreso el ${formatDayShort(report.day)} a las ${formatTime(now)}`
+      h('span', t('Impreso el {day} a las {time}', { day: formatDayShort(report.day), time: formatTime(now) })
         + `${by ? ` · ${by}` : ''}`)));
 }
 
@@ -196,7 +201,7 @@ export function listSheet(report, {
         h('div.rep__brand', business.name || 'El Águila Cocina'),
         h('div.rep__sub', [business.address, business.city].filter(Boolean).join(' · '))),
       h('div.rep__stamp',
-        h('div.rep__kind', 'Reporte'),
+        h('div.rep__kind', t('Reporte')),
         h('div.rep__period', name),
         h('div.rep__sub', `${rangeTitle(range)} · ${rangeSpan(range)}`))),
 
@@ -205,17 +210,16 @@ export function listSheet(report, {
     // Said out loud, because a list printed while the search box had something
     // in it is a list with people missing, and the paper has to admit that.
     filter
-      ? h('p.rep__note', `Sólo los renglones que decían «${filter}». `
-        + 'Borra la búsqueda si quieres la lista completa.')
+      ? h('p.rep__note', t('Sólo los renglones que decían «{filter}». Borra la búsqueda si quieres la lista completa.', { filter }))
       : null,
 
     rows.length
       ? table(columns, rows, total, text)
-      : h('p.rep__none', 'No hay nada que listar en este periodo.'),
+      : h('p.rep__none', t('No hay nada que listar en este periodo.')),
 
     h('div.rep__foot',
       h('span', `${business.name || 'El Águila Cocina'} · ${name} · ${rangeSpan(range)}`),
-      h('span', `Impreso el ${formatDayShort(report.day)} a las ${formatTime(now)}`
+      h('span', t('Impreso el {day} a las {time}', { day: formatDayShort(report.day), time: formatTime(now) })
         + `${by ? ` · ${by}` : ''}`)));
 }
 

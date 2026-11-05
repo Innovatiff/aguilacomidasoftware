@@ -30,6 +30,7 @@ import {
   today, addDays, daysBetween, formatRange, formatDay, weekdayName,
 } from '../lib/dates.js';
 import { money } from '../lib/format.js';
+import { t, inSpanish } from '../lib/i18n.js';
 import { servingSince, onPlanOn } from './clients.js';
 
 /**
@@ -182,8 +183,8 @@ export async function issueInvoice(client, period, charge, meals, author, extra 
  */
 export async function addCharge({ client, amount, reason, date }, author) {
   const total = round2(amount);
-  if (!(total > 0)) throw new Error('El monto debe ser mayor a cero.');
-  if (!String(reason || '').trim()) throw new Error('Escribe de qué es la deuda.');
+  if (!(total > 0)) throw new Error(t('El monto debe ser mayor a cero.'));
+  if (!String(reason || '').trim()) throw new Error(t('Escribe de qué es la deuda.'));
 
   const day = date || today();
   // An auto id borrowed only for its uniqueness: two debts on the same day for
@@ -230,25 +231,25 @@ export async function addCharge({ client, amount, reason, date }, author) {
  */
 export async function correctAmount({ invoice, amount, note }, author) {
   const id = invoice?.id;
-  if (!id) throw new Error('Esa factura ya no existe.');
+  if (!id) throw new Error(t('Esa factura ya no existe.'));
 
   const next = round2(amount);
   const why = String(note || '').trim();
-  if (!(next >= 0)) throw new Error('El monto no puede ser negativo.');
-  if (!why) throw new Error('Escribe por qué cambia el monto.');
+  if (!(next >= 0)) throw new Error(t('El monto no puede ser negativo.'));
+  if (!why) throw new Error(t('Escribe por qué cambia el monto.'));
 
   const ref = doc(db, 'invoices', id);
 
   let moved = null;
   const result = await runTransaction(db, async (tx) => {
     const snap = await tx.get(ref);
-    if (!snap.exists()) throw new Error('Esa factura ya no existe.');
+    if (!snap.exists()) throw new Error(t('Esa factura ya no existe.'));
 
     const data = snap.data();
     if (round2(data.amount || 0) === next) return { id, ...data };
     if (next < round2(data.paid || 0)) {
-      throw new Error(`Ya pagó ${money(round2(data.paid || 0))} de esta cuenta. `
-        + 'Para bajarla de ahí hay que cancelar primero el pago.');
+      throw new Error(t('Ya pagó {amount} de esta cuenta. Para bajarla de ahí hay que cancelar primero el pago.',
+        { amount: money(round2(data.paid || 0)) }));
     }
 
     tx.set(ref, correction(data, next, why, author), { merge: true });
@@ -330,10 +331,10 @@ export function owedBills(bills, client, day = today()) {
  */
 export async function adjustBalance({ client, target, note }, author) {
   const why = String(note || '').trim();
-  if (!why) throw new Error('Escribe por qué cambia el saldo.');
+  if (!why) throw new Error(t('Escribe por qué cambia el saldo.'));
 
   const wanted = round2(target);
-  if (!(wanted >= 0)) throw new Error('El saldo no puede ser negativo.');
+  if (!(wanted >= 0)) throw new Error(t('El saldo no puede ser negativo.'));
 
   const snap = await getDocs(query(invoicesRef(),
     where('clientId', '==', client.id), where('settled', '==', false)));
@@ -378,8 +379,8 @@ export async function adjustBalance({ client, target, note }, author) {
     }
 
     if (left > 0.005) {
-      throw new Error(`Sólo se pueden bajar ${money(round2(-difference - left))}: `
-        + 'el resto ya está pagado. Para devolverlo hay que cancelar el pago.');
+      throw new Error(t('Sólo se pueden bajar {amount}: el resto ya está pagado. Para devolverlo hay que cancelar el pago.',
+        { amount: money(round2(-difference - left)) }));
     }
     return done;
   });
@@ -403,10 +404,10 @@ export async function adjustBalance({ client, target, note }, author) {
  * nothing to preserve: unlike a payment, it is deleted rather than reversed.
  */
 export async function voidCharge(invoice) {
-  if (!invoice?.id) throw new Error('Ese cargo ya no existe.');
-  if (!isCharge(invoice)) throw new Error('Sólo se pueden quitar los cargos agregados a mano.');
+  if (!invoice?.id) throw new Error(t('Ese cargo ya no existe.'));
+  if (!isCharge(invoice)) throw new Error(t('Sólo se pueden quitar los cargos agregados a mano.'));
   if ((Number(invoice.paid) || 0) > 0.005) {
-    throw new Error('Este cargo ya tiene pagos aplicados. Cancela primero el pago.');
+    throw new Error(t('Este cargo ya tiene pagos aplicados. Cancela primero el pago.'));
   }
   await deleteDoc(doc(db, 'invoices', invoice.id));
   logMovement({
@@ -435,9 +436,9 @@ export async function voidCharge(invoice) {
  */
 export async function recordPastPayment({ client, amount, method, date, note }, author) {
   const total = round2(amount);
-  if (!(total > 0)) throw new Error('El monto debe ser mayor a cero.');
+  if (!(total > 0)) throw new Error(t('El monto debe ser mayor a cero.'));
   const day = date || today();
-  if (day > today()) throw new Error('Esa fecha todavía no llega.');
+  if (day > today()) throw new Error(t('Esa fecha todavía no llega.'));
 
   const ref = doc(collection(db, 'receipts'));
   const receipt = {
@@ -655,9 +656,12 @@ export function aheadRows(payer, bills, pricing, { day = today(), amount = 0 } =
 export function nothingOwedYet(client, day = today()) {
   const running = periodOf(client, day);
   const payDay = payDayAfter(running);
-  return `Está al corriente con lo ya servido. Lo que pague hoy queda para su ${periodWord(client)} `
-    + `en curso (${formatRange(running.start, running.end)}), la que se paga el `
-    + `${weekdayName(payDay)} ${formatDay(payDay)}.`;
+  return t('Está al corriente con lo ya servido. Lo que pague hoy queda para su {period} en curso ({range}), la que se paga el {weekday} {day}.', {
+    period: t(periodWord(client)),
+    range: formatRange(running.start, running.end),
+    weekday: weekdayName(payDay),
+    day: formatDay(payDay),
+  });
 }
 
 /**
@@ -684,7 +688,7 @@ export function nothingOwedYet(client, day = today()) {
  */
 export async function takePayment(params, author) {
   const total = round2(params.amount);
-  if (!(total > 0)) throw new Error('El monto debe ser mayor a cero.');
+  if (!(total > 0)) throw new Error(t('El monto debe ser mayor a cero.'));
   const day = params.date || today();
   // Made here so the receipt keeps one id and one folio whichever way it is
   // saved — and so a retry can tell it was saved already.
@@ -796,7 +800,7 @@ async function applyPayment({
           periodEnd: record.periodEnd || '',
           // Stamped now so the receipt keeps saying what it paid for even if
           // the bill behind it is later removed.
-          title: invoiceTitle(record),
+          title: inSpanish(() => invoiceTitle(record)),
           kind: record.kind || 'period',
           amount: take,
           ...(row.ahead ? { ahead: true } : {}),
@@ -953,8 +957,8 @@ async function landed(write, ms = 4000) {
  * is corrected. Both stay visible to both sides, and the two cancel out.
  */
 export async function voidReceipt(receipt, author, { date = '', note = '' } = {}) {
-  if (!receipt?.id) throw new Error('Ese recibo ya no existe.');
-  if (Number(receipt.amount) < 0) throw new Error('Un recibo de cancelación no se puede cancelar.');
+  if (!receipt?.id) throw new Error(t('Ese recibo ya no existe.'));
+  if (Number(receipt.amount) < 0) throw new Error(t('Un recibo de cancelación no se puede cancelar.'));
 
   // One cancellation per receipt, whoever presses and however many times: the
   // id is the receipt's, so a second one finds the first already there. The
@@ -976,7 +980,7 @@ export async function voidReceipt(receipt, author, { date = '', note = '' } = {}
 
   return runTransaction(db, async (tx) => {
     // Every read before any write — Firestore refuses the other order.
-    if ((await tx.get(counterRef)).exists()) throw new Error('Este pago ya estaba cancelado.');
+    if ((await tx.get(counterRef)).exists()) throw new Error(t('Este pago ya estaba cancelado.'));
     const clientSnap = clientRef ? await tx.get(clientRef) : null;
     const rows = [];
     for (const invoiceId of targets) {
@@ -1017,7 +1021,7 @@ export async function voidReceipt(receipt, author, { date = '', note = '' } = {}
         invoiceId: snap.id,
         periodStart: data.periodStart,
         periodEnd: data.periodEnd,
-        title: invoiceTitle({ ...data, id: snap.id }),
+        title: inSpanish(() => invoiceTitle({ ...data, id: snap.id })),
         kind: data.kind || 'period',
         amount: -back,
       });
@@ -1033,7 +1037,7 @@ export async function voidReceipt(receipt, author, { date = '', note = '' } = {}
     // give back — but it still has to be cancellable, or a wrong figure typed
     // in during the migration is stuck on the record forever.
     const historic = !targets.length;
-    if (!removed && !historic) throw new Error('Este pago ya estaba cancelado.');
+    if (!removed && !historic) throw new Error(t('Este pago ya estaba cancelado.'));
 
     if (reopened && clientSnap?.exists()) {
       const was = clientSnap.data().paidThrough || null;
@@ -1083,8 +1087,8 @@ export async function voidReceipt(receipt, author, { date = '', note = '' } = {}
  * the second receipt says which one it came from.
  */
 export async function spreadHeld(receipt, client, pricing, author) {
-  if (!receipt?.held) throw new Error('Este pago ya está repartido.');
-  if (!client?.id) throw new Error('No encontramos al cliente de este pago.');
+  if (!receipt?.held) throw new Error(t('Este pago ya está repartido.'));
+  if (!client?.id) throw new Error(t('No encontramos al cliente de este pago.'));
   const day = receipt.date || today();
   await voidReceipt(receipt, author, {
     date: day,
@@ -1118,14 +1122,14 @@ export async function reversePayment(id, index, author) {
 
   return runTransaction(db, async (tx) => {
     const snap = await tx.get(ref);
-    if (!snap.exists()) throw new Error('La factura ya no existe.');
+    if (!snap.exists()) throw new Error(t('La factura ya no existe.'));
 
     const data = snap.data();
     const clientRef = data.clientId ? doc(db, 'clients', data.clientId) : null;
     const clientSnap = clientRef ? await tx.get(clientRef) : null;
     const payments = [...paymentsOf(data)];
     const [removed] = payments.splice(index, 1);
-    if (!removed) throw new Error('Ese pago ya no existe.');
+    if (!removed) throw new Error(t('Ese pago ya no existe.'));
 
     const paid = round2(payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0));
     const settled = paid >= (Number(data.amount) || 0) - 0.005;

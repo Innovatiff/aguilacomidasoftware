@@ -29,21 +29,22 @@ import { emptyClient, tagsInUse } from '../data/clients.js';
 import { KINDS, changeWords } from '../lib/schedule.js';
 import { PAYMENT_METHODS, paymentMethodMeta, clientStatusMeta } from '../lib/model.js';
 import {
-  today, addDays, daysBetween, formatDay, formatDayLong, weekdayName, capitalize,
+  today, addDays, daysBetween, formatDay, formatDayLong, capitalize,
 } from '../lib/dates.js';
 import { money, plural, fold } from '../lib/format.js';
 import { tierFor } from '../lib/pricing.js';
 import { kitchenSpelling } from '../lib/diet.js';
+import { t } from '../lib/i18n.js';
 
 const balanceOf = (client) => billingFor(client)?.balance || 0;
 const where = (client) => [client?.farmName, client?.locationName].filter(Boolean).join(' · ');
 
 /** "lunes 26 de octubre" */
-const dayWords = (day) => `${weekdayName(day)} ${formatDay(day)}`;
+const dayWords = (day) => formatDayLong(day, { year: false });
 
 /** One-time things happen on a day; changes happen from a day. */
-const onTitle = (kind) => (kind === 'start' ? '¿Qué día empieza?'
-  : KINDS[kind]?.ends ? '¿Desde qué día?' : '¿Qué día?');
+const onTitle = (kind) => (kind === 'start' ? t('¿Qué día empieza?')
+  : KINDS[kind]?.ends ? t('¿Desde qué día?') : t('¿Qué día?'));
 
 /**
  * @param {object}   options
@@ -55,7 +56,7 @@ export function openScheduleFlow({ client = null, author, onClose } = {}) {
   const preset = client;
 
   return runFlow({
-    title: 'Programar',
+    title: t('Programar'),
     state: {
       kind: '', client: preset,
       meals: 0, days: null, farmId: '', locationId: '', farmQuery: '',
@@ -81,11 +82,10 @@ export function openScheduleFlow({ client = null, author, onClose } = {}) {
     },
     commit: (s) => commit(s, author),
     done: (s) => ({
-      what: 'Programado',
+      what: t('Programado'),
       who: `${s.kind === 'start' ? s.name.trim() : s.client?.name || s.name || ''} · `
         + `${capitalize(dayWords(s.on))}`,
-      note: 'Lo aplica solo la primera computadora que se abra ese día. Está en el Programador, '
-        + 'donde se puede cancelar antes.',
+      note: t('Lo aplica solo la primera computadora que se abra ese día. Está en el Programador, donde se puede cancelar antes.'),
     }),
     onExit: () => onClose?.(),
   });
@@ -95,8 +95,8 @@ export function openScheduleFlow({ client = null, author, onClose } = {}) {
   function kindStep() {
     return {
       id: 'kind',
-      title: '¿Qué quieres programar?',
-      hint: 'Se aplica solo en el día que escojas. Hasta entonces no cambia nada.',
+      title: t('¿Qué quieres programar?'),
+      hint: t('Se aplica solo en el día que escojas. Hasta entonces no cambia nada.'),
       ready: (st) => !!st.kind,
       // Compact and five across, so all thirteen fit a 768px screen without
       // scrolling: icon on the left, the name and its line beside it.
@@ -121,7 +121,7 @@ export function openScheduleFlow({ client = null, author, onClose } = {}) {
   function whoStep() {
     return {
       id: 'who',
-      title: '¿De quién?',
+      title: t('¿De quién?'),
       ready: (st) => !!st.client,
       build: (st, api) => posFind({
         clients: store.clients,
@@ -139,7 +139,7 @@ export function openScheduleFlow({ client = null, author, onClose } = {}) {
     switch (s.kind) {
       case 'meals': return [{
         id: 'meals',
-        title: '¿Cuántas comidas al día, desde ese día?',
+        title: t('¿Cuántas comidas al día, desde ese día?'),
         ready: (st) => st.meals > 0,
         build: (st, api) => posPick({
           columns: 3,
@@ -148,16 +148,16 @@ export function openScheduleFlow({ client = null, author, onClose } = {}) {
           advance: api.next,
           options: [1, 2, 3].map((n) => ({
             value: n, label: String(n),
-            sub: Number(c?.mealsPerDay) === n ? 'Lo que tiene ahora'
-              : `${money(tierFor(store.pricing, n)?.price || 0)} / quincena`,
+            sub: Number(c?.mealsPerDay) === n ? t('Lo que tiene ahora')
+              : t('{price} / quincena', { price: money(tierFor(store.pricing, n)?.price || 0) }),
           })),
         }),
       }];
 
       case 'days': return [{
         id: 'days',
-        title: '¿Qué días come, desde ese día?',
-        hint: 'Toca un día para quitarlo o ponerlo.',
+        title: t('¿Qué días come, desde ese día?'),
+        hint: t('Toca un día para quitarlo o ponerlo.'),
         ready: (st) => (st.days ?? c?.deliveryDays ?? []).length > 0,
         build: (st, api) => posDays({
           days: st.days ?? c?.deliveryDays ?? [1, 2, 3, 4, 5, 6],
@@ -165,31 +165,31 @@ export function openScheduleFlow({ client = null, author, onClose } = {}) {
         }),
       }];
 
-      case 'location': return [farmStep('¿A qué farma se cambia?'), placeStep(s, '¿A qué ubicación?')];
+      case 'location': return [farmStep(t('¿A qué farma se cambia?')), placeStep(s, t('¿A qué ubicación?'))];
 
       case 'diet': return [dietStep()];
 
       case 'info': return [{
         id: 'info',
-        title: '¿Qué cambia en sus datos?',
-        hint: 'Cambia solo lo que escribas distinto.',
+        title: t('¿Qué cambia en sus datos?'),
+        hint: t('Cambia solo lo que escribas distinto.'),
         ready: (st) => (st.phone !== undefined && st.phone !== (c?.phone || ''))
           || (st.notes !== undefined && st.notes !== (c?.notes || '')),
         build: (st, api) => h('div.stack.stack-4',
-          posField('Teléfono', posText({
-            value: st.phone ?? c?.phone ?? '', placeholder: 'Su teléfono', inputmode: 'tel',
+          posField(t('Teléfono'), posText({
+            value: st.phone ?? c?.phone ?? '', placeholder: t('Su teléfono'), inputmode: 'tel',
             onChange: (v) => { st.phone = v; api.revalidate(); },
           })),
-          posField('Notas para la cocina', posText({
-            value: st.notes ?? c?.notes ?? '', placeholder: 'Ej. Dejar la comida con el encargado',
+          posField(t('Notas para la cocina'), posText({
+            value: st.notes ?? c?.notes ?? '', placeholder: t('Ej. Dejar la comida con el encargado'),
             onChange: (v) => { st.notes = v; api.revalidate(); },
           }))),
       }];
 
       case 'status': return [{
         id: 'status',
-        title: '¿Cómo queda desde ese día?',
-        hint: c ? `Ahora está ${clientStatusMeta(c.status).label.toLowerCase()}.` : '',
+        title: t('¿Cómo queda desde ese día?'),
+        hint: c ? t('Ahora está {status}.', { status: clientStatusMeta(c.status).label.toLowerCase() }) : '',
         ready: (st) => !!st.status,
         build: (st, api) => posPick({
           columns: 3,
@@ -197,9 +197,9 @@ export function openScheduleFlow({ client = null, author, onClose } = {}) {
           onPick: (v) => { st.status = v; api.revalidate(); },
           advance: api.next,
           options: [
-            { value: 'paused', label: 'En pausa', sub: 'Se va un tiempo', icon: 'pause' },
-            { value: 'active', label: 'Activo', sub: 'Vuelve a comer', icon: 'play' },
-            { value: 'inactive', label: 'Ya no pide', sub: 'Se da de baja', icon: 'ban' },
+            { value: 'paused', label: t('En pausa'), sub: t('Se va un tiempo'), icon: 'pause' },
+            { value: 'active', label: t('Activo'), sub: t('Vuelve a comer'), icon: 'play' },
+            { value: 'inactive', label: t('Ya no pide'), sub: t('Se da de baja'), icon: 'ban' },
           ],
         }),
       }];
@@ -207,19 +207,19 @@ export function openScheduleFlow({ client = null, author, onClose } = {}) {
       case 'start': return [
         {
           id: 'name',
-          title: '¿Cómo se llama?',
-          hint: 'Se da de alta hoy, en pausa, y empieza solo el día que escojas.',
+          title: t('¿Cómo se llama?'),
+          hint: t('Se da de alta hoy, en pausa, y empieza solo el día que escojas.'),
           ready: (st) => st.name.trim().length > 1,
-          build: (st, api) => posField('Nombre completo', posText({
-            value: st.name, placeholder: 'Ej. José Hernández',
+          build: (st, api) => posField(t('Nombre completo'), posText({
+            value: st.name, placeholder: t('Ej. José Hernández'),
             onChange: (v) => { st.name = v; api.revalidate(); },
           })),
         },
-        farmStep('¿En qué farma está?'),
-        placeStep(s, '¿En qué ubicación?'),
+        farmStep(t('¿En qué farma está?')),
+        placeStep(s, t('¿En qué ubicación?')),
         {
           id: 'meals',
-          title: '¿Cuántas comidas al día?',
+          title: t('¿Cuántas comidas al día?'),
           ready: (st) => st.meals > 0,
           build: (st, api) => posPick({
             columns: 3,
@@ -227,7 +227,7 @@ export function openScheduleFlow({ client = null, author, onClose } = {}) {
             onPick: (v) => { st.meals = v; api.revalidate(); },
             advance: api.next,
             options: [1, 2, 3].map((n) => ({
-              value: n, label: String(n), sub: `${money(tierFor(store.pricing, n)?.price || 0)} / quincena`,
+              value: n, label: String(n), sub: t('{price} / quincena', { price: money(tierFor(store.pricing, n)?.price || 0) }),
             })),
           }),
         },
@@ -236,31 +236,31 @@ export function openScheduleFlow({ client = null, author, onClose } = {}) {
       case 'farm': return [
         {
           id: 'name',
-          title: '¿Cómo se llama la farma?',
+          title: t('¿Cómo se llama la farma?'),
           ready: (st) => st.name.trim().length > 1,
-          build: (st, api) => posField('Nombre de la farma', posText({
-            value: st.name, placeholder: 'Ej. Mucci Farms',
+          build: (st, api) => posField(t('Nombre de la farma'), posText({
+            value: st.name, placeholder: t('Ej. Mucci Farms'),
             onChange: (v) => { st.name = v; api.revalidate(); },
           })),
         },
-        namesStep({ title: '¿Qué ubicaciones tiene?', label: 'Ubicación', optional: true }),
+        namesStep({ title: t('¿Qué ubicaciones tiene?'), label: t('Ubicación'), optional: true }),
       ];
 
       case 'place': return [
-        farmStep('¿En qué farma?'),
-        namesStep({ title: '¿Qué ubicaciones nuevas?', label: 'Ubicación' }),
+        farmStep(t('¿En qué farma?')),
+        namesStep({ title: t('¿Qué ubicaciones nuevas?'), label: t('Ubicación') }),
       ];
 
       case 'charge': return [
-        moneyStep('¿De cuánto es la deuda?'),
-        textStep({ id: 'reason', key: 'reason', title: '¿De qué es?', label: 'Motivo', placeholder: 'Ej. Contenedor que no regresó' }),
+        moneyStep(t('¿De cuánto es la deuda?')),
+        textStep({ id: 'reason', key: 'reason', title: t('¿De qué es?'), label: t('Motivo'), placeholder: t('Ej. Contenedor que no regresó') }),
       ];
 
       case 'payment': return [
-        moneyStep('¿Cuánto paga ese día?'),
+        moneyStep(t('¿Cuánto paga ese día?')),
         {
           id: 'method',
-          title: '¿Cómo paga?',
+          title: t('¿Cómo paga?'),
           ready: (st) => !!st.method,
           build: (st, api) => posPick({
             columns: 3,
@@ -275,25 +275,25 @@ export function openScheduleFlow({ client = null, author, onClose } = {}) {
       case 'balance': return [
         {
           id: 'target',
-          title: '¿Cuánto debe quedar debiendo ese día?',
-          hint: c ? `Hoy debe ${money(balanceOf(c))}.` : '',
+          title: t('¿Cuánto debe quedar debiendo ese día?'),
+          hint: c ? t('Hoy debe {amount}.', { amount: money(balanceOf(c)) }) : '',
           ready: (st) => st.target !== null && st.target >= 0,
           build: (st, api) => posMoney({
             value: st.target ?? '',
             onChange: (v) => { st.target = v; api.revalidate(); },
-            quick: [{ label: 'En cero', value: 0 }],
+            quick: [{ label: t('En cero'), value: 0 }],
           }),
         },
-        textStep({ id: 'note', key: 'note', title: '¿Por qué?', label: 'Motivo', placeholder: 'Ej. Descuento acordado' }),
+        textStep({ id: 'note', key: 'note', title: t('¿Por qué?'), label: t('Motivo'), placeholder: t('Ej. Descuento acordado') }),
       ];
 
       case 'reminder': return [
-        textStep({ id: 'note', key: 'note', title: '¿Qué hay que recordar?', label: 'Recordatorio',
-          placeholder: 'Ej. Dijo que paga el viernes' }),
+        textStep({ id: 'note', key: 'note', title: t('¿Qué hay que recordar?'), label: t('Recordatorio'),
+          placeholder: t('Ej. Dijo que paga el viernes') }),
         {
           id: 'amount',
-          title: '¿De cuánto? (si es de dinero)',
-          hint: 'Si no es de dinero, deja 0 y sigue.',
+          title: t('¿De cuánto? (si es de dinero)'),
+          hint: t('Si no es de dinero, deja 0 y sigue.'),
           build: (st, api) => posMoney({
             value: st.amount || '', onChange: (v) => { st.amount = v; api.revalidate(); }, quick: [],
           }),
@@ -309,7 +309,7 @@ export function openScheduleFlow({ client = null, author, onClose } = {}) {
     return {
       id: 'farm',
       title,
-      hint: 'Escribe parte del nombre.',
+      hint: t('Escribe parte del nombre.'),
       ready: (st) => !!st.farmId,
       build: (st, api) => {
         const results = h('div');
@@ -331,14 +331,14 @@ export function openScheduleFlow({ client = null, author, onClose } = {}) {
                 sub: plural((farm.locations || []).length, 'ubicación', 'ubicaciones'),
               })),
             })
-            : posNote('Ninguna farma se llama así.', 'warn'));
+            : posNote(t('Ninguna farma se llama así.'), 'warn'));
         };
         const box = posText({
-          value: st.farmQuery, placeholder: 'Ej. Mucci', autocomplete: 'off',
+          value: st.farmQuery, placeholder: t('Ej. Mucci'), autocomplete: 'off',
           onChange: (v) => { st.farmQuery = v; paint(); },
         });
         paint();
-        return h('div.stack.stack-3', posField('Farma', box), results);
+        return h('div.stack.stack-3', posField(t('Farma'), box), results);
       },
     };
   }
@@ -348,7 +348,7 @@ export function openScheduleFlow({ client = null, author, onClose } = {}) {
     return {
       id: 'place',
       title,
-      hint: farm ? `Ubicaciones de ${farm.name}.` : '',
+      hint: farm ? t('Ubicaciones de {farm}.', { farm: farm.name }) : '',
       ready: (st) => !!st.locationId,
       build: (st, api) => ((farm?.locations || []).length
         ? posPick({
@@ -358,10 +358,10 @@ export function openScheduleFlow({ client = null, author, onClose } = {}) {
           advance: api.next,
           options: farm.locations.map((one) => ({
             value: one.id, label: one.name,
-            sub: s.client?.farmId === farm.id && s.client?.locationId === one.id ? 'Donde está ahora' : '',
+            sub: s.client?.farmId === farm.id && s.client?.locationId === one.id ? t('Donde está ahora') : '',
           })),
         })
-        : posNote('Esa farma no tiene ubicaciones. Prográmale una primero, o agrégala en Ranchos.', 'bad')),
+        : posNote(t('Esa farma no tiene ubicaciones. Prográmale una primero, o agrégala en Ranchos.'), 'bad')),
     };
   }
 
@@ -369,8 +369,8 @@ export function openScheduleFlow({ client = null, author, onClose } = {}) {
   function dietStep() {
     return {
       id: 'diet',
-      title: '¿Qué cambia en lo que no puede comer?',
-      hint: 'Toca uno de los suyos para quitarlo; escribe para agregar.',
+      title: t('¿Qué cambia en lo que no puede comer?'),
+      hint: t('Toca uno de los suyos para quitarlo; escribe para agregar.'),
       ready: (st) => st.add.length > 0 || st.remove.length > 0,
       build: (st, api) => {
         const now = h('div.posdiet');
@@ -388,16 +388,16 @@ export function openScheduleFlow({ client = null, author, onClose } = {}) {
                   st.remove = out ? st.remove.filter((one) => one !== tag) : [...st.remove, tag];
                   paint(); api.revalidate();
                 },
-              }, out ? icon('check') : icon('x'), out ? `Ya puede: ${tag}` : tag);
+              }, out ? icon('check') : icon('x'), out ? t('Ya puede: {tag}', { tag }) : tag);
             })
-            : h('p.pos__hint', 'Ahora no tiene nada.'));
+            : h('p.pos__hint', t('Ahora no tiene nada.')));
           mount(added, st.add.map((tag) => h('button.posdiet__tag.is-new', {
             type: 'button',
             onclick: () => { st.add = st.add.filter((one) => one !== tag); paint(); api.revalidate(); },
           }, icon('x'), tag)));
         };
         const box = posText({
-          value: '', placeholder: 'Ej. No pasta',
+          value: '', placeholder: t('Ej. No pasta'),
           onkeydown: (event) => { if (event.key === 'Enter') { event.preventDefault(); add(); } },
           onChange: () => {},
         });
@@ -411,10 +411,10 @@ export function openScheduleFlow({ client = null, author, onClose } = {}) {
         }
         paint();
         return h('div',
-          posLabel('Lo que tiene ahora'), now,
+          posLabel(t('Lo que tiene ahora')), now,
           h('div.posadd.posdiet__add',
-            h('div.grow', posField('Agregar', box)),
-            h('button.posbtn.posbtn--add', { type: 'button', onclick: add }, icon('plus'), 'Agregar')),
+            h('div.grow', posField(t('Agregar'), box)),
+            h('button.posbtn.posbtn--add', { type: 'button', onclick: add }, icon('plus'), t('Agregar'))),
           added);
       },
     };
@@ -425,12 +425,12 @@ export function openScheduleFlow({ client = null, author, onClose } = {}) {
     return {
       id: 'names',
       title,
-      hint: 'Escribe una y toca Agregar. Casa 1, Bloque Norte, Invernadero 3…',
+      hint: t('Escribe una y toca Agregar. Casa 1, Bloque Norte, Invernadero 3…'),
       ready: (st) => optional || st.places.length > 0,
       build: (st, api) => {
         const list = h('div.posplaces');
         const box = posText({
-          value: '', placeholder: 'Ej. Casa 1',
+          value: '', placeholder: t('Ej. Casa 1'),
           onkeydown: (event) => { if (event.key === 'Enter') { event.preventDefault(); add(); } },
           onChange: () => {},
         });
@@ -446,14 +446,14 @@ export function openScheduleFlow({ client = null, author, onClose } = {}) {
           h('span.posplace__n', String(i + 1)),
           h('span.posplace__name', name),
           h('button.posplace__x', {
-            type: 'button', 'aria-label': `Quitar ${name}`,
+            type: 'button', 'aria-label': t('Quitar {name}', { name }),
             onclick: () => { st.places = st.places.filter((one) => one !== name); paint(); api.revalidate(); },
           }, icon('x')))));
         paint();
         return h('div',
           h('div.posadd',
             h('div.grow', posField(label, box)),
-            h('button.posbtn.posbtn--add', { type: 'button', onclick: add }, icon('plus'), 'Agregar')),
+            h('button.posbtn.posbtn--add', { type: 'button', onclick: add }, icon('plus'), t('Agregar'))),
           list);
       },
     };
@@ -467,7 +467,7 @@ export function openScheduleFlow({ client = null, author, onClose } = {}) {
       build: (st, api) => posMoney({
         value: st.amount || '',
         onChange: (v) => { st.amount = v; api.revalidate(); },
-        quick: st.client ? [{ label: `Lo que debe hoy: ${money(balanceOf(st.client))}`, value: balanceOf(st.client) }]
+        quick: st.client ? [{ label: t('Lo que debe hoy: {amount}', { amount: money(balanceOf(st.client)) }), value: balanceOf(st.client) }]
           .filter((one) => one.value > 0) : [],
       }),
     };
@@ -490,11 +490,11 @@ export function openScheduleFlow({ client = null, author, onClose } = {}) {
     return {
       id: 'on',
       title: onTitle(s.kind),
-      hint: 'Toca el día en el calendario.',
+      hint: t('Toca el día en el calendario.'),
       ready: (st) => !!st.on && st.on >= today(),
       build: (st, api) => posCalendar({
         value: st.on || undefined,
-        onTag: 'ese día',
+        onTag: t('ese día'),
         // A start, not a span: nothing before it is shaded, and the day after
         // it is not "the morning it goes back".
         span: false,
@@ -506,9 +506,9 @@ export function openScheduleFlow({ client = null, author, onClose } = {}) {
         },
         note: (v) => (v
           ? [capitalize(dayWords(v)), v === today()
-            ? 'Es hoy: se aplica en cuanto lo guardes'
-            : `En ${plural(daysBetween(today(), v), 'día', 'días')}`]
-          : ['Toca un día', 'Hoy o cualquier día que venga']),
+            ? t('Es hoy: se aplica en cuanto lo guardes')
+            : t('En {days}', { days: plural(daysBetween(today(), v), 'día', 'días') })]
+          : [t('Toca un día'), t('Hoy o cualquier día que venga')]),
       }),
     };
   }
@@ -517,7 +517,7 @@ export function openScheduleFlow({ client = null, author, onClose } = {}) {
     const start = s.kind === 'start';
     return {
       id: 'ends',
-      title: start ? '¿Hasta cuándo come?' : '¿Hasta cuándo?',
+      title: start ? t('¿Hasta cuándo come?') : t('¿Hasta cuándo?'),
       ready: (st) => !!st.ends,
       build: (st, api) => posPick({
         columns: 2,
@@ -525,8 +525,8 @@ export function openScheduleFlow({ client = null, author, onClose } = {}) {
         onPick: (v) => { st.ends = v; if (v === 'no') st.until = ''; api.refresh(); },
         advance: api.next,
         options: [
-          { value: 'no', label: start ? 'Sin fecha de fin' : 'Se queda así', sub: start ? 'Come hasta que se le pause' : 'Desde ese día en adelante', icon: 'check' },
-          { value: 'yes', label: 'Hasta un día', sub: start ? 'Su último día; al siguiente queda en pausa' : 'Después regresa a como estaba', icon: 'calendar' },
+          { value: 'no', label: start ? t('Sin fecha de fin') : t('Se queda así'), sub: start ? t('Come hasta que se le pause') : t('Desde ese día en adelante'), icon: 'check' },
+          { value: 'yes', label: t('Hasta un día'), sub: start ? t('Su último día; al siguiente queda en pausa') : t('Después regresa a como estaba'), icon: 'calendar' },
         ],
       }),
     };
@@ -536,19 +536,19 @@ export function openScheduleFlow({ client = null, author, onClose } = {}) {
     const start = s.kind === 'start';
     return {
       id: 'until',
-      title: start ? '¿Cuál es su último día?' : '¿Cuál es el último día con el cambio?',
-      hint: start ? 'Al día siguiente queda en pausa solo.' : 'Al día siguiente regresa a como estaba.',
+      title: start ? t('¿Cuál es su último día?') : t('¿Cuál es el último día con el cambio?'),
+      hint: start ? t('Al día siguiente queda en pausa solo.') : t('Al día siguiente regresa a como estaba.'),
       ready: (st) => !!st.until && st.until >= st.on,
       build: (st, api) => posCalendar({
         value: st.until || undefined,
         min: st.on || today(),
         onPick: (v) => { st.until = v; api.revalidate(); },
-        afterTag: start ? 'pausa' : 'regresa',
+        afterTag: start ? t('pausa') : t('regresa'),
         note: (v) => (v
-          ? [`Último día: ${dayWords(v)}`, start
-            ? `El ${dayWords(addDays(v, 1))} queda en pausa`
-            : `El ${dayWords(addDays(v, 1))} regresa a como estaba`]
-          : ['Toca el último día', `Desde el ${dayWords(st.on)}`]),
+          ? [t('Último día: {day}', { day: dayWords(v) }), start
+            ? t('El {day} queda en pausa', { day: dayWords(addDays(v, 1)) })
+            : t('El {day} regresa a como estaba', { day: dayWords(addDays(v, 1)) })]
+          : [t('Toca el último día'), t('Desde el {day}', { day: dayWords(st.on) })]),
       }),
     };
   }
@@ -558,38 +558,39 @@ export function openScheduleFlow({ client = null, author, onClose } = {}) {
   function confirmStep() {
     return {
       id: 'confirm',
-      title: 'Revisa lo que se va a programar',
+      title: t('Revisa lo que se va a programar'),
       last: true,
-      next: 'Programar',
+      next: t('Programar'),
       build: (st) => {
         const preview = { kind: st.kind, value: valueOf(st), farmName: farmById(st.farmId)?.name || '' };
         const kindMeta = KINDS[st.kind];
+        const after = { day: st.until ? dayWords(addDays(st.until, 1)) : '' };
         const rows = [
-          ['Qué', kindMeta.label],
+          [t('Qué'), kindMeta.label],
           st.kind === 'start'
-            ? ['Quién', `${st.name.trim()} · ${[farmById(st.farmId)?.name,
+            ? [t('Quién'), `${st.name.trim()} · ${[farmById(st.farmId)?.name,
               (farmById(st.farmId)?.locations || []).find((one) => one.id === st.locationId)?.name].filter(Boolean).join(' · ')}`]
-            : st.client ? ['Quién', st.client.name] : null,
-          st.kind === 'start' ? ['Comidas', `${st.meals} al día`] : ['Cambio', capitalize(changeWords(preview, store.farms))],
-          [st.kind === 'start' ? 'Empieza' : kindMeta.ends ? 'Desde' : 'Día', capitalize(formatDayLong(st.on)), { total: true }],
+            : st.client ? [t('Quién'), st.client.name] : null,
+          st.kind === 'start' ? [t('Comidas'), t('{meals} al día', { meals: st.meals })] : [t('Cambio'), capitalize(changeWords(preview, store.farms))],
+          [st.kind === 'start' ? t('Empieza') : kindMeta.ends ? t('Desde') : t('Día'), capitalize(formatDayLong(st.on)), { total: true }],
           kindMeta.ends
-            ? ['Hasta', st.until
-              ? `${capitalize(formatDayLong(st.until))} · el ${dayWords(addDays(st.until, 1))} ${st.kind === 'start' ? 'queda en pausa' : 'regresa'}`
-              : 'Se queda así']
+            ? [t('Hasta'), st.until
+              ? `${capitalize(formatDayLong(st.until))} · ${st.kind === 'start' ? t('el {day} queda en pausa', after) : t('el {day} regresa', after)}`
+              : t('Se queda así')]
             : null,
         ];
         return h('div',
           posSummary(rows),
           st.kind === 'payment'
-            ? posNote(`Ese día se registra el pago de ${money(st.amount)} (${paymentMethodMeta(st.method).label}) con su `
-              + 'recibo, sin que nadie cobre en el mostrador: úsalo solo para dinero que llega solo, como un '
-              + 'descuento de nómina.', 'warn')
+            ? posNote(t('Ese día se registra el pago de {amount} ({method}) con su recibo, sin que nadie cobre en el mostrador: úsalo solo para dinero que llega solo, como un descuento de nómina.', {
+              amount: money(st.amount), method: paymentMethodMeta(st.method).label,
+            }), 'warn')
             : null,
           st.kind === 'start'
-            ? posNote('Se da de alta hoy, en pausa: ya sale en Clientes como «Empieza el '
-              + `${formatDay(st.on)}» y la cocina puede acomodar su ubicación. No se empaca ni se cobra antes.`, 'ok')
-            : posNote('Lo aplica solo la primera computadora que se abra ese día —la de la oficina o la de la '
-              + 'cocina—. Hasta entonces no cambia nada, y se puede cancelar en el Programador.', 'ok'));
+            ? posNote(t('Se da de alta hoy, en pausa: ya sale en Clientes como «Empieza el {day}» y la cocina puede acomodar su ubicación. No se empaca ni se cobra antes.', {
+              day: formatDay(st.on),
+            }), 'ok')
+            : posNote(t('Lo aplica solo la primera computadora que se abra ese día —la de la oficina o la de la cocina—. Hasta entonces no cambia nada, y se puede cancelar en el Programador.'), 'ok'));
       },
     };
   }

@@ -28,6 +28,7 @@ import {
   DEFAULT_DELIVERY_DAYS, DEFAULT_GRACE_DAYS, DEFAULT_PAY_EVERY, payDayOnOrAfter,
 } from '../lib/billing.js';
 import { matches } from '../lib/format.js';
+import { t } from '../lib/i18n.js';
 
 const farmsRef = () => collection(db, 'farms');
 const clientsRef = () => collection(db, 'clients');
@@ -114,7 +115,7 @@ export function watchFarmClients(farmId, onData, onError) {
 
 export async function createFarm(data, author) {
   const name = String(data.name || '').trim();
-  if (!name) throw new Error('Escribe el nombre del rancho.');
+  if (!name) throw new Error(t('Escribe el nombre del rancho.'));
 
   const ref = doc(farmsRef());
   await saved(setDoc(ref, {
@@ -188,7 +189,7 @@ export async function setFarmStatus(farmId, status) {
 export async function deleteFarm(farmId) {
   const roster = await getDocs(query(clientsRef(), where('farmId', '==', farmId)));
   if (!roster.empty) {
-    throw new Error(`Primero mueve o elimina los ${roster.size} clientes de este rancho.`);
+    throw new Error(t('Primero mueve o elimina los {count} clientes de este rancho.', { count: roster.size }));
   }
   await deleteDoc(doc(db, 'farms', farmId));
   logMovement({ kind: 'farma', text: 'Borró una farma sin clientes', farmId });
@@ -198,9 +199,9 @@ export async function deleteFarm(farmId) {
 
 export async function addLocation(farm, name) {
   const label = String(name || '').trim();
-  if (!label) throw new Error('Escribe el nombre de la ubicación.');
+  if (!label) throw new Error(t('Escribe el nombre de la ubicación.'));
   if ((farm.locations || []).some((loc) => sameLabel(loc.name, label))) {
-    throw new Error('Ese rancho ya tiene una ubicación con ese nombre.');
+    throw new Error(t('Ese rancho ya tiene una ubicación con ese nombre.'));
   }
 
   const locations = [...(farm.locations || []), { id: newLocationId(), name: label }];
@@ -217,10 +218,10 @@ export async function addLocation(farm, name) {
 export async function addLocations(farm, names) {
   const have = [...(farm?.locations || [])];
   const labels = (names || []).map((name) => String(name || '').trim().replace(/\s+/g, ' ')).filter(Boolean);
-  if (!labels.length) throw new Error('Escribe el nombre de la ubicación.');
+  if (!labels.length) throw new Error(t('Escribe el nombre de la ubicación.'));
   for (const label of labels) {
     if (have.some((loc) => sameLabel(loc.name, label))) {
-      throw new Error(`${farm.name} ya tiene una ubicación que se llama ${label}.`);
+      throw new Error(t('{farm} ya tiene una ubicación que se llama {name}.', { farm: farm.name, name: label }));
     }
     have.push({ id: newLocationId(), name: label });
   }
@@ -235,9 +236,9 @@ export async function addLocations(farm, names) {
 /** Renames a location and carries the new label to everyone standing in it. */
 export async function renameLocation(farm, locationId, name) {
   const label = String(name || '').trim();
-  if (!label) throw new Error('Escribe el nombre de la ubicación.');
+  if (!label) throw new Error(t('Escribe el nombre de la ubicación.'));
   if ((farm.locations || []).some((loc) => loc.id !== locationId && sameLabel(loc.name, label))) {
-    throw new Error('Ese rancho ya tiene una ubicación con ese nombre.');
+    throw new Error(t('Ese rancho ya tiene una ubicación con ese nombre.'));
   }
 
   const locations = (farm.locations || []).map(
@@ -264,7 +265,7 @@ export async function removeLocation(farm, locationId) {
     where('locationId', '==', locationId),
   ));
   if (!standing.empty) {
-    throw new Error(`Primero mueve los ${standing.size} clientes que están en esa ubicación.`);
+    throw new Error(t('Primero mueve los {count} clientes que están en esa ubicación.', { count: standing.size }));
   }
 
   const locations = (farm.locations || []).filter((loc) => loc.id !== locationId);

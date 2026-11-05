@@ -36,48 +36,49 @@ import {
 import { matchesSearch, setClientStatus, setEndsOn } from '../data/clients.js';
 import { issueAll, byFarm } from '../data/cycles.js';
 import { postSystemMessage } from '../data/chat.js';
-import { owedBreakdown } from '../lib/billing.js';
+import { owedWords } from '../lib/billing-words.js';
 import { money, moneyFull, number, plural } from '../lib/format.js';
 import {
   formatDay, formatDayLong, today, addDays, humanDelta, daysBetween,
 } from '../lib/dates.js';
 import { errorText } from '../firebase.js';
+import { t, inSpanish } from '../lib/i18n.js';
 
 /** What each state looks like on a row, and what to call it. */
 const STATE = {
-  overdue:  { label: 'Vencido',     tone: 'bad' },
-  due:      { label: 'Por pagar',   tone: 'warn' },
+  overdue:  { label: t('Vencido'),     tone: 'bad' },
+  due:      { label: t('Por pagar'),   tone: 'warn' },
   // Money on the fortnight still running — left by the old way of taking
   // payments, and waiting to be put on the fortnight it was really for.
-  advance:  { label: 'Pago adelantado', tone: 'warn' },
-  clear:    { label: 'Al corriente', tone: 'ok' },
-  paused:   { label: 'En pausa',    tone: 'warn' },
-  inactive: { label: 'Inactivo',    tone: 'muted' },
+  advance:  { label: t('Pago adelantado'), tone: 'warn' },
+  clear:    { label: t('Al corriente'), tone: 'ok' },
+  paused:   { label: t('En pausa'),    tone: 'warn' },
+  inactive: { label: t('Inactivo'),    tone: 'muted' },
 };
 
 const FILTERS = [
-  { value: 'all',      label: 'Todos',      match: () => true },
-  { value: 'overdue',  label: 'Vencidos',   match: (row) => row.state === 'overdue' },
-  { value: 'debt',     label: 'Deben',      match: (row) => row.owed > 0 },
+  { value: 'all',      label: t('Todos'),      match: () => true },
+  { value: 'overdue',  label: t('Vencidos'),   match: (row) => row.state === 'overdue' },
+  { value: 'debt',     label: t('Deben'),      match: (row) => row.owed > 0 },
   /*
    * "Al corriente" is owing nothing for food already served — the only kind of
    * paid there is, since nothing is paid ahead. Inicio's tile counts this one
    * and links here; when the two disagreed, the number on the dashboard opened
    * a list that contradicted it.
    */
-  { value: 'current',  label: 'Al corriente',
+  { value: 'current',  label: t('Al corriente'),
     match: (row) => row.serving === 'active' && row.owed <= 0.005 },
-  { value: 'advance',  label: 'Pago adelantado', match: (row) => row.advance },
-  { value: 'active',   label: 'Activos',    match: (row) => row.serving === 'active' },
-  { value: 'paused',   label: 'En pausa',   match: (row) => row.client.status === 'paused' },
-  { value: 'inactive', label: 'Inactivos',  match: (row) => row.client.status === 'inactive' },
-  { value: 'diet',     label: 'Con restricciones',
+  { value: 'advance',  label: t('Pago adelantado'), match: (row) => row.advance },
+  { value: 'active',   label: t('Activos'),    match: (row) => row.serving === 'active' },
+  { value: 'paused',   label: t('En pausa'),   match: (row) => row.client.status === 'paused' },
+  { value: 'inactive', label: t('Inactivos'),  match: (row) => row.client.status === 'inactive' },
+  { value: 'diet',     label: t('Con restricciones'),
     match: (row) => (row.client.tags || []).length > 0 },
   // The migration list: everybody still on their rancho's placeholder cycle
   // rather than on a day somebody confirmed. It empties as payments come in.
-  { value: 'nocycle',  label: 'Sin periodo fijo',
+  { value: 'nocycle',  label: t('Sin periodo fijo'),
     match: (row) => row.serving !== 'inactive' && !row.cycleSet },
-  { value: 'gaps',     label: 'Revisar',    match: (row) => row.hasGap },
+  { value: 'gaps',     label: t('Revisar'),    match: (row) => row.hasGap },
 ];
 
 /** Filters about money list the biggest debt first; the rest go alphabetical. */
@@ -97,19 +98,19 @@ export function renderClients(context) {
     const failure = firstError();
 
     screen({
-      title: 'Clientes',
-      subtitle: `${store.clients.length} en ${plural(store.farms.length, 'rancho', 'ranchos')}`,
+      title: t('Clientes'),
+      subtitle: t('{clients} en {farms}', { clients: store.clients.length, farms: plural(store.farms.length, 'rancho', 'ranchos') }),
       tab: 'clients',
       actions: [
-        topbarButton('cash', { label: 'Cobrar en la tienda', onClick: () => go('/cobrar') }),
-        topbarButton('receipt', { label: 'Cobranza', onClick: () => go('/billing') }),
+        topbarButton('cash', { label: t('Cobrar en la tienda'), onClick: () => go('/cobrar') }),
+        topbarButton('receipt', { label: t('Cobranza'), onClick: () => go('/billing') }),
       ],
       sticky: h('div.searchbar',
         // Wraps rather than squeezing: on a phone the farm picker drops under
         // the search box instead of leaving it three words wide.
         h('div.row.row--wrap',
           h('div', { style: { flex: '3 1 220px', minWidth: 0 } }, searchInput({
-            placeholder: 'Buscar por nombre, rancho o ubicación…',
+            placeholder: t('Buscar por nombre, rancho o ubicación…'),
             value: term,
             onInput: (value) => { term = value; redraw(); },
           })),
@@ -117,7 +118,7 @@ export function renderClients(context) {
             ? h('div', { style: { flex: '1 1 160px', minWidth: 0 } }, select({
                 value: farmId,
                 options: [
-                  { value: '', label: 'Todos los ranchos' },
+                  { value: '', label: t('Todos los ranchos') },
                   ...store.farms.map((farm) => ({ value: farm.id, label: farm.name })),
                 ],
                 onchange: (event) => { farmId = event.target.value; draw(); },
@@ -129,7 +130,7 @@ export function renderClients(context) {
         ? h('div.page__inner', dataErrorCard(failure.error, { onRetry: () => startStore() }))
         : store.loaded.clients ? body() : skeletonRows(6),
       fab: h('button.fab', { type: 'button', onclick: () => go('/clients/new') },
-        icon('userPlus'), 'Cliente'),
+        icon('userPlus'), t('Cliente')),
     });
   };
 
@@ -183,24 +184,24 @@ export function renderClients(context) {
 
       statGrid([
         stat({
-          label: 'Activos',
+          label: t('Activos'),
           value: number(rows.filter((row) => row.serving === 'active').length),
-          foot: `${rows.length} en total`,
+          foot: t('{count} en total', { count: rows.length }),
           onClick: () => { filter = 'active'; draw(); },
         }),
         stat({
-          label: 'Deben',
+          label: t('Deben'),
           value: money(owed, { round: true }),
           foot: `${plural(rows.filter((row) => row.owed > 0).length, 'cliente', 'clientes')}`,
           tone: owed > 0 ? 'accent' : 'ok',
           onClick: () => { filter = 'debt'; draw(); },
         }),
         stat({
-          label: 'Al corriente',
+          label: t('Al corriente'),
           value: number(rows.filter((row) => row.owed <= 0 && row.serving !== 'inactive').length),
           foot: rows.some((row) => row.advance)
-            ? `${plural(rows.filter((row) => row.advance).length, 'con pago adelantado', 'con pago adelantado')} por corregir`
-            : 'Sin deber nada de lo ya servido',
+            ? t('{clients} por corregir', { clients: plural(rows.filter((row) => row.advance).length, 'con pago adelantado', 'con pago adelantado') })
+            : t('Sin deber nada de lo ya servido'),
           tone: 'ok',
           onClick: () => { filter = rows.some((row) => row.advance) ? 'advance' : 'current'; draw(); },
         }),
@@ -224,26 +225,26 @@ export function renderClients(context) {
   function empty() {
     if (term) {
       return emptyState({
-        icon: 'search', title: 'Sin resultados',
-        text: `Ningún cliente coincide con “${term}”.`,
+        icon: 'search', title: t('Sin resultados'),
+        text: t('Ningún cliente coincide con “{term}”.', { term }),
       });
     }
     if (!store.clients.length) {
       return emptyState({
         icon: 'users',
-        title: 'Todavía no hay clientes',
+        title: t('Todavía no hay clientes'),
         text: store.farms.length
-          ? 'Entra a un rancho y registra a su gente ahí.'
-          : 'Registra primero un rancho: los clientes viven dentro de uno.',
-        action: button(store.farms.length ? 'Registrar cliente' : 'Registrar rancho', {
+          ? t('Entra a un rancho y registra a su gente ahí.')
+          : t('Registra primero un rancho: los clientes viven dentro de uno.'),
+        action: button(store.farms.length ? t('Registrar cliente') : t('Registrar rancho'), {
           icon: 'userPlus',
           onClick: () => go(store.farms.length ? '/clients/new' : '/farms/new'),
         }),
       });
     }
     return emptyState({
-      icon: 'check', title: 'Nadie en este filtro',
-      text: filter === 'overdue' ? 'Nadie tiene pagos vencidos.' : 'Prueba con otro filtro.',
+      icon: 'check', title: t('Nadie en este filtro'),
+      text: filter === 'overdue' ? t('Nadie tiene pagos vencidos.') : t('Prueba con otro filtro.'),
     });
   }
 
@@ -268,7 +269,7 @@ export function renderClients(context) {
       h('div.item__main',
         h('div.item__title.truncate', client.name),
         h('div.item__meta.truncate',
-          [client.farmName, client.locationName].filter(Boolean).join(' · ') || 'Sin ubicación'),
+          [client.farmName, client.locationName].filter(Boolean).join(' · ') || t('Sin ubicación')),
         // What they cannot eat, on the row itself: the kitchen asks this far
         // more often than it opens anybody's file.
         tagList(client.tags, { max: 3 })),
@@ -291,35 +292,35 @@ export function renderClients(context) {
   function standing(row) {
     if (row.hasGap) {
       const [first] = [
-        row.gaps.noPlace && 'sin ubicación',
-        row.gaps.noPlan && 'sin precio en su plan',
+        row.gaps.noPlace && t('sin ubicación'),
+        row.gaps.noPlan && t('sin precio en su plan'),
       ].filter(Boolean);
-      return `Revisar: ${first}`;
+      return t('Revisar: {issue}', { issue: first });
     }
     // A last day already written down is the most important thing about this
     // person today: it changes who cooks for them tomorrow.
     if (row.endsOn && row.serving === 'active') {
-      return `Termina ${humanDelta(row.daysLeft)} · ${formatDay(row.endsOn)}`;
+      return t('Termina {when} · {day}', { when: humanDelta(row.daysLeft), day: formatDay(row.endsOn) });
     }
     if (row.owed > 0) {
       const due = row.billing?.dueDate;
-      return `${owedBreakdown(row.billing?.outstanding)} · ${row.state === 'overdue'
-        ? `venció ${humanDelta(daysBetween(today(), due))}`
-        : `vence ${formatDay(due)}`}`;
+      return `${owedWords(row.billing?.outstanding)} · ${row.state === 'overdue'
+        ? t('venció {when}', { when: humanDelta(daysBetween(today(), due)) })
+        : t('vence {day}', { day: formatDay(due) })}`;
     }
     if (row.serving === 'inactive') {
-      return row.endsOn ? `Terminó el ${formatDay(row.endsOn)}` : 'Ya no recibe comida';
+      return row.endsOn ? t('Terminó el {day}', { day: formatDay(row.endsOn) }) : t('Ya no recibe comida');
     }
     if (row.serving === 'paused') {
       // Registered ahead (Programador): the day they start is what anybody asks.
-      if (row.startsOn && row.startsOn > today()) return `Empieza el ${formatDay(row.startsOn)}`;
+      if (row.startsOn && row.startsOn > today()) return t('Empieza el {day}', { day: formatDay(row.startsOn) });
       // Paused by their last day: when it was is what anybody asks.
       return row.endsOn && row.endsOn < today()
-        ? `Terminó el ${formatDay(row.endsOn)} · en pausa`
-        : 'Sin entregas por ahora';
+        ? t('Terminó el {day} · en pausa', { day: formatDay(row.endsOn) })
+        : t('Sin entregas por ahora');
     }
-    if (row.advance) return 'Pago por adelantado · por corregir';
-    return `Paga el ${formatDay(row.payDay)}`;
+    if (row.advance) return t('Pago por adelantado · por corregir');
+    return t('Paga el {day}', { day: formatDay(row.payDay) });
   }
 
   /* --- Automation ---------------------------------------------------------- */
@@ -346,9 +347,11 @@ export function renderClients(context) {
     return actionBanner({
       tone: 'brand', icon: 'receipt',
       title: `${plural(pending.rows.length, 'factura por emitir', 'facturas por emitir')}`,
-      text: `${plural(pending.periods, 'periodo cerrado', 'periodos cerrados')} sin facturar · `
-        + `${moneyFull(pending.total)} que todavía no se cobran.`,
-      cta: 'Revisar y emitir',
+      text: t('{periods} sin facturar · {amount} que todavía no se cobran.', {
+        periods: plural(pending.periods, 'periodo cerrado', 'periodos cerrados'),
+        amount: moneyFull(pending.total),
+      }),
+      cta: t('Revisar y emitir'),
       onClick: reviewPending,
     });
   }
@@ -363,9 +366,8 @@ export function renderClients(context) {
     return actionBanner({
       tone: 'warn', icon: 'alert',
       title: plural(ahead.length, 'cliente con pago por adelantado', 'clientes con pago por adelantado'),
-      text: 'Su pago quedó en una quincena antes de que se sirviera. Va a la quincena anterior, '
-        + 'que es la que pagaron. Revisa y corrige.',
-      cta: 'Revisar',
+      text: t('Su pago quedó en una quincena antes de que se sirviera. Va a la quincena anterior, que es la que pagaron. Revisa y corrige.'),
+      cta: t('Revisar'),
       onClick: () => reviewAdvance(ahead),
     });
   }
@@ -385,8 +387,8 @@ export function renderClients(context) {
     return actionBanner({
       tone: 'bad', icon: 'alert',
       title: `${plural(overdue.length, 'cliente con pago vencido', 'clientes con pago vencido')}`,
-      text: `${money(total)} vencidos. Puedes recordarles a todos de una vez.`,
-      cta: 'Recordar a todos',
+      text: t('{amount} vencidos. Puedes recordarles a todos de una vez.', { amount: money(total) }),
+      cta: t('Recordar a todos'),
       onClick: () => remindAll(overdue),
     });
   }
@@ -410,13 +412,15 @@ export function renderClients(context) {
       + (skipped?.off || 0);
 
     const ok = await sheet({
-      title: 'Periodos sin facturar',
+      title: t('Periodos sin facturar'),
       build: (close) => h('div.stack.stack-4',
-        alert(`Se emitirán ${plural(rows.length, 'factura', 'facturas')} por ${moneyFull(total)}, `
-          + 'al precio del plan de cada quien.', 'brand', 'receipt'),
+        alert(t('Se emitirán {invoices} por {amount}, al precio del plan de cada quien.', {
+          invoices: plural(rows.length, 'factura', 'facturas'), amount: moneyFull(total),
+        }), 'brand', 'receipt'),
         unpriced.length
-          ? alert(`${plural(unpriced.length, 'cliente queda', 'clientes quedan')} fuera por no tener `
-            + 'precio en su plan. Ponlo en Ajustes → Precios.', 'warn')
+          ? alert(t('{clients} fuera por no tener precio en su plan. Ponlo en Ajustes → Precios.', {
+            clients: plural(unpriced.length, 'cliente queda', 'clientes quedan'),
+          }), 'warn')
           : null,
         card(h('div.stack.stack-2', byFarm(rows).map((farm) => h('div.row.row--between',
           h('span.truncate', farm.name),
@@ -426,28 +430,31 @@ export function renderClients(context) {
         // half its work reads as if there was never anything there.
         left
           ? h('div.stack.stack-1',
-              h('div.t-xs.upper.c-faint.w-700', 'Se dejaron fuera'),
+              h('div.t-xs.upper.c-faint.w-700', t('Se dejaron fuera')),
               skipped.paid
-                ? h('p.t-sm.c-soft', `${plural(skipped.paid, 'periodo ya cubierto', 'periodos ya cubiertos')} `
-                  + 'por lo que pagaron antes del sistema.')
+                ? h('p.t-sm.c-soft', t('{periods} por lo que pagaron antes del sistema.', {
+                  periods: plural(skipped.paid, 'periodo ya cubierto', 'periodos ya cubiertos'),
+                }))
                 : null,
               skipped.notYet
-                ? h('p.t-sm.c-soft', `${plural(skipped.notYet, 'periodo anterior', 'periodos anteriores')} `
-                  + 'a la fecha en que esas personas empezaron a comer aquí.')
+                ? h('p.t-sm.c-soft', t('{periods} a la fecha en que esas personas empezaron a comer aquí.', {
+                  periods: plural(skipped.notYet, 'periodo anterior', 'periodos anteriores'),
+                }))
                 : null,
               skipped.ended
-                ? h('p.t-sm.c-soft', `${plural(skipped.ended, 'periodo posterior', 'periodos posteriores')} `
-                  + 'al último día de personas que ya terminaron.')
+                ? h('p.t-sm.c-soft', t('{periods} al último día de personas que ya terminaron.', {
+                  periods: plural(skipped.ended, 'periodo posterior', 'periodos posteriores'),
+                }))
                 : null,
               skipped.off
-                ? h('p.t-sm.c-soft', `${plural(skipped.off, 'periodo', 'periodos')} que empezaron `
-                  + 'con esas personas en pausa.')
+                ? h('p.t-sm.c-soft', t('{periods} que empezaron con esas personas en pausa.', {
+                  periods: plural(skipped.off, 'periodo', 'periodos'),
+                }))
                 : null)
           : null,
 
-        h('p.t-xs.c-faint', 'Sólo se factura a quien recibió comida en el periodo, cada quien '
-          + 'con el suyo: semanal o quincenal. Un periodo que ya tenía factura no se toca.'),
-        button('Emitir las facturas', {
+        h('p.t-xs.c-faint', t('Sólo se factura a quien recibió comida en el periodo, cada quien con el suyo: semanal o quincenal. Un periodo que ya tenía factura no se toca.')),
+        button(t('Emitir las facturas'), {
           variant: 'primary', block: true, onClick: () => close(true),
         })),
     });
@@ -470,10 +477,11 @@ export function renderClients(context) {
   /** One message each, sent in one go, saying what they owe and by when. */
   async function remindAll(overdue) {
     const ok = await confirm({
-      title: 'Recordar a todos',
-      message: `Se enviará un mensaje a ${plural(overdue.length, 'cliente', 'clientes')} con su saldo `
-        + 'y su fecha vencida. Les llega en su app, en su propio chat.',
-      confirmLabel: 'Enviar recordatorios',
+      title: t('Recordar a todos'),
+      message: t('Se enviará un mensaje a {clients} con su saldo y su fecha vencida. Les llega en su app, en su propio chat.', {
+        clients: plural(overdue.length, 'cliente', 'clientes'),
+      }),
+      confirmLabel: t('Enviar recordatorios'),
       icon: 'chat',
     });
     if (!ok) return;
@@ -482,10 +490,10 @@ export function renderClients(context) {
     for (const row of overdue) {
       const due = row.billing?.dueDate;
       try {
-        await postSystemMessage(row.client.id,
+        await postSystemMessage(row.client.id, inSpanish(() =>
           `Recordatorio: tiene ${money(row.owed)} pendientes de pago`
           + `${due ? `, vencidos desde el ${formatDay(due)}` : ''}. `
-          + 'Puede pagar en la cocina cuando guste; ahí mismo le damos su recibo.',
+          + 'Puede pagar en la cocina cuando guste; ahí mismo le damos su recibo.'),
           { meta: { kind: 'reminder', amount: row.owed }, notify: true });
         sent += 1;
       } catch {
@@ -524,19 +532,17 @@ export function renderClients(context) {
       build: (close) => h('div.stack.stack-3',
         h('p.t-sm.c-soft',
           [client.farmName, client.locationName].filter(Boolean).join(' · ')
-          + ` · ${plural(client.mealsPerDay, 'comida', 'comidas')}/día`),
+          + ` · ${t('{meals}/día', { meals: plural(client.mealsPerDay, 'comida', 'comidas') })}`),
 
         row.owed > 0
-          ? alert(`Debe ${money(row.owed)} en ${owedBreakdown(row.billing?.outstanding)}.`,
+          ? alert(t('Debe {amount} en {owed}.', { amount: money(row.owed), owed: owedWords(row.billing?.outstanding) }),
               row.state === 'overdue' ? 'bad' : 'warn')
           : row.advance
-            ? alert('Tiene un pago puesto en una quincena antes de que se sirviera. Aquí no se '
-              + 'paga por adelantado: va a la quincena anterior, que es la que pagó.', 'warn')
-            : alert(`Al corriente. Su quincena en curso se paga el ${formatDay(row.payDay)}, `
-              + 'cuando termine.', 'ok'),
+            ? alert(t('Tiene un pago puesto en una quincena antes de que se sirviera. Aquí no se paga por adelantado: va a la quincena anterior, que es la que pagó.'), 'warn')
+            : alert(t('Al corriente. Su quincena en curso se paga el {day}, cuando termine.', { day: formatDay(row.payDay) }), 'ok'),
 
         row.advance
-          ? button('Revisar y corregir', {
+          ? button(t('Revisar y corregir'), {
               variant: 'soft', block: true, icon: 'check',
               onClick: async () => {
                 close();
@@ -546,23 +552,23 @@ export function renderClients(context) {
             })
           : null,
 
-        button('Cobrar', {
+        button(t('Cobrar'), {
           variant: 'primary', block: true, icon: 'cash',
           onClick: () => { close(); charge(row); },
         }),
-        button('Agregar una deuda', {
+        button(t('Agregar una deuda'), {
           variant: 'ghost', block: true, icon: 'plus',
           onClick: () => { close(); addDebt(row); },
         }),
-        button('Ver ficha completa', {
+        button(t('Ver ficha completa'), {
           variant: 'ghost', block: true, icon: 'users',
           onClick: () => { close(); go(`/clients/${client.id}`); },
         }),
-        button('Enviar mensaje', {
+        button(t('Enviar mensaje'), {
           variant: 'ghost', block: true, icon: 'chat',
           onClick: () => { close(); go(`/chat/${client.id}`); },
         }),
-        button('Editar', {
+        button(t('Editar'), {
           variant: 'ghost', block: true, icon: 'edit',
           onClick: () => { close(); go(`/clients/${client.id}/edit`); },
         }),
@@ -573,15 +579,15 @@ export function renderClients(context) {
         // anybody's file. It is the thing a manager is told at the gate.
         h('div.stack.stack-2',
           h('div.t-xs.upper.c-faint.w-700',
-            client.endsOn ? `Termina el ${formatDay(client.endsOn)}` : 'Último día que se le sirve'),
+            client.endsOn ? t('Termina el {day}', { day: formatDay(client.endsOn) }) : t('Último día que se le sirve')),
           h('div.row.row--wrap', { style: { gap: '6px' } },
-            [['Hoy', 0], ['Mañana', 1], ['En 2 días', 2], ['En 3 días', 3], ['En 7 días', 7]].map(
+            [[t('Hoy'), 0], [t('Mañana'), 1], [t('En 2 días'), 2], [t('En 3 días'), 3], [t('En 7 días'), 7]].map(
               ([label, days]) => button(label, {
                 variant: 'soft', size: 'sm',
                 onClick: async () => { close(); await lastDay(client, addDays(today(), days)); },
               })),
             client.endsOn
-              ? button('Quitar', {
+              ? button(t('Quitar'), {
                   variant: 'ghost', size: 'sm',
                   onClick: async () => { close(); await lastDay(client, ''); },
                 })
@@ -596,8 +602,8 @@ export function renderClients(context) {
     try {
       await setEndsOn(client.id, endsOn);
       toastOk(endsOn
-        ? `${client.name} termina el ${formatDayLong(endsOn)}`
-        : `${client.name} sigue sin fecha de término`);
+        ? t('{name} termina el {day}', { name: client.name, day: formatDayLong(endsOn) })
+        : t('{name} sigue sin fecha de término', { name: client.name }));
     } catch (error) { toastBad(errorText(error)); }
   }
 
@@ -611,28 +617,27 @@ export function renderClients(context) {
   function statusButton(client, close) {
     if (client.status === 'active') {
       return h('div.stack.stack-2',
-        button('Poner en pausa', {
+        button(t('Poner en pausa'), {
           variant: 'ghost', block: true, icon: 'pause',
-          onClick: async () => { close(); await setStatus(client, 'paused', 'Cliente en pausa'); },
+          onClick: async () => { close(); await setStatus(client, 'paused', t('Cliente en pausa')); },
         }),
-        button('Marcar inactivo', {
+        button(t('Marcar inactivo'), {
           variant: 'danger-soft', block: true, icon: 'ban',
           onClick: async () => {
             close();
             if (!await confirm({
-              title: `Marcar inactivo a ${client.name}`,
-              message: 'Deja de aparecer en las rutas y no se le vuelve a facturar. Lo que deba '
-                + 'sigue registrado y su historial se conserva.',
-              confirmLabel: 'Marcar inactivo', tone: 'danger', icon: 'ban',
+              title: t('Marcar inactivo a {name}', { name: client.name }),
+              message: t('Deja de aparecer en las rutas y no se le vuelve a facturar. Lo que deba sigue registrado y su historial se conserva.'),
+              confirmLabel: t('Marcar inactivo'), tone: 'danger', icon: 'ban',
             })) return;
-            await setStatus(client, 'inactive', 'Cliente inactivo');
+            await setStatus(client, 'inactive', t('Cliente inactivo'));
           },
         }));
     }
 
-    return button(client.status === 'paused' ? 'Reactivar' : 'Volver a activar', {
+    return button(client.status === 'paused' ? t('Reactivar') : t('Volver a activar'), {
       variant: 'ok', block: true, icon: 'play',
-      onClick: async () => { close(); await setStatus(client, 'active', 'Cliente activo'); },
+      onClick: async () => { close(); await setStatus(client, 'active', t('Cliente activo')); },
     });
   }
 

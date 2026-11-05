@@ -28,6 +28,7 @@ import { mealsOn } from './pricing.js';
 import { packingLineOf } from './packing.js';
 import { changeWords, comingUp, isClientChange } from './schedule.js';
 import { addDays, dayOf, weekdayOf, today as todayKey } from './dates.js';
+import { t } from './i18n.js';
 
 const startOf = (day) => new Date(`${day}T00:00:00`).getTime();
 
@@ -106,7 +107,7 @@ export function novedades({
   for (const set of comingUp(scheduled, day, days)) {
     items.push({
       kind: 'programado', client: asClient(set), on: set.on, at: startOf(set.on), plates: 0,
-      line: null, text: set.kind === 'start' ? 'empieza' : changeWords(set, farms), until: set.until,
+      line: null, text: set.kind === 'start' ? t('empieza') : changeWords(set, farms), until: set.until,
     });
   }
   for (const set of scheduled) {

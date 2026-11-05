@@ -12,11 +12,12 @@
  */
 
 import { formatDayShort } from './lib/dates.js';
+import { t } from './lib/i18n.js';
 
-export const VERSION = { n: 79, day: '2026-10-29', what: 'Movimientos en Reportes' };
+export const VERSION = { n: 80, day: '2026-11-05', what: t('El panel en inglés y en español') };
 
 /** "Versión 75" — for the corners with room for a word and a number. */
-export const versionShort = () => `Versión ${VERSION.n}`;
+export const versionShort = () => t('Versión {n}', { n: VERSION.n });
 
 /** "21 oct" — the day it was pushed. */
 export const versionDay = () => formatDayShort(VERSION.day);

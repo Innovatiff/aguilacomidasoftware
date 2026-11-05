@@ -30,6 +30,7 @@ import { icon } from '../lib/icons.js';
 import { toastBad } from './overlay.js';
 import { today, formatDayLong, capitalize } from '../lib/dates.js';
 import { errorText } from '../firebase.js';
+import { t } from '../lib/i18n.js';
 
 /**
  * @typedef {object} Step
@@ -73,7 +74,7 @@ export function runFlow({ title, steps, state = {}, subject, commit, done, onExi
   const body = h('div.pos__body');
 
   const backBtn = h('button.posbtn', { type: 'button', onclick: goBack },
-    icon('chevronL'), h('span', 'Atrás'));
+    icon('chevronL'), h('span', t('Atrás')));
   // One handler for the forward button, branching on where the flow is. Two
   // handlers on one button is what caused a confirmation to commit twice.
   const nextBtn = h('button.posbtn.posbtn--go', {
@@ -85,7 +86,7 @@ export function runFlow({ title, steps, state = {}, subject, commit, done, onExi
   const panel = h('div.pos.pos--flow', { role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
     h('header.pos__bar',
       h('button.pos__exit', { type: 'button', onclick: leave },
-        icon('x'), h('span', 'Salir')),
+        icon('x'), h('span', t('Salir'))),
       h('span.pos__mark', icon('eagle')),
       h('span.pos__title', title),
       h('span.pos__day', capitalize(formatDayLong(today()))),
@@ -110,7 +111,7 @@ export function runFlow({ title, steps, state = {}, subject, commit, done, onExi
     const step = list[index];
     shownAt = Date.now();
 
-    stepBadge.textContent = `Paso ${index + 1} de ${list.length}`;
+    stepBadge.textContent = t('Paso {step} de {total}', { step: index + 1, total: list.length });
     stepBadge.hidden = false;
 
     mount(body, h(`div.pos__inner.pos__slide${direction === 'back' ? '.pos__slide--back' : ''}`,
@@ -124,7 +125,7 @@ export function runFlow({ title, steps, state = {}, subject, commit, done, onExi
     // somebody who opened the wrong tile is reaching for anyway — and a big
     // striped slab that does nothing is a button people learn to distrust.
     backBtn.disabled = false;
-    mount(backBtn, icon('chevronL'), h('span', index === 0 ? 'Cancelar' : 'Atrás'));
+    mount(backBtn, icon('chevronL'), h('span', index === 0 ? t('Cancelar') : t('Atrás')));
     paintSubject();
     revalidate();
     focusFirst();
@@ -164,7 +165,7 @@ export function runFlow({ title, steps, state = {}, subject, commit, done, onExi
 
     mount(nextBtn,
       step.last ? icon('check') : null,
-      h('span', step.next || (step.last ? 'Confirmar' : 'Siguiente')),
+      h('span', step.next || (step.last ? t('Confirmar') : t('Siguiente'))),
       step.last ? null : icon('chevronR'));
     nextBtn.className = `posbtn ${step.last ? 'posbtn--done' : 'posbtn--go'}`;
     nextBtn.disabled = busy || !ok;
@@ -210,11 +211,11 @@ export function runFlow({ title, steps, state = {}, subject, commit, done, onExi
 
     busy = true;
     revalidate();
-    mount(nextBtn, h('span.spinner.spinner--light'), h('span', 'Guardando…'));
+    mount(nextBtn, h('span.spinner.spinner--light'), h('span', t('Guardando…')));
 
     try {
       const result = await commit(model);
-      finished = done(model, result) || { what: 'Listo' };
+      finished = done(model, result) || { what: t('Listo') };
       showDone();
     } catch (error) {
       busy = false;
@@ -240,7 +241,7 @@ export function runFlow({ title, steps, state = {}, subject, commit, done, onExi
       finished.note ? h('div.posnote.posnote--ok', icon('info'), h('div', finished.note)) : null));
 
     backBtn.hidden = true;
-    mount(nextBtn, icon('check'), h('span', 'Listo — hacer otra cosa'));
+    mount(nextBtn, icon('check'), h('span', t('Listo — hacer otra cosa')));
     nextBtn.className = 'posbtn posbtn--done';
     nextBtn.disabled = false;
     nextBtn.focus({ preventScroll: true });

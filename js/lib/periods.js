@@ -15,17 +15,15 @@
 
 import {
   today, parseDay, dayKey, addDays, daysBetween,
-  formatDayLong, formatDayShort, formatRange, capitalize,
+  formatDayLong, formatDayShort, formatRange, capitalize, monthName,
 } from './dates.js';
+import { t, english } from './i18n.js';
 
 export const GRAINS = ['day', 'week', 'month', 'year'];
 
 export const GRAIN_LABEL = {
-  day: 'Día', week: 'Semana', month: 'Mes', year: 'Año', custom: 'Personalizado',
+  day: t('Día'), week: t('Semana'), month: t('Mes'), year: t('Año'), custom: t('Personalizado'),
 };
-
-const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',
-  'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
 const yearOf = (key) => parseDay(key).getFullYear();
 
@@ -100,7 +98,9 @@ export const isFuture = (range, day = today()) => range.start > day;
 export function rangeTitle(range) {
   if (range.grain === 'day') return capitalize(formatDayLong(range.start));
   if (range.grain === 'month') {
-    return `${capitalize(MONTHS[parseDay(range.start).getMonth()])} de ${yearOf(range.start)}`;
+    return english()
+      ? `${monthName(range.start)} ${yearOf(range.start)}`
+      : `${capitalize(monthName(range.start))} de ${yearOf(range.start)}`;
   }
   if (range.grain === 'year') return String(yearOf(range.start));
   return rangeSpan(range);
@@ -115,8 +115,12 @@ export function rangeTitle(range) {
  */
 export function rangeSpan(range) {
   const from = yearOf(range.start), to = yearOf(range.end);
-  if (from !== to) return `${formatDayShort(range.start)} ${from} – ${formatDayShort(range.end)} ${to}`;
-  return `${formatRange(range.start, range.end)} ${to}`;
+  // "Nov 1 – 30, 2026" in English, where the year follows a comma.
+  const year = english() ? ', ' : ' ';
+  if (from !== to) {
+    return `${formatDayShort(range.start)}${year}${from} – ${formatDayShort(range.end)}${year}${to}`;
+  }
+  return `${formatRange(range.start, range.end)}${year}${to}`;
 }
 
 /** "7 días" — the denominator under every average on the page. */
@@ -169,8 +173,8 @@ function monthly(range) {
       grain: 'month',
       start,
       end,
-      label: capitalize(MONTHS[parseDay(monthStart).getMonth()]),
-      short: MONTHS[parseDay(monthStart).getMonth()].slice(0, 3),
+      label: capitalize(monthName(monthStart)),
+      short: monthName(monthStart).slice(0, 3),
     });
   }
   return out;

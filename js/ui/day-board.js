@@ -35,6 +35,7 @@ import { dayBoard, NO_LINE } from '../lib/board.js';
 import { today, formatDayLong, capitalize } from '../lib/dates.js';
 import { number, plural } from '../lib/format.js';
 import { errorText } from '../firebase.js';
+import { t } from '../lib/i18n.js';
 
 /**
  * @param {object} [options]
@@ -61,14 +62,14 @@ export function openDayBoard({ by = '' } = {}) {
 
   const body = h('div.pos__body');
   const exit = h('button.pos__exit', { type: 'button', onclick: () => close() },
-    icon('x'), h('span', 'Cerrar'));
+    icon('x'), h('span', t('Cerrar')));
   const panel = h('div.pos.pos--board', {
-    role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Tablero de hoy',
+    role: 'dialog', 'aria-modal': 'true', 'aria-label': t('Tablero de hoy'),
   },
   h('header.pos__bar',
     exit,
     h('span.pos__mark', icon('eagle')),
-    h('span.pos__title', 'Tablero de hoy'),
+    h('span.pos__title', t('Tablero de hoy')),
     h('span.pos__day', capitalize(formatDayLong(day)))),
   body);
 
@@ -115,9 +116,9 @@ export function openDayBoard({ by = '' } = {}) {
   function content() {
     const broken = failure || firstError()?.error;
     if (broken) {
-      return posNote(`No se pudieron leer los clientes: ${errorText(broken)}`, 'bad');
+      return posNote(t('No se pudieron leer los clientes: {error}', { error: errorText(broken) }), 'bad');
     }
-    if (!setup || !isReady()) return h('p.pos__hint', 'Contando…');
+    if (!setup || !isReady()) return h('p.pos__hint', t('Contando…'));
 
     const board = dayBoard({
       lines: setup.lines, farms: store.farms, clients: activeClients(), day,
@@ -128,36 +129,39 @@ export function openDayBoard({ by = '' } = {}) {
 
     const adrift = board.outside;
     const adriftPlates = adrift.reduce((n, one) => n + one.plates, 0);
+    const adriftWords = {
+      people: plural(adrift.length, 'persona come', 'personas comen'),
+      list: adrift.map((one) => `${one.name} (${[one.farmName, one.locationName].filter(Boolean).join(' · ') || t('sin farma')})`).join(', '),
+      meals: plural(adriftPlates, 'comida', 'comidas'),
+    };
 
     return [
       // Counted, and said in red: their food is in every number below, so it
       // gets cooked — but nobody packs it until their location is in a libreta.
       adrift.length
-        ? posNote(`${plural(adrift.length, 'persona come', 'personas comen')} hoy y no `
-          + `${adrift.length === 1 ? 'está' : 'están'} en ninguna libreta: `
-          + `${adrift.map((one) => `${one.name} (${[one.farmName, one.locationName].filter(Boolean).join(' · ') || 'sin farma'})`).join(', ')}. `
-          + `Sus ${plural(adriftPlates, 'comida', 'comidas')} ya están en estas cuentas, en «Sin libreta», `
-          + 'para que se cocinen — pero nadie las va a empacar hasta que su ubicación entre a una '
-          + 'libreta, desde Organizar libreta.', 'bad')
+        ? posNote(adrift.length === 1
+          ? t('{people} hoy y no está en ninguna libreta: {list}. Sus {meals} ya están en estas cuentas, en «Sin libreta», para que se cocinen — pero nadie las va a empacar hasta que su ubicación entre a una libreta, desde Organizar libreta.', adriftWords)
+          : t('{people} hoy y no están en ninguna libreta: {list}. Sus {meals} ya están en estas cuentas, en «Sin libreta», para que se cocinen — pero nadie las va a empacar hasta que su ubicación entre a una libreta, desde Organizar libreta.', adriftWords), 'bad')
         : null,
 
       h('div.dboard__stats',
         stat({
-          title: 'Medias', note: 'todos: 1 o 2 comidas',
+          title: t('Medias'), note: t('todos: 1 o 2 comidas'),
           big: plural(medias.people.total, 'persona', 'personas'),
           tally: medias.people, lines: board.lines,
         }),
         stat({
-          title: 'Completas', note: 'solo los de 2 comidas',
+          title: t('Completas'), note: t('solo los de 2 comidas'),
           big: plural(completas.people.total, 'persona', 'personas'),
           tally: completas.people, lines: board.lines,
           extra: completas.more
-            ? `${completas.more === 1 ? 'Una de ellas lleva' : `${number(completas.more)} de ellas llevan`} `
-              + '3 comidas o más.'
+            ? (completas.more === 1
+              ? t('Una de ellas lleva 3 comidas o más.')
+              : t('{n} de ellas llevan 3 comidas o más.', { n: number(completas.more) }))
             : null,
         }),
         stat({
-          title: 'Comidas', note: 'para empacar hoy',
+          title: t('Comidas'), note: t('para empacar hoy'),
           big: plural(board.plates.total, 'comida', 'comidas'),
           tally: board.plates, lines: board.lines, dark: true,
         })),
@@ -165,11 +169,7 @@ export function openDayBoard({ by = '' } = {}) {
       board.kinds.map((kind) => whiteboard(kind, board.lines, opened)),
 
       h('p.dboard__foot',
-        'Cuenta a cada persona que come hoy, en su libreta —y en «Sin libreta» a quien todavía '
-        + 'no está en ninguna—. Las medias son todos —los de '
-        + 'una comida y los de dos—; las completas, solo los de dos comidas (o más). Por eso '
-        + 'siempre hay más medias que completas. Lo que no pueden comer sale de su ficha: '
-        + '«No puede comer», y lo de sus preferencias que dice «sin».'),
+        t('Cuenta a cada persona que come hoy, en su libreta —y en «Sin libreta» a quien todavía no está en ninguna—. Las medias son todos —los de una comida y los de dos—; las completas, solo los de dos comidas (o más). Por eso siempre hay más medias que completas. Lo que no pueden comer sale de su ficha: «No puede comer», y lo de sus preferencias que dice «sin».')),
     ];
   }
 
@@ -212,20 +212,23 @@ function stat({ title, note, big, tally, lines, extra, dark = false }) {
  */
 function whiteboard(kind, lines, opened) {
   const word = kind.title.toLowerCase();
-  const who = kind.id === 'medias' ? 'llevan 1 o 2 comidas' : 'llevan 2 comidas o más';
+  const people = plural(kind.people.total, 'persona', 'personas');
+  const who = kind.id === 'medias'
+    ? t('{people} que llevan 1 o 2 comidas', { people })
+    : t('{people} que llevan 2 comidas o más', { people });
 
   return h(`section.dwb.dwb--${kind.id}`, { 'aria-label': kind.title },
     h('div.dwb__head',
       h('h3.dwb__title', kind.title),
-      h('span.dwb__who', `${plural(kind.people.total, 'persona', 'personas')} que ${who}`)),
+      h('span.dwb__who', who)),
 
     !kind.people.total
-      ? h('p.dwb__empty', `Hoy no hay ${word}.`)
+      ? h('p.dwb__empty', t('Hoy no hay {kind}.', { kind: word }))
       : !kind.rows.length
-        ? h('p.dwb__empty', `Todas las ${word} pueden comer de todo.`)
+        ? h('p.dwb__empty', t('Todas las {kind} pueden comer de todo.', { kind: word }))
         : [
-          h('p.dwb__lead', 'Cuántas NO pueden comer',
-            h('span.dwb__tip', 'Toca una línea para ver quiénes son')),
+          h('p.dwb__lead', t('Cuántas NO pueden comer'),
+            h('span.dwb__tip', t('Toca una línea para ver quiénes son'))),
           h('div.dwb__lines', kind.rows.map((row) => {
             const key = `${kind.id}:${row.key}`;
             const line = h('details.dline', {
@@ -233,9 +236,9 @@ function whiteboard(kind, lines, opened) {
               ontoggle: () => { if (line.open) opened.add(key); else opened.delete(key); },
             },
             h('summary.dline__sum',
-              h('span.dline__what', h('span.dline__sin', 'Sin '), lowerFirst(row.label)),
+              h('span.dline__what', h('span.dline__sin', t('Sin ')), lowerFirst(row.label)),
               h('span.dline__counts', lines.map((libreta) => perLine(lines, libreta, row.byLine[libreta.id]))),
-              h('span.dline__total', h('span', 'Total'), h('b', number(row.total))),
+              h('span.dline__total', h('span', t('Total')), h('b', number(row.total))),
               h('span.dline__more', icon('chevronD'))),
             h('div.dline__who', lines
               .filter((libreta) => (row.names?.[libreta.id] || []).length)

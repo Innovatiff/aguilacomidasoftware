@@ -23,6 +23,8 @@ import { h, mount, $ } from '../lib/dom.js';
 import { icon } from '../lib/icons.js';
 import { back, currentPath, go } from '../lib/router.js';
 import { versionShort, versionDay, versionLabel } from '../version.js';
+import { t } from '../lib/i18n.js';
+import { langSwitch } from './lang.js';
 
 let root, topbar, page, tabbar;
 let tabs = [];
@@ -48,7 +50,7 @@ function liveButton(spec, props, ...children) {
 const relive = (el, handler) => { if (el) el.__onClick = handler || null; };
 
 /** Shown at the top of the rail; the phone layout has no room for it. */
-let brandName = { name: 'El Águila', sub: 'Cocina' };
+let brandName = { name: 'El Águila', sub: t('Cocina') };
 
 /** Shown at the top of the rail; the phone layout has no room for it. */
 
@@ -60,7 +62,7 @@ export function configureShell({ mount: host, tabs: tabConfig = [], brand } = {}
 
   topbar = h('header.topbar');
   page = h('main.page', { id: 'page' });
-  tabbar = h('nav.tabbar', { 'aria-label': 'Navegación principal' });
+  tabbar = h('nav.tabbar', { 'aria-label': t('Navegación principal') });
 
   // These are all caches over the nodes above, and the nodes above are new.
   // Signing out and back in builds a fresh frame; keeping what the last one
@@ -111,6 +113,9 @@ function renderTabs() {
           brandName.name,
           h('span', brandName.sub))),
       tabs.map((config) => tabNodes.get(config.id)),
+      // The language, at the foot of the rail with the version: both are
+      // about this computer, and both are looked for rather than used daily.
+      h('div.tabbar__lang', langSwitch({ short: true })),
       // Which update this computer is on, at the foot of the rail: where
       // somebody looks when asked "does it say 75?", and nowhere in the way.
       h('div.tabbar__ver', { title: versionLabel() },
@@ -286,7 +291,7 @@ function paintTopbar({ title, subtitle, backTo, actions, brand }) {
   mount(topbar,
     backTo != null
       ? liveButton('button.topbar__btn', {
-          type: 'button', 'aria-label': 'Regresar',
+          type: 'button', 'aria-label': t('Regresar'),
           onclick: backHandler(backTo),
         }, icon('chevronL'))
       : null,

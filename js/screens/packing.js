@@ -29,6 +29,8 @@ import { today, formatDayLong, formatTime, capitalize } from '../lib/dates.js';
 import { versionLabel } from '../version.js';
 import { kitchen } from '../lib/mode.js';
 import { plural, number } from '../lib/format.js';
+import { t } from '../lib/i18n.js';
+import { langSwitch } from '../ui/lang.js';
 
 export function renderPacking() {
   const life = lifetime();
@@ -56,7 +58,7 @@ export function renderPacking() {
     const asking = content?.classList?.contains('pk__pin');
 
     screen({
-      title: 'Empaque',
+      title: t('Empaque'),
       subtitle: capitalize(formatDayLong(day)),
       tab: 'packing',
       // On a kitchen computer there is no tab bar to get back to the menu
@@ -70,7 +72,7 @@ export function renderPacking() {
       // and it is done from the panel. On the kitchen computer a gear here
       // would let anybody who walks past give themselves every permission.
       actions: kitchen() ? [] : [topbarButton('settings', {
-        label: 'Configurar el empaque', onClick: () => go('/empaque/ajustes'),
+        label: t('Configurar el empaque'), onClick: () => go('/empaque/ajustes'),
       })],
       body: h(`div.page__inner.pk.stack.stack-5${asking ? '.pk--asking' : ''}`, content),
     });
@@ -89,8 +91,7 @@ export function renderPacking() {
     if (!packer) return askPin();
     return broken
       ? h('div.stack.stack-4',
-          alert('Sin conexión con la base de datos. Se empaca con la lista guardada en esta '
-            + 'computadora; alguien agregado hace un momento podría no salir.', 'warn'),
+          alert(t('Sin conexión con la base de datos. Se empaca con la lista guardada en esta computadora; alguien agregado hace un momento podría no salir.'), 'warn'),
           pickLine())
       : pickLine();
   }
@@ -100,13 +101,11 @@ export function renderPacking() {
   function noPackers() {
     return emptyState({
       icon: 'users',
-      title: 'Todavía no hay usuarios',
+      title: t('Todavía no hay usuarios'),
       text: kitchen()
-        ? 'El encargado tiene que crear los usuarios desde el panel, cada uno con su PIN, '
-          + 'antes de poder entrar aquí.'
-        : 'Crea los usuarios —nombre, PIN y lo que puede hacer cada uno— antes de poder '
-          + 'usar esta pantalla.',
-      action: kitchen() ? null : button('Crear usuarios', {
+        ? t('El encargado tiene que crear los usuarios desde el panel, cada uno con su PIN, antes de poder entrar aquí.')
+        : t('Crea los usuarios —nombre, PIN y lo que puede hacer cada uno— antes de poder usar esta pantalla.'),
+      action: kitchen() ? null : button(t('Crear usuarios'), {
         variant: 'primary', size: 'lg', icon: 'userPlus', onClick: () => go('/empaque/ajustes'),
       }),
     });
@@ -177,16 +176,19 @@ export function renderPacking() {
       h(`button.pk__key${className}`, { type: 'button', onclick: onPress }, label);
 
     return h('div.pk__pin',
-      h('h2.pk__ask', '¿Quién eres?'),
-      h('p.pk__hint', 'Escribe tu número para que tu nombre quede en la lista de hoy.'),
+      h('h2.pk__ask', t('¿Quién eres?')),
+      h('p.pk__hint', t('Escribe tu número para que tu nombre quede en la lista de hoy.')),
       dots,
-      wrong ? alert('Ese número no es de nadie. Inténtalo otra vez.', 'bad', 'alert') : null,
+      wrong ? alert(t('Ese número no es de nadie. Inténtalo otra vez.'), 'bad', 'alert') : null,
       h('div.pk__pad',
         [1, 2, 3, 4, 5, 6, 7, 8, 9].map((digit) => key(String(digit), () => press(digit))),
         key('', () => {}, '.is-blank'),
         key('0', () => press(0)),
         key('←', rub, '.pk__key--rub')),
-      h('p.pk__ver', versionLabel()));
+      h('p.pk__ver', versionLabel()),
+      // Before anybody types their number: whoever sits down can read the
+      // screen in their language from the first word.
+      langSwitch({ short: true }));
   }
 
   /* --- Which libreta ------------------------------------------------------- */
@@ -210,33 +212,35 @@ export function renderPacking() {
     return h('div.stack.stack-5',
       h('div.pk__who',
         h('div',
-          h('div.pk__wholabel', 'Estás empacando como'),
+          h('div.pk__wholabel', t('Estás empacando como')),
           h('div.pk__whoname', packer.name)),
         h('button.btn.btn--ghost', {
           type: 'button',
           onclick: () => { packer = null; sitDown(null); typed = ''; paint(); },
-        }, 'No soy yo')),
+        }, t('No soy yo'))),
 
-      h('h2.pk__ask', '¿Cuál libreta vas a empacar?'),
+      h('h2.pk__ask', t('¿Cuál libreta vas a empacar?')),
 
       h('div.pk__lines', setup.lines.map((line) => lineCard(line, roster))),
 
       unplaced.length
-        ? alert(`${plural(unplaced.length, 'ubicación no está', 'ubicaciones no están')} en `
-          + 'ninguna libreta: '
-          + `${unplaced.map((one) => `${one.farm.name} · ${one.place.name}`).join(', ')}. `
-          + 'Nadie va a empacar a su gente hasta que alguien las meta en una libreta, desde '
-          + 'Avisos u Organizar libreta en el menú.', 'bad', 'alert')
+        ? alert(t('{places} en ninguna libreta: {list}. Nadie va a empacar a su gente hasta que alguien las meta en una libreta, desde Avisos u Organizar libreta en el menú.', {
+          places: plural(unplaced.length, 'ubicación no está', 'ubicaciones no están'),
+          list: unplaced.map((one) => `${one.farm.name} · ${one.place.name}`).join(', '),
+        }), 'bad', 'alert')
         : null,
       homeless.length
-        ? alert(`${homeless.map((one) => one.name).join(', ')}: sin farma, así que ninguna libreta `
-          + 'los puede empacar. Que la oficina les ponga su farma.', 'bad', 'alert')
+        ? alert(t('{names}: sin farma, así que ninguna libreta los puede empacar. Que la oficina les ponga su farma.', {
+          names: homeless.map((one) => one.name).join(', '),
+        }), 'bad', 'alert')
         : null,
       adopted.length
-        ? alert(`${plural(adopted.length, 'ubicación nueva se empaca', 'ubicaciones nuevas se empacan')} `
-          + 'con el resto de su farma: '
-          + `${adopted.map((one) => `${one.farm.name} · ${one.place.name} en ${one.line.name}`).join(', ')}. `
-          + 'Confírmalas o muévelas desde Avisos en el menú.', 'warn', 'pin')
+        ? alert(t('{places} con el resto de su farma: {list}. Confírmalas o muévelas desde Avisos en el menú.', {
+          places: plural(adopted.length, 'ubicación nueva se empaca', 'ubicaciones nuevas se empacan'),
+          list: adopted.map((one) => t('{farm} · {place} en {line}', {
+            farm: one.farm.name, place: one.place.name, line: one.line.name,
+          })).join(', '),
+        }), 'warn', 'pin')
         : null,
 
       runs.length ? doneToday() : null);
@@ -246,13 +250,13 @@ export function renderPacking() {
   function notAllowed() {
     return emptyState({
       icon: 'lock',
-      title: `${packer.name}, no tienes permiso para empacar`,
-      text: 'Si te toca empacar hoy, pídele al encargado que te lo active desde el panel.',
+      title: t('{name}, no tienes permiso para empacar', { name: packer.name }),
+      text: t('Si te toca empacar hoy, pídele al encargado que te lo active desde el panel.'),
       action: kitchen()
-        ? button('Volver al menú', {
+        ? button(t('Volver al menú'), {
           variant: 'primary', size: 'lg', icon: 'chevronL', onClick: () => go('/rapido'),
         })
-        : button('No soy yo', {
+        : button(t('No soy yo'), {
           variant: 'ghost', size: 'lg',
           onClick: () => { packer = null; sitDown(null); typed = ''; paint(); },
         }),
@@ -280,36 +284,37 @@ export function renderPacking() {
     },
       h('div.pkline__head',
         h('div.pkline__name', line.name),
-        yours ? h('span.pkline__yours', 'Tu libreta') : null,
+        yours ? h('span.pkline__yours', t('Tu libreta')) : null,
         run
           ? h(`span.pkline__badge${run.done ? '.is-done' : ''}`,
-              run.done ? 'Terminada' : 'Empezada')
+              run.done ? t('Terminada') : t('Empezada'))
           : null),
 
       h('div.pkline__farms', farmNames.length
         ? farmNames.join(' · ')
-        : 'Sin ubicaciones asignadas'),
+        : t('Sin ubicaciones asignadas')),
 
       h('div.pkline__nums',
         h('div.pkline__num',
           h('span.pkline__n', number(plan.people)),
-          h('span.pkline__l', plan.people === 1 ? 'persona' : 'personas')),
+          h('span.pkline__l', plan.people === 1 ? t('persona') : t('personas'))),
         h('div.pkline__num',
           h('span.pkline__n', number(plan.plates)),
-          h('span.pkline__l', 'comidas')),
+          h('span.pkline__l', t('comidas'))),
         h('div.pkline__num',
           h('span.pkline__n', number(plan.farmCount)),
-          h('span.pkline__l', plan.farmCount === 1 ? 'farma' : 'farmas'))),
+          h('span.pkline__l', plan.farmCount === 1 ? t('farma') : t('farmas')))),
 
       h('div.pkline__foot',
         resumeAt(line, plan, run)
           || (run
             ? h('span', run.done
-              ? `La terminó ${names(run)}`
-                + `${run.finishedAt ? ` a las ${formatTime(run.finishedAt)}` : ''}`
-              : `${mine ? 'La empezaste tú' : `La está empacando ${names(run)}`}`
-                + `${run.packed ? ` · va en ${run.packed} de ${run.people}` : ''}`)
-            : h('span', plan.people ? 'Nadie la ha tocado hoy' : 'No hay nada que empacar')),
+              ? (run.finishedAt
+                ? t('La terminó {who} a las {time}', { who: names(run), time: formatTime(run.finishedAt) })
+                : t('La terminó {who}', { who: names(run) }))
+              : `${mine ? t('La empezaste tú') : t('La está empacando {who}', { who: names(run) })}`
+                + `${run.packed ? ` · ${t('va en {n} de {total}', { n: run.packed, total: run.people })}` : ''}`)
+            : h('span', plan.people ? t('Nadie la ha tocado hoy') : t('No hay nada que empacar'))),
         plan.people ? h('span.pkline__go', icon('chevronR')) : null));
   }
 
@@ -324,9 +329,11 @@ export function renderPacking() {
     const here = run?.done ? null : spotOf(line, plan);
     if (!here) return null;
     const who = here.slide.kind === 'client' ? here.slide.client.name
-      : here.slide.kind === 'farm' ? `la farma ${here.slide.farm.name}`
-        : 'el final';
-    return h('span.pkline__resume', `Sigues en ${who} · ${number(here.done)} de ${number(here.people)}`);
+      : here.slide.kind === 'farm' ? t('la farma {farm}', { farm: here.slide.farm.name })
+        : t('el final');
+    return h('span.pkline__resume', t('Sigues en {who} · {n} de {total}', {
+      who, n: number(here.done), total: number(here.people),
+    }));
   }
 
   /**
@@ -354,24 +361,24 @@ export function renderPacking() {
 
   function doneToday() {
     return h('div.stack.stack-3',
-      h('h2.pk__ask.pk__ask--sm', 'Lo de hoy'),
+      h('h2.pk__ask.pk__ask--sm', t('Lo de hoy')),
       h('div.pk__runs', runs.map((run) => h('div.pkrun',
         h('span.pkrun__ico', icon(run.done ? 'check' : 'clock')),
         h('div.grow',
           h('div.pkrun__name', `${run.lineName} · ${names(run)}`),
           h('div.pkrun__meta', run.done
-            ? `Terminada${run.finishedAt ? ` a las ${formatTime(run.finishedAt)}` : ''}`
+            ? `${run.finishedAt ? t('Terminada a las {time}', { time: formatTime(run.finishedAt) }) : t('Terminada')}`
               + ` · ${plural(run.people, 'persona', 'personas')}`
-            : `Empezada${run.startedAt ? ` a las ${formatTime(run.startedAt)}` : ''}`
-              + ` · va en ${progressOf(run)}`)))))); 
+            : `${run.startedAt ? t('Empezada a las {time}', { time: formatTime(run.startedAt) }) : t('Empezada')}`
+              + ` · ${t('va en {progress}', { progress: progressOf(run) })}`)))))); 
   }
 
   /** "23 de 174": exact where this computer has the place, the record's otherwise. */
   function progressOf(run) {
     const here = spotOf(setup.lines.find((line) => line.id === run.lineId));
     return here
-      ? `${number(here.done)} de ${number(here.people)}`
-      : `${number(run.packed || 0)} de ${number(run.people)}`;
+      ? t('{n} de {total}', { n: number(here.done), total: number(here.people) })
+      : t('{n} de {total}', { n: number(run.packed || 0), total: number(run.people) });
   }
 
   // Left open overnight, the menu would offer yesterday's libretas and what
@@ -389,7 +396,7 @@ export function renderPacking() {
 /** Who worked a libreta — both, when a morning changed hands. */
 function names(run) {
   const all = (run?.packerNames || [run?.packerName]).filter(Boolean);
-  if (!all.length) return 'alguien';
+  if (!all.length) return t('alguien');
   if (all.length === 1) return all[0];
-  return `${all.slice(0, -1).join(', ')} y ${all[all.length - 1]}`;
+  return t('{names} y {last}', { names: all.slice(0, -1).join(', '), last: all[all.length - 1] });
 }

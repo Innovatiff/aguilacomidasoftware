@@ -20,6 +20,7 @@ import {
 } from '../firebase.js';
 import { today } from '../lib/dates.js';
 import { clientChanges } from '../lib/movements.js';
+import { inSpanish } from '../lib/i18n.js';
 
 const ref = () => collection(db, 'movements');
 
@@ -71,11 +72,12 @@ export function logMovement(entry) {
 
 /**
  * What a write to a client changes, field by field, as movements — worked out
- * against the client as this computer has them before the write lands.
+ * against the client as this computer has them before the write lands, and
+ * worded in Spanish, as every line in `movements` is, whatever this screen reads.
  */
 export function logClientChanges(clientId, patch, { by, prefix = '', before = null } = {}) {
   const was = before || lookup(clientId) || {};
-  for (const change of clientChanges(was, patch)) {
+  for (const change of inSpanish(() => clientChanges(was, patch))) {
     logMovement({ ...change, text: `${prefix}${change.text}`, clientId, clientName: was.name, by });
   }
 }

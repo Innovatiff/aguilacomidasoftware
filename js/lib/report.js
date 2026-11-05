@@ -32,6 +32,7 @@
 import { round2, balanceOf, invoiceStatus, isCharge, invoiceTitle } from './billing.js';
 import { PAYMENT_METHODS, paymentMethodMeta } from './model.js';
 import { today, dayOf, daysBetween } from './dates.js';
+import { t } from './i18n.js';
 
 const sum = (rows, pick) => round2(rows.reduce((total, row) => total + (Number(pick(row)) || 0), 0));
 
@@ -170,13 +171,13 @@ function spanOf(range, day) {
  * than either being wrong on its own.
  */
 export const debtWord = (change) => (Math.abs(change) <= 0.005
-  ? 'La deuda quedó igual'
-  : (change > 0 ? 'La deuda subió' : 'La deuda bajó'));
+  ? t('La deuda quedó igual')
+  : (change > 0 ? t('La deuda subió') : t('La deuda bajó')));
 
 /** The same movement, explained: which side of it was bigger. */
 export const debtWhy = (change) => (Math.abs(change) <= 0.005
-  ? 'Entró justo lo que se emitió'
-  : (change > 0 ? 'Se emitió más de lo que entró' : 'Entró más de lo que se emitió'));
+  ? t('Entró justo lo que se emitió')
+  : (change > 0 ? t('Se emitió más de lo que entró') : t('Entró más de lo que se emitió')));
 
 /** What a bill says it fed. Falls back to the plan when nobody recorded it. */
 const mealsOn = (invoice) => Number(invoice.meals) || Number(invoice.plannedMeals) || 0;
@@ -232,10 +233,10 @@ function byFarm(receipts, invoices) {
   const at = (id, name) => {
     const key = id || '';
     if (!found.has(key)) {
-      found.set(key, { farmId: key, name: name || 'Sin rancho', collected: 0, billed: 0, payers: new Set() });
+      found.set(key, { farmId: key, name: name || t('Sin rancho'), collected: 0, billed: 0, payers: new Set() });
     }
     const entry = found.get(key);
-    if (name && entry.name === 'Sin rancho') entry.name = name;
+    if (name && entry.name === t('Sin rancho')) entry.name = name;
     return entry;
   };
 
@@ -290,7 +291,7 @@ function byPayer(receipts) {
     const key = row.clientId || `sin-cliente:${row.id}`;
     const amount = Number(row.amount) || 0;
     const entry = found.get(key) || {
-      clientId: row.clientId || '', name: row.clientName || 'Sin cliente',
+      clientId: row.clientId || '', name: row.clientName || t('Sin cliente'),
       farmName: row.farmName || '', amount: 0, refunds: 0, count: 0, last: '',
     };
     if (amount > 0) {
@@ -311,7 +312,7 @@ function byPayer(receipts) {
 function byCashier(receipts) {
   const found = new Map();
   for (const row of receipts) {
-    const name = row.takenByName || 'Sin registrar';
+    const name = row.takenByName || t('Sin registrar');
     const entry = found.get(name) || { name, amount: 0, count: 0 };
     entry.amount = round2(entry.amount + (Number(row.amount) || 0));
     if (Number(row.amount) > 0) entry.count += 1;

@@ -22,6 +22,7 @@ import { h, svg } from '../lib/dom.js';
 import { qrMatrix } from '../lib/qr.js';
 import { formatDayShort } from '../lib/dates.js';
 import { plural } from '../lib/format.js';
+import { t } from '../lib/i18n.js';
 
 /* --- The QR ----------------------------------------------------------------- */
 
@@ -71,8 +72,12 @@ const upper = (value) => String(value || '').trim().toUpperCase();
 
 /** "02 OCT": the footer's day always takes two digits, so every label reads alike. */
 function footerDay(day) {
-  const [date, month] = formatDayShort(day).split(' ');
-  return `${date.padStart(2, '0')} ${upper(month)}`;
+  // "2 oct" in Spanish, "Oct 2" in English: the number and the month, in
+  // whichever order the screen's language says them.
+  const parts = formatDayShort(day).split(' ');
+  const date = parts.find((part) => /^\d+$/.test(part)) || '';
+  const month = parts.find((part) => !/^\d+$/.test(part)) || '';
+  return t('{date} {month}', { date: date.padStart(2, '0'), month: upper(month) });
 }
 
 /**

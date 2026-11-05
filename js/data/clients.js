@@ -37,6 +37,7 @@ import {
 import { matches, fold } from '../lib/format.js';
 import { normalizeExtras } from '../lib/pricing.js';
 import { findLocation, TERM_FIELDS } from './farms.js';
+import { t } from '../lib/i18n.js';
 
 const clientsRef = () => collection(db, 'clients');
 
@@ -258,8 +259,7 @@ export async function clientForEmail(email) {
       new Promise((resolve) => { setTimeout(resolve, 6000); })]);
   } catch { snap = null; }
   if (!snap) {
-    throw new Error('Sin internet no se puede revisar el correo. Guárdalo sin correo y '
-      + 'agrégalo cuando vuelva la conexión.');
+    throw new Error(t('Sin internet no se puede revisar el correo. Guárdalo sin correo y agrégalo cuando vuelva la conexión.'));
   }
   return snap.exists() ? { email: key, ...snap.data() } : null;
 }
@@ -280,9 +280,9 @@ export async function createClient(data, farm, author) {
   const email = normalizeEmail(data.email);
 
   if (email) {
-    if (!isValidEmail(email)) throw new Error('El correo no es válido. Déjalo vacío si no tiene.');
+    if (!isValidEmail(email)) throw new Error(t('El correo no es válido. Déjalo vacío si no tiene.'));
     const taken = await clientForEmail(email);
-    if (taken) throw new Error(`Ese correo ya es de ${taken.clientName || 'otro cliente'}.`);
+    if (taken) throw new Error(t('Ese correo ya es de {name}.', { name: taken.clientName || t('otro cliente') }));
   }
 
   const ref = doc(clientsRef());
@@ -324,11 +324,11 @@ export async function updateClient(clientId, patch, previousEmail, farm) {
   const previous = normalizeEmail(previousEmail);
 
   if (patchEmail && email) {
-    if (!isValidEmail(email)) throw new Error('El correo no es válido. Déjalo vacío si no tiene.');
+    if (!isValidEmail(email)) throw new Error(t('El correo no es válido. Déjalo vacío si no tiene.'));
     if (email !== previous) {
       const taken = await clientForEmail(email);
       if (taken && taken.clientId !== clientId) {
-        throw new Error(`Ese correo ya es de ${taken.clientName || 'otro cliente'}.`);
+        throw new Error(t('Ese correo ya es de {name}.', { name: taken.clientName || t('otro cliente') }));
       }
     }
   }
@@ -443,8 +443,7 @@ export async function deleteClient(clientId, email) {
     getDocs(query(collection(db, 'receipts'), where('clientId', '==', clientId), limit(1))),
   ]);
   if (!bills.empty || !receipts.empty) {
-    throw new Error('Tiene facturas o pagos registrados. Para no perder su historial, '
-      + 'desactívalo en lugar de borrarlo.');
+    throw new Error(t('Tiene facturas o pagos registrados. Para no perder su historial, desactívalo en lugar de borrarlo.'));
   }
 
   const before = clientBefore(clientId);
@@ -470,14 +469,14 @@ export async function deleteClient(clientId, email) {
  */
 function place(data, farm) {
   const farmId = data.farmId || farm?.id || '';
-  if (!farmId) throw new Error('Elige el rancho al que pertenece.');
-  if (farm && farm.id !== farmId) throw new Error('El rancho no coincide con la ubicación elegida.');
+  if (!farmId) throw new Error(t('Elige el rancho al que pertenece.'));
+  if (farm && farm.id !== farmId) throw new Error(t('El rancho no coincide con la ubicación elegida.'));
 
   const locationId = data.locationId || '';
-  if (!locationId) throw new Error('Elige la ubicación donde está esta persona.');
+  if (!locationId) throw new Error(t('Elige la ubicación donde está esta persona.'));
 
   const location = findLocation(farm, locationId);
-  if (!location) throw new Error('Esa ubicación ya no existe en el rancho.');
+  if (!location) throw new Error(t('Esa ubicación ya no existe en el rancho.'));
 
   return {
     farmId,

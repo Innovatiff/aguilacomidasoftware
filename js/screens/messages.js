@@ -13,6 +13,7 @@ import { ensureConversation } from '../data/chat.js';
 import { matchesSearch } from '../data/clients.js';
 import { formatStamp } from '../lib/dates.js';
 import { toDate } from '../firebase.js';
+import { t } from '../lib/i18n.js';
 
 export function renderMessages() {
   let term = '';
@@ -20,12 +21,12 @@ export function renderMessages() {
   const draw = () => {
     const rows = threads();
     screen({
-      title: 'Mensajes',
+      title: t('Mensajes'),
       subtitle: unreadLabel(),
       tab: 'messages',
       sticky: h('div.searchbar',
         searchInput({
-          placeholder: 'Buscar rancho…',
+          placeholder: t('Buscar rancho…'),
           value: term,
           onInput: (value) => { term = value; redraw(); },
         })),
@@ -67,14 +68,14 @@ export function renderMessages() {
     const unread = Number(conversation?.unreadAdmin) || 0;
     const stamp = toDate(conversation?.lastAt);
     const preview = conversation?.lastMessage
-      || 'Sin mensajes todavía — toca para escribir.';
+      || t('Sin mensajes todavía — toca para escribir.');
     const mine = conversation?.lastSenderRole === 'admin';
 
     return itemRow({
       lead: avatar(client.name),
       title: client.name,
       meta: h('span', { style: unread ? { color: 'var(--ink-900)', fontWeight: '550' } : null },
-        mine ? h('span.c-faint', 'Tú: ') : null,
+        mine ? h('span.c-faint', t('Tú: ')) : null,
         preview),
       end: [
         stamp ? h('span.t-xs.c-faint', formatStamp(stamp)) : null,
@@ -90,18 +91,18 @@ export function renderMessages() {
 
   function unreadLabel() {
     const total = store.conversations.reduce((sum, row) => sum + (Number(row.unreadAdmin) || 0), 0);
-    if (!total) return `${store.clients.length} ranchos`;
-    return `${total} sin leer`;
+    if (!total) return t('{count} ranchos', { count: store.clients.length });
+    return t('{count} sin leer', { count: total });
   }
 
   function empty() {
     if (term) {
-      return emptyState({ icon: 'search', title: 'Sin resultados', text: `Ningún rancho coincide con “${term}”.` });
+      return emptyState({ icon: 'search', title: t('Sin resultados'), text: t('Ningún rancho coincide con “{term}”.', { term }) });
     }
     return emptyState({
       icon: 'chat',
-      title: 'Todavía no hay ranchos',
-      text: 'Registra un rancho para poder escribirle.',
+      title: t('Todavía no hay ranchos'),
+      text: t('Registra un rancho para poder escribirle.'),
     });
   }
 

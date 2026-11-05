@@ -15,6 +15,7 @@
 import { h, mount } from '../lib/dom.js';
 import { icon } from '../lib/icons.js';
 import { money, fold } from '../lib/format.js';
+import { t } from '../lib/i18n.js';
 import { matchesSearch } from '../data/clients.js';
 import {
   WEEKDAYS_SHORT, today as todayKey, addDays, addMonths, weekdayOf, formatMonth, formatDayLong,
@@ -114,7 +115,7 @@ function rank(client, term) {
 export function posFind({ clients, value, onPick, balanceOf }) {
   const box = h('input.posfield', {
     type: 'text',
-    placeholder: 'Escribe el nombre…',
+    placeholder: t('Escribe el nombre…'),
     autocomplete: 'off',
     spellcheck: 'false',
   });
@@ -149,8 +150,8 @@ export function posFind({ clients, value, onPick, balanceOf }) {
     if (!rows.length) {
       count.hidden = true;
       mount(results, h('div.posempty', term
-        ? `Nadie se llama así. Prueba con el apellido.`
-        : 'Todavía no hay clientes.'));
+        ? t('Nadie se llama así. Prueba con el apellido.')
+        : t('Todavía no hay clientes.')));
       return;
     }
 
@@ -158,8 +159,9 @@ export function posFind({ clients, value, onPick, balanceOf }) {
     // as "he is not in the system", and that is how a client gets sent home.
     count.hidden = hidden <= 0;
     if (hidden > 0) {
-      mount(count, `${found.length} se llaman así · faltan ${hidden}, `
-        + 'escribe otra palabra de su nombre');
+      mount(count, t('{count} se llaman así · faltan {hidden}, escribe otra palabra de su nombre', {
+        count: found.length, hidden,
+      }));
     }
 
     mount(results, rows.map((client) => personRow(client, {
@@ -175,20 +177,20 @@ export function posFind({ clients, value, onPick, balanceOf }) {
 }
 
 function personRow(client, { on, owes, onClick }) {
-  const flag = client.status === 'inactive' ? 'inactivo'
-    : client.status === 'paused' && client.startsOn > todayKey() ? `empieza ${client.startsOn.slice(8)}/${client.startsOn.slice(5, 7)}`
-    : client.status === 'paused' ? 'en pausa'
-      : (client.endsOn && client.endsOn < todayKey()) ? 'terminó' : null;
+  const flag = client.status === 'inactive' ? t('inactivo')
+    : client.status === 'paused' && client.startsOn > todayKey() ? t('empieza {dd}/{mm}', { dd: client.startsOn.slice(8), mm: client.startsOn.slice(5, 7) })
+    : client.status === 'paused' ? t('en pausa')
+      : (client.endsOn && client.endsOn < todayKey()) ? t('terminó') : null;
 
   return h(`button.posperson${on ? '.is-on' : ''}`, { type: 'button', onclick: onClick },
     h('span.posperson__mark', initials(client.name)),
     h('span.posperson__who',
       h('span.posperson__name', client.name),
       h('span.posperson__where',
-        [client.farmName, client.locationName].filter(Boolean).join(' · ') || 'Sin ubicación',
+        [client.farmName, client.locationName].filter(Boolean).join(' · ') || t('Sin ubicación'),
         flag ? h('span.posperson__flag', flag) : null)),
     h(`span.posperson__owes.posperson__owes--${owes > 0 ? 'bad' : 'ok'}`,
-      owes > 0 ? money(owes, { round: true }) : 'Al día'));
+      owes > 0 ? money(owes, { round: true }) : t('Al día')));
 }
 
 const initials = (name) => String(name || '?')
@@ -304,7 +306,7 @@ export function posDays({ days, onChange }) {
  * @param {boolean} [options.markAfter]  mark the day after it (`afterTag`)
  */
 export function posCalendar({
-  value, onPick, min = todayKey(), months = 12, onTag = 'último', afterTag = 'pausa', note,
+  value, onPick, min = todayKey(), months = 12, onTag = t('último'), afterTag = t('pausa'), note,
   span = true, markAfter = true,
 }) {
   const now = todayKey();
@@ -313,10 +315,10 @@ export function posCalendar({
   let view = addMonths(value && value >= min ? value : min, 0);
 
   const prev = h('button.poscal__nav', {
-    type: 'button', 'aria-label': 'Mes anterior', onclick: () => turn(-1),
+    type: 'button', 'aria-label': t('Mes anterior'), onclick: () => turn(-1),
   }, icon('chevronL'));
   const next = h('button.poscal__nav', {
-    type: 'button', 'aria-label': 'Mes siguiente', onclick: () => turn(1),
+    type: 'button', 'aria-label': t('Mes siguiente'), onclick: () => turn(1),
   }, icon('chevronR'));
   const title = h('span.poscal__month', { 'aria-live': 'polite' });
   const said = h('div.poscal__said');
@@ -347,7 +349,7 @@ export function posCalendar({
       ...Array.from({ length: 42 }, (_, i) => {
         const day = addDays(start, i);
         const on = day === value;
-        const tag = on ? onTag : day === after ? afterTag : day === now ? 'hoy' : '';
+        const tag = on ? onTag : day === after ? afterTag : day === now ? t('hoy') : '';
         return h(`button.poscal__day${day.slice(0, 7) !== month ? '.is-out' : ''}`
           + `${day === now ? '.is-today' : ''}${on ? '.is-on' : ''}`
           + `${day === after ? '.is-after' : ''}`

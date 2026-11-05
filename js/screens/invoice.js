@@ -31,6 +31,7 @@ import {
 import { money, moneyFull, number, percent } from '../lib/format.js';
 import { paymentMethodMeta } from '../lib/model.js';
 import { errorText, toDate } from '../firebase.js';
+import { t, tx, inSpanish } from '../lib/i18n.js';
 
 export function renderInvoice(context) {
   const id = context.params.id;
@@ -46,21 +47,21 @@ export function renderInvoice(context) {
   function draw() {
     if (missing) {
       screen({
-        title: 'Factura',
+        title: t('Factura'),
         backTo: '/billing',
-        body: h('div.page__inner', alert('Esta factura ya no existe.', 'bad')),
+        body: h('div.page__inner', alert(t('Esta factura ya no existe.'), 'bad')),
       });
       return;
     }
     if (!invoice) {
-      screen({ title: 'Factura', backTo: '/billing', body: loading() });
+      screen({ title: t('Factura'), backTo: '/billing', body: loading() });
       return;
     }
 
     const status = invoiceStatus(invoice, today());
     screen({
-      title: invoice.clientName || 'Factura',
-      subtitle: invoiceTitle(invoice),
+      title: invoice.clientName || t('Factura'),
+      subtitle: tx(invoiceTitle(invoice)),
       backTo: '/billing',
       tab: 'clients',
       sunken: true,
@@ -81,44 +82,47 @@ export function renderInvoice(context) {
         h('div.row.row--between',
           h('div',
             h('div.t-xs.upper.c-faint.w-700', balance > 0
-              ? 'Saldo pendiente'
-              : isCharge(invoice) ? 'Total de la deuda' : 'Total del periodo'),
+              ? t('Saldo pendiente')
+              : isCharge(invoice) ? t('Total de la deuda') : t('Total del periodo')),
             h('div.t-3xl.w-700', { style: { color: balance > 0 ? (status === 'overdue' ? 'var(--bad-600)' : 'var(--ink-900)') : 'var(--ok-600)' } },
               money(balance > 0 ? balance : amount))),
-          badge(STATUS_LABEL[status], STATUS_TONE[status])),
+          badge(t(STATUS_LABEL[status]), STATUS_TONE[status])),
 
         h('div.stack.stack-2',
           meter(percent(paid, amount), { tone: balance <= 0 ? 'ok' : status === 'overdue' ? 'bad' : null }),
           h('div.row.row--between.t-sm.c-soft',
-            h('span', `Pagado ${money(paid)}`),
-            h('span', `de ${money(amount)}`))),
+            h('span', t('Pagado {amount}', { amount: money(paid) })),
+            h('span', t('de {amount}', { amount: money(amount) })))),
 
         status === 'overdue'
-          ? alert(`Venció ${humanDelta(late)} — ${formatDayLong(invoice.dueDate)}.`, 'bad')
+          ? alert(t('Venció {when} — {day}.', { when: humanDelta(late), day: formatDayLong(invoice.dueDate) }), 'bad')
           : balance > 0
-            ? alert(`Vence ${humanDelta(late)} — ${formatDayLong(invoice.dueDate)}.`, late <= 2 ? 'warn' : 'info')
-            : alert(`Saldado${invoice.paidAt ? ` el ${formatDay(dayOf(invoice.paidAt))}` : ''}.`, 'ok'),
+            ? alert(t('Vence {when} — {day}.', { when: humanDelta(late), day: formatDayLong(invoice.dueDate) }),
+              late <= 2 ? 'warn' : 'info')
+            : alert(invoice.paidAt
+              ? t('Saldado el {day}.', { day: formatDay(dayOf(invoice.paidAt)) })
+              : t('Saldado.'), 'ok'),
 
         balance > 0
           ? h('div.stack.stack-2',
-              button('Cobrar', {
+              button(t('Cobrar'), {
                 variant: 'primary', block: true, icon: 'cash', onClick: charge,
               }),
-              button('Enviar recordatorio', {
+              button(t('Enviar recordatorio'), {
                 variant: 'ghost', block: true, icon: 'chat',
                 onClick: sendReminder,
               }))
-          : button('Ver la ficha del cliente', {
+          : button(t('Ver la ficha del cliente'), {
               variant: 'ghost', block: true, icon: 'users',
               onClick: () => go(`/clients/${invoice.clientId}`),
             }))),
 
       /* Breakdown */
-      sectionLabel('Desglose'),
+      sectionLabel(t('Desglose')),
       card(defList([
-        defRow('Cliente', invoice.clientName),
+        defRow(t('Cliente'), invoice.clientName),
         [invoice.farmName, invoice.locationName].filter(Boolean).length
-          ? defRow('Dónde', [invoice.farmName, invoice.locationName].filter(Boolean).join(' · '))
+          ? defRow(t('Dónde'), [invoice.farmName, invoice.locationName].filter(Boolean).join(' · '))
           : null,
 
         // A hand-written debt has no fortnight behind it — no plan, no days, no
@@ -126,22 +130,22 @@ export function renderInvoice(context) {
         // was never done.
         ...(isCharge(invoice)
           ? [
-              defRow('Motivo', invoice.reason || 'Cargo'),
-              defRow('Fecha', formatDayLong(invoice.periodStart)),
-              defRow('Fecha límite de pago', formatDayLong(invoice.dueDate)),
-              defRow('Deuda', moneyFull(amount), { total: true }),
+              defRow(t('Motivo'), invoice.reason || t('Cargo')),
+              defRow(t('Fecha'), formatDayLong(invoice.periodStart)),
+              defRow(t('Fecha límite de pago'), formatDayLong(invoice.dueDate)),
+              defRow(t('Deuda'), moneyFull(amount), { total: true }),
             ]
           : [
-              defRow('Periodo', `${formatDay(invoice.periodStart)} – ${formatDay(invoice.periodEnd)}`),
+              defRow(t('Periodo'), `${formatDay(invoice.periodStart)} – ${formatDay(invoice.periodEnd)}`),
 
               // Straight off the bill, not recalculated: these are the numbers
               // it was issued with, and they must not move when the price list
               // does.
               ...(invoice.fromNotebook ? [] : chargeRows(invoice)),
 
-              defRow('Comidas entregadas', number(invoice.meals)),
-              defRow('Fecha límite de pago', formatDayLong(invoice.dueDate)),
-              defRow(capitalize(periodWord(invoice)), moneyFull(amount), { total: true }),
+              defRow(t('Comidas entregadas'), number(invoice.meals)),
+              defRow(t('Fecha límite de pago'), formatDayLong(invoice.dueDate)),
+              defRow(capitalize(t(periodWord(invoice))), moneyFull(amount), { total: true }),
             ]),
       ].filter(Boolean))),
 
@@ -150,42 +154,42 @@ export function renderInvoice(context) {
       // right here, and so is the reason it moved.
       (invoice.corrections || []).length
         ? h('div.stack.stack-2',
-            sectionLabel('Correcciones'),
+            sectionLabel(t('Correcciones')),
             list((invoice.corrections || []).map(correctionRow), { card: true }))
         : null,
 
-      button('Corregir el monto', {
+      button(t('Corregir el monto'), {
         variant: 'ghost', block: true, icon: 'edit', onClick: fixAmount,
       }),
 
       isCharge(invoice)
-        ? alert('Esta deuda se agregó a mano'
-          + (invoice.issuedByName ? ` (${invoice.issuedByName})` : '')
-          + ': no la generó un periodo de comida. Se cobra igual que cualquier otra.', 'info')
+        ? alert(invoice.issuedByName
+          ? t('Esta deuda se agregó a mano ({name}): no la generó un periodo de comida. Se cobra igual que cualquier otra.',
+            { name: invoice.issuedByName })
+          : t('Esta deuda se agregó a mano: no la generó un periodo de comida. Se cobra igual que cualquier otra.'), 'info')
         : invoice.fromNotebook
-          ? alert(`Esta ${periodWord(invoice)} viene del cuaderno: se registró al pasar al `
-            + 'cliente al sistema, no la generó una ruta.', 'info')
+          ? alert(t('Esta {period} viene del cuaderno: se registró al pasar al cliente al sistema, no la generó una ruta.',
+            { period: t(periodWord(invoice)) }), 'info')
           : null,
 
       // Only while nothing has been paid against it: after that the mistake is
       // in the payment, and cancelling that is what puts this back.
       isCharge(invoice)
         ? (paid > 0.005
-            ? h('p.t-xs.c-faint.center', 'Para quitar esta deuda hay que cancelar primero el pago '
-              + 'que se le aplicó.')
-            : button('Quitar esta deuda', {
+            ? h('p.t-xs.c-faint.center', t('Para quitar esta deuda hay que cancelar primero el pago que se le aplicó.'))
+            : button(t('Quitar esta deuda'), {
                 variant: 'danger-soft', block: true, icon: 'ban', onClick: removeCharge,
               }))
         : null,
 
       /* Payments */
-      sectionLabel('Pagos recibidos'),
+      sectionLabel(t('Pagos recibidos')),
       paymentsOf(invoice).length
         ? list(paymentsOf(invoice).map(paymentRow), { card: true })
-        : card(h('p.t-sm.c-soft.center', 'Todavía no se ha registrado ningún pago.')),
+        : card(h('p.t-sm.c-soft.center', t('Todavía no se ha registrado ningún pago.'))),
 
       invoice.issuedByName
-        ? h('p.t-xs.c-faint.center', `Emitida por ${invoice.issuedByName}`)
+        ? h('p.t-xs.c-faint.center', t('Emitida por {name}', { name: invoice.issuedByName }))
         : null);
   }
 
@@ -199,7 +203,7 @@ export function renderInvoice(context) {
           : { background: 'var(--warn-50)', color: 'var(--warn-600)' },
       }, icon('edit')),
       title: `${money(entry.from)} → ${money(entry.to)}`,
-      meta: entry.note || 'Sin motivo',
+      meta: entry.note || t('Sin motivo'),
       end: h('span.t-xs.c-faint',
         [entry.byName, entry.date ? formatDay(entry.date) : null].filter(Boolean).join(' · ')),
       chevron: false,
@@ -217,7 +221,7 @@ export function renderInvoice(context) {
     const paidHere = round2(invoice.paid || 0);
 
     const result = await sheet({
-      title: 'Corregir el monto',
+      title: t('Corregir el monto'),
       build: (close) => {
         let next = String(round2(invoice.amount || 0));
         let note = '';
@@ -232,7 +236,7 @@ export function renderInvoice(context) {
           oninput: (event) => { next = event.target.value; repaint(); },
         });
         const noteBox = input({
-          placeholder: 'Ej. se cobró al plan equivocado',
+          placeholder: t('Ej. se cobró al plan equivocado'),
           maxlength: 90,
           oninput: (event) => { note = event.target.value; repaint(); },
         });
@@ -242,15 +246,15 @@ export function renderInvoice(context) {
           const moved = Math.abs(value - round2(invoice.amount || 0)) > 0.005;
           const tooLow = value < paidHere - 0.005;
 
-          mount(save, icon('edit'), moved ? `Dejarla en ${money(value)}` : 'Corregir el monto');
+          mount(save, icon('edit'), moved ? t('Dejarla en {amount}', { amount: money(value) }) : t('Corregir el monto'));
           save.disabled = busy || !moved || !note.trim() || tooLow || value < 0;
 
           mount(after, tooLow
-            ? `Ya pagó ${money(paidHere)} de esta cuenta. Para bajarla de ahí hay que `
-              + 'cancelar primero el pago.'
+            ? t('Ya pagó {amount} de esta cuenta. Para bajarla de ahí hay que cancelar primero el pago.',
+              { amount: money(paidHere) })
             : moved
-              ? `Queda debiendo ${money(round2(value - paidHere))} de esta cuenta.`
-              : 'Escribe el monto correcto.');
+              ? t('Queda debiendo {amount} de esta cuenta.', { amount: money(round2(value - paidHere)) })
+              : t('Escribe el monto correcto.'));
         }
 
         const form = h('form.stack.stack-4', {
@@ -259,7 +263,7 @@ export function renderInvoice(context) {
             if (busy) return;
             busy = true;
             save.disabled = true;
-            mount(save, h('span.spinner.spinner--light'), 'Corrigiendo…');
+            mount(save, h('span.spinner.spinner--light'), t('Corrigiendo…'));
             try {
               await correctAmount(
                 { invoice, amount: round2(Number(next) || 0), note: note.trim() },
@@ -273,19 +277,19 @@ export function renderInvoice(context) {
           },
         },
         card(defList([
-          defRow('Cuenta', invoiceTitle(invoice)),
-          defRow('Dice ahora', moneyFull(invoice.amount)),
-          paidHere > 0.005 ? defRow('Ya pagado', money(paidHere)) : null,
+          defRow(t('Cuenta'), tx(invoiceTitle(invoice))),
+          defRow(t('Dice ahora'), moneyFull(invoice.amount)),
+          paidHere > 0.005 ? defRow(t('Ya pagado'), money(paidHere)) : null,
         ].filter(Boolean))),
 
-        field({ label: 'Monto correcto', control: box }),
+        field({ label: t('Monto correcto'), control: box }),
         field({
-          label: '¿Por qué?',
-          hint: 'Queda guardado en la cuenta, con tu nombre y la fecha.',
+          label: t('¿Por qué?'),
+          hint: t('Queda guardado en la cuenta, con tu nombre y la fecha.'),
           control: noteBox,
         }),
         after,
-        alert('No se borra nada: la cuenta guarda lo que decía antes y lo que dice ahora.',
+        alert(t('No se borra nada: la cuenta guarda lo que decía antes y lo que dice ahora.'),
           'info'),
         save);
 
@@ -294,7 +298,7 @@ export function renderInvoice(context) {
       },
     });
 
-    if (result) toastOk('Monto corregido');
+    if (result) toastOk(t('Monto corregido'));
   }
 
   function paymentRow(payment, index) {
@@ -312,23 +316,23 @@ export function renderInvoice(context) {
 
   async function paymentOptions(payment, index) {
     await sheet({
-      title: `Pago de ${money(payment.amount)}`,
+      title: t('Pago de {amount}', { amount: money(payment.amount) }),
       build: (close) => h('div.stack.stack-4',
         card(defList([
-          defRow('Monto', money(payment.amount)),
-          defRow('Forma', paymentMethodMeta(payment.method).label),
-          defRow('Fecha', payment.date ? formatDayLong(payment.date) : '—'),
-          payment.reference ? defRow('Referencia', payment.reference) : null,
-          payment.byName ? defRow('Registró', payment.byName) : null,
-          payment.note ? defRow('Nota', payment.note) : null,
+          defRow(t('Monto'), money(payment.amount)),
+          defRow(t('Forma'), paymentMethodMeta(payment.method).label),
+          defRow(t('Fecha'), payment.date ? formatDayLong(payment.date) : '—'),
+          payment.reference ? defRow(t('Referencia'), payment.reference) : null,
+          payment.byName ? defRow(t('Registró'), payment.byName) : null,
+          payment.note ? defRow(t('Nota'), payment.note) : null,
         ].filter(Boolean))),
         payment.receiptId
-          ? button('Ver el recibo', {
+          ? button(t('Ver el recibo'), {
               variant: 'ghost', block: true, icon: 'receipt',
               onClick: () => { close(); go(`/receipts/${payment.receiptId}`); },
             })
           : null,
-        button('Cancelar este pago', {
+        button(t('Cancelar este pago'), {
           variant: 'danger-soft', block: true, icon: 'ban',
           onClick: async () => { close(); await cancelPayment(payment, index); },
         })),
@@ -356,16 +360,17 @@ export function renderInvoice(context) {
     const spread = (receipt?.applied || []).length > 1;
 
     const ok = await confirm({
-      title: 'Cancelar pago',
+      title: t('Cancelar pago'),
       message: receipt
-        ? `Se cancela el recibo ${receipt.folio} completo, de ${money(receipt.amount)}`
-          + `${spread ? `, que cubría ${receipt.applied.length} quincenas` : ''}. `
-          + 'Todo lo que pagó vuelve a quedar pendiente. El recibo no se borra: queda junto '
-          + 'con su cancelación, y el cliente ve las dos cosas.'
-        : `Se restará ${money(payment.amount)} de lo cobrado y la factura volverá a quedar `
-          + 'pendiente.',
-      confirmLabel: 'Sí, cancelar el pago',
-      cancelLabel: 'No, dejarlo así',
+        ? (spread
+            ? t('Se cancela el recibo {folio} completo, de {amount}, que cubría {count} quincenas. Todo lo que pagó vuelve a quedar pendiente. El recibo no se borra: queda junto con su cancelación, y el cliente ve las dos cosas.',
+              { folio: receipt.folio, amount: money(receipt.amount), count: receipt.applied.length })
+            : t('Se cancela el recibo {folio} completo, de {amount}. Todo lo que pagó vuelve a quedar pendiente. El recibo no se borra: queda junto con su cancelación, y el cliente ve las dos cosas.',
+              { folio: receipt.folio, amount: money(receipt.amount) }))
+        : t('Se restará {amount} de lo cobrado y la factura volverá a quedar pendiente.',
+          { amount: money(payment.amount) }),
+      confirmLabel: t('Sí, cancelar el pago'),
+      cancelLabel: t('No, dejarlo así'),
       tone: 'danger',
       icon: 'ban',
     });
@@ -374,7 +379,7 @@ export function renderInvoice(context) {
     try {
       if (receipt) await voidReceipt(receipt, author());
       else await reversePayment(id, index, author());
-      toastOk('Pago cancelado');
+      toastOk(t('Pago cancelado'));
     } catch (error) { toastBad(errorText(error)); }
   }
 
@@ -390,12 +395,12 @@ export function renderInvoice(context) {
     const doomed = { ...invoice, id };
 
     const ok = await confirm({
-      title: 'Quitar esta deuda',
-      message: `Se quita el cargo de ${money(doomed.amount)} `
-        + `(${doomed.reason || 'sin motivo'}) de la cuenta de ${doomed.clientName}. `
-        + 'Su saldo baja por esa cantidad.',
-      confirmLabel: 'Sí, quitarla',
-      cancelLabel: 'No, dejarla',
+      title: t('Quitar esta deuda'),
+      message: t('Se quita el cargo de {amount} ({reason}) de la cuenta de {name}. Su saldo baja por esa cantidad.', {
+        amount: money(doomed.amount), reason: doomed.reason || t('sin motivo'), name: doomed.clientName,
+      }),
+      confirmLabel: t('Sí, quitarla'),
+      cancelLabel: t('No, dejarla'),
       tone: 'danger',
       icon: 'ban',
     });
@@ -403,7 +408,7 @@ export function renderInvoice(context) {
 
     try {
       await voidCharge(doomed);
-      toastOk('Deuda quitada');
+      toastOk(t('Deuda quitada'));
       go(`/clients/${doomed.clientId}`);
     } catch (error) { toastBad(errorText(error)); }
   }
@@ -415,7 +420,7 @@ export function renderInvoice(context) {
    */
   async function charge() {
     const client = clientById(invoice.clientId);
-    if (!client) { toastBad('No se encontró la ficha de este cliente.'); return; }
+    if (!client) { toastBad(t('No se encontró la ficha de este cliente.')); return; }
     const receipt = await openChargeSheet({
       client,
       invoices: invoicesFor(client.id),
@@ -429,17 +434,22 @@ export function renderInvoice(context) {
   async function sendReminder() {
     const balance = balanceOf(invoice);
     const late = daysBetween(today(), invoice.dueDate);
-    const what = isCharge(invoice)
-      ? `el cargo “${invoiceTitle(invoice)}”`
-      : `el periodo ${invoiceTitle(invoice)}`;
-    const text = late < 0
-      ? `Recordatorio: ${what} tiene un saldo de ${money(balance)} que venció el ${formatDay(invoice.dueDate)}. Si ya realizaron el pago, avísennos por aquí.`
-      : `Recordatorio: ${what} suma ${money(balance)} y vence el ${formatDay(invoice.dueDate)}. Cualquier duda sobre el pago, escríbannos por aquí.`;
+    const words = () => {
+      const what = isCharge(invoice)
+        ? t('el cargo “{title}”', { title: invoiceTitle(invoice) })
+        : t('el periodo {title}', { title: invoiceTitle(invoice) });
+      const said = { what, amount: money(balance), day: formatDay(invoice.dueDate) };
+      return late < 0
+        ? t('Recordatorio: {what} tiene un saldo de {amount} que venció el {day}. Si ya realizaron el pago, avísennos por aquí.', said)
+        : t('Recordatorio: {what} suma {amount} y vence el {day}. Cualquier duda sobre el pago, escríbannos por aquí.', said);
+    };
+    // Sent in Spanish, to the client's app; shown here in the screen's language.
+    const text = inSpanish(words);
 
     if (!await confirm({
-      title: 'Enviar recordatorio',
-      message: text,
-      confirmLabel: 'Enviar mensaje', icon: 'chat',
+      title: t('Enviar recordatorio'),
+      message: words(),
+      confirmLabel: t('Enviar mensaje'), icon: 'chat',
     })) return;
 
     try {
@@ -447,7 +457,7 @@ export function renderInvoice(context) {
         meta: { kind: 'payment_reminder', invoiceId: id, balance },
         notify: true,
       });
-      toastOk('Recordatorio enviado');
+      toastOk(t('Recordatorio enviado'));
       go(`/chat/${invoice.clientId}`);
     } catch (error) { toastBad(errorText(error)); }
   }

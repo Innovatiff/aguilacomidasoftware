@@ -15,6 +15,7 @@ import { getClient } from '../data/clients.js';
 import { ADMIN_QUICK_REPLIES } from '../lib/model.js';
 import { STATUS_LABEL, STATUS_TONE } from '../lib/billing.js';
 import { money } from '../lib/format.js';
+import { t } from '../lib/i18n.js';
 
 export function renderChat(context) {
   const life = lifetime();
@@ -40,7 +41,7 @@ export function renderChat(context) {
         sender: { uid: session.uid, name: session.displayName },
         client,
         quickReplies: ADMIN_QUICK_REPLIES,
-        emptyText: 'Escribe al rancho sobre entregas, horarios o pagos. Verán el mensaje en su app.',
+        emptyText: t('Escribe al rancho sobre entregas, horarios o pagos. Verán el mensaje en su app.'),
       });
     }
 
@@ -48,7 +49,7 @@ export function renderChat(context) {
     const owes = (billing?.balance || 0) > 0;
 
     const page = screen({
-      title: client?.name || 'Conversación',
+      title: client?.name || t('Conversación'),
       backTo: '/messages',
       flush: true,
       hideTabs: true,
@@ -58,11 +59,11 @@ export function renderChat(context) {
       },
         avatar(client?.name || '?', { size: 'sm', dark: true }),
         h('div.grow', { style: { minWidth: 0, textAlign: 'left' } },
-          h('div.topbar__title', { style: { fontSize: 'var(--fs-md)' } }, client?.name || 'Conversación'),
+          h('div.topbar__title', { style: { fontSize: 'var(--fs-md)' } }, client?.name || t('Conversación')),
           h('span.topbar__sub',
-            owes ? `Debe ${money(billing.balance, { round: true })}` : 'Al corriente'))),
+            owes ? t('Debe {amount}', { amount: money(billing.balance, { round: true }) }) : t('Al corriente')))),
       actions: [topbarButton('users', {
-        label: 'Ver rancho',
+        label: t('Ver rancho'),
         onClick: () => go(`/clients/${clientId}`),
       })],
       body: h('div.stack', { style: { flex: '1', minHeight: '0', display: 'flex' } },
@@ -90,5 +91,5 @@ const overdueStrip = (billing) => h('div', {
     display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'space-between',
   },
 },
-  h('span.t-sm.w-600.c-bad', `Saldo vencido: ${money(billing.balance)}`),
-  badge(STATUS_LABEL[billing.status], STATUS_TONE[billing.status]));
+  h('span.t-sm.w-600.c-bad', t('Saldo vencido: {amount}', { amount: money(billing.balance) })),
+  badge(t(STATUS_LABEL[billing.status]), STATUS_TONE[billing.status]));

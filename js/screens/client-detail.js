@@ -45,6 +45,7 @@ import {
 import { money, moneyFull, plural, phone as fmtPhone, telHref, number } from '../lib/format.js';
 import { clientStatusMeta, paymentMethodMeta } from '../lib/model.js';
 import { errorText } from '../firebase.js';
+import { t, tx } from '../lib/i18n.js';
 
 export function renderClientDetail(context) {
   const clientId = context.params.id;
@@ -64,7 +65,7 @@ export function renderClientDetail(context) {
 
   function draw() {
     if (!client) {
-      screen({ title: 'Cliente', backTo: '/clients', tab: 'clients', body: loading() });
+      screen({ title: t('Cliente'), backTo: '/clients', tab: 'clients', body: loading() });
       return;
     }
     screen({
@@ -74,8 +75,8 @@ export function renderClientDetail(context) {
       backTo: client.farmId ? `/farms/${client.farmId}` : '/clients',
       tab: 'clients',
       actions: [
-        topbarButton('chat', { label: 'Mensajes', onClick: openChat }),
-        topbarButton('edit', { label: 'Editar', onClick: () => go(`/clients/${clientId}/edit`) }),
+        topbarButton('chat', { label: t('Mensajes'), onClick: openChat }),
+        topbarButton('edit', { label: t('Editar'), onClick: () => go(`/clients/${clientId}/edit`) }),
       ],
       body: body(),
     });
@@ -107,12 +108,12 @@ export function renderClientDetail(context) {
       h('div.row.row--top',
         h('span', { style: { color: 'var(--brand-600)' } }, icon('check')),
         h('div.grow',
-          h('div.w-600', 'Cliente registrado'),
+          h('div.w-600', t('Cliente registrado')),
           h('p.t-sm.c-soft', { style: { marginTop: '2px' } },
-            'Ya puede entrar a la app con este correo:'),
+            t('Ya puede entrar a la app con este correo:')),
           h('div.row', { style: { marginTop: '10px' } },
             emailChip(email),
-            button('Copiar', { variant: 'soft', size: 'sm', icon: 'copy', onClick: () => copy(email) })))));
+            button(t('Copiar'), { variant: 'soft', size: 'sm', icon: 'copy', onClick: () => copy(email) })))));
   }
 
   function identityCard(model, onChat) {
@@ -124,37 +125,42 @@ export function renderClientDetail(context) {
           model.phone ? h('div.t-sm.c-soft', fmtPhone(model.phone)) : null,
           h('div', { style: { marginTop: '6px' } },
             startsLater(model)
-              ? badge(`Empieza el ${formatDay(model.startsOn)}`, 'info', 'clock')
+              ? badge(t('Empieza el {day}', { day: formatDay(model.startsOn) }), 'info', 'clock')
               : badge(clientStatusMeta(model.status).label, clientStatusMeta(model.status).tone,
                 clientStatusMeta(model.status).icon)))),
 
       // Registered ahead: on pause, and active by itself on that morning.
       startsLater(model)
-        ? alert(`Empieza el ${formatDayLong(model.startsOn)}: ese día se activa solo (Programador). `
-          + 'Hasta entonces no se empaca ni se le cobra, pero la cocina ya puede acomodar su ubicación.',
+        ? alert(t('Empieza el {day}: ese día se activa solo (Programador). Hasta entonces no se empaca ni se le cobra, pero la cocina ya puede acomodar su ubicación.', {
+          day: formatDayLong(model.startsOn),
+        }),
         'info', 'clock')
         : null,
 
       model.endsOn
         ? alert(model.endsOn < today()
-          ? `Su último día fue el ${formatDayLong(model.endsOn)}. `
-            + `${model.status === 'paused' ? `Desde el ${formatDayLong(addDays(model.endsOn, 1))} está en pausa: `
-              : ''}ya no aparece en la libreta ni se le factura. Para que vuelva, reactívalo.`
-          : `Último día: ${formatDayLong(model.endsOn)} `
-            + `(${plural(Math.max(0, daysLeft(model)), 'día', 'días')}). Ese día se le empaca; `
-            + 'al día siguiente queda en pausa solo y sale de la libreta.',
+          ? (model.status === 'paused'
+            ? t('Su último día fue el {day}. Desde el {next} está en pausa: ya no aparece en la libreta ni se le factura. Para que vuelva, reactívalo.', {
+              day: formatDayLong(model.endsOn), next: formatDayLong(addDays(model.endsOn, 1)),
+            })
+            : t('Su último día fue el {day}. ya no aparece en la libreta ni se le factura. Para que vuelva, reactívalo.', {
+              day: formatDayLong(model.endsOn),
+            }))
+          : t('Último día: {day} ({days}). Ese día se le empaca; al día siguiente queda en pausa solo y sale de la libreta.', {
+            day: formatDayLong(model.endsOn), days: plural(Math.max(0, daysLeft(model)), 'día', 'días'),
+          }),
         model.endsOn < today() ? 'bad' : 'warn')
         : null,
 
       (model.tags || []).length
         ? h('div.stack.stack-2',
-            h('div.t-xs.upper.c-faint.w-700', 'No puede comer'),
+            h('div.t-xs.upper.c-faint.w-700', t('No puede comer')),
             tagList(model.tags, { className: 'tags--loud' }))
         : null,
 
       (model.preferencias || []).length
         ? h('div.stack.stack-2',
-            h('div.t-xs.upper.c-faint.w-700', 'Preferencias'),
+            h('div.t-xs.upper.c-faint.w-700', t('Preferencias')),
             tagList(model.preferencias))
         : null,
 
@@ -162,18 +168,18 @@ export function renderClientDetail(context) {
 
       // Today's note, which is the only thing on this card that expires.
       dayNoteOf(model)
-        ? alert(`Hoy: ${dayNoteOf(model)}`, 'info', 'note')
+        ? alert(t('Hoy: {note}', { note: dayNoteOf(model) }), 'info', 'note')
         : null,
 
       h('div.btn-group',
         model.phone
-          ? h('a.btn.btn--ghost.btn--sm', { href: telHref(model.phone) }, icon('phone'), 'Llamar')
+          ? h('a.btn.btn--ghost.btn--sm', { href: telHref(model.phone) }, icon('phone'), t('Llamar'))
           : null,
-        button('Mensaje', { variant: 'ghost', size: 'sm', icon: 'chat', onClick: onChat }),
-        button(dayNoteOf(model) ? 'Cambiar nota de hoy' : 'Nota de hoy', {
+        button(t('Mensaje'), { variant: 'ghost', size: 'sm', icon: 'chat', onClick: onChat }),
+        button(dayNoteOf(model) ? t('Cambiar nota de hoy') : t('Nota de hoy'), {
           variant: 'ghost', size: 'sm', icon: 'note', onClick: () => editDayNote(model),
         }),
-        button(model.endsOn ? 'Cambiar último día' : 'Poner último día', {
+        button(model.endsOn ? t('Cambiar último día') : t('Poner último día'), {
           variant: 'ghost', size: 'sm', icon: 'calendar', onClick: () => setLastDay(model),
         }))));
   }
@@ -187,8 +193,8 @@ export function renderClientDetail(context) {
     const planned = plannedFor(model.id);
     return card(h('div.stack.stack-3',
       h('div.row.row--between',
-        h('div.card__title', 'Programado'),
-        button('Programar un cambio', {
+        h('div.card__title', t('Programado')),
+        button(t('Programar un cambio'), {
           variant: 'soft', size: 'sm', icon: 'clock',
           onClick: () => openScheduleFlow({ client: model, author: { uid: session.uid, name: session.displayName } }),
         })),
@@ -199,8 +205,7 @@ export function renderClientDetail(context) {
           chevron: true,
           onClick: () => go('/programador'),
         })), { card: false })
-        : h('p.t-sm.c-soft', 'Nada programado. Para un cambio que empieza otro día —dos comidas '
-          + 'desde el lunes, otra casa desde el 28— tócale a «Programar un cambio».')));
+        : h('p.t-sm.c-soft', t('Nada programado. Para un cambio que empieza otro día —dos comidas desde el lunes, otra casa desde el 28— tócale a «Programar un cambio».'))));
   }
 
   /**
@@ -215,26 +220,25 @@ export function renderClientDetail(context) {
 
     return card(h('div.stack.stack-3',
       h('div.row.row--between',
-        h('div.card__title', 'Ubicación'),
-        stillThere ? null : badge('Revisar', 'bad')),
+        h('div.card__title', t('Ubicación')),
+        stillThere ? null : badge(t('Revisar'), 'bad')),
 
       h('div.row',
         h('span.item__ico', icon('farm')),
         h('div.grow', { style: { minWidth: 0 } },
-          h('div.w-650.truncate', model.farmName || 'Sin rancho'),
-          h('div.t-sm.c-soft.truncate', model.locationName || 'Sin ubicación')),
+          h('div.w-650.truncate', model.farmName || t('Sin rancho')),
+          h('div.t-sm.c-soft.truncate', model.locationName || t('Sin ubicación'))),
         model.farmId
-          ? button('Ver rancho', {
+          ? button(t('Ver rancho'), {
               variant: 'ghost', size: 'sm', onClick: () => go(`/farms/${model.farmId}`),
             })
           : null),
 
       stillThere
         ? null
-        : alert('Esa ubicación ya no existe en el rancho. Elige otra para que siga apareciendo '
-          + 'en la ruta.', 'warn'),
+        : alert(t('Esa ubicación ya no existe en el rancho. Elige otra para que siga apareciendo en la ruta.'), 'warn'),
 
-      button('Cambiar de ubicación', {
+      button(t('Cambiar de ubicación'), {
         variant: 'ghost', size: 'sm', block: true, icon: 'pin', onClick: () => changePlace(model),
       })));
   }
@@ -251,31 +255,31 @@ export function renderClientDetail(context) {
     const paidUpTo = model.paidThrough ? paidThroughOn(model, model.paidThrough) : null;
 
     return h('div.stack.stack-3',
-      sectionLabel('Cobro'),
+      sectionLabel(t('Cobro')),
 
       card(h('div.stack.stack-4',
         h('div.row.row--between',
           h('div',
-            h('div.t-xs.upper.c-faint.w-700', owes ? 'Saldo pendiente' : 'Sin adeudo'),
+            h('div.t-xs.upper.c-faint.w-700', owes ? t('Saldo pendiente') : t('Sin adeudo')),
             h('div.t-2xl.w-700', { style: { color: owes ? 'var(--bad-600)' : 'var(--ok-600)' } },
               money(billing.balance))),
-          badge(STATUS_LABEL[billing.status] || 'Al corriente', STATUS_TONE[billing.status] || 'ok')),
+          badge(t(STATUS_LABEL[billing.status]) || t('Al corriente'), STATUS_TONE[billing.status] || 'ok')),
 
         owes ? h('div.t-sm.c-soft',
           billing.daysToDue < 0
-            ? `Venció ${humanDelta(billing.daysToDue)} (${formatDay(billing.dueDate)}).`
-            : `Vence ${humanDelta(billing.daysToDue)} (${formatDay(billing.dueDate)}).`) : null,
+            ? t('Venció {when} ({day}).', { when: humanDelta(billing.daysToDue), day: formatDay(billing.dueDate) })
+            : t('Vence {when} ({day}).', { when: humanDelta(billing.daysToDue), day: formatDay(billing.dueDate) })) : null,
 
         advance
           ? h('div.stack.stack-2',
-              alert(`Tiene un pago puesto en una ${periodWord(model)} antes de que se sirviera. `
-                + `Aquí no se paga por adelantado: ese pago es por la ${periodWord(model)} `
-                + 'anterior.', 'warn'),
-              button('Revisar y corregir', {
+              alert(t('Tiene un pago puesto en una {period} antes de que se sirviera. Aquí no se paga por adelantado: ese pago es por la {period} anterior.', {
+                period: t(periodWord(model)),
+              }), 'warn'),
+              button(t('Revisar y corregir'), {
                 variant: 'soft', size: 'sm', icon: 'check', onClick: () => fixAhead(model),
               }))
           : !owes && paidUpTo && paidUpTo < period.start
-            ? h('div.t-sm.c-soft', `Pagado hasta el ${formatDay(paidUpTo)}.`)
+            ? h('div.t-sm.c-soft', t('Pagado hasta el {day}.', { day: formatDay(paidUpTo) }))
             : null,
 
         h('div.divider'),
@@ -283,20 +287,23 @@ export function renderClientDetail(context) {
         h('div.stack.stack-2',
           h('div.row.row--between.t-sm',
             h('span.c-soft',
-              `${capitalize(periodWord(model))} en curso · ${formatRange(period.start, period.end)}`),
-            h('span.w-600', priced ? money(projection.amount) : 'Sin precio')),
+              capitalize(t('{period} en curso · {range}', {
+                period: t(periodWord(model)), range: formatRange(period.start, period.end),
+              }))),
+            h('span.w-600', priced ? money(projection.amount) : t('Sin precio'))),
           meter(periodProgress(period), { tone: 'ok' }),
           h('div.t-xs.c-faint',
-            [`${plural(model.mealsPerDay, 'comida', 'comidas')}/día`,
-              `${projection.days} días`,
-              projection.extraMeals ? `+${projection.extraMeals} extra` : null,
+            [t('{meals}/día', { meals: plural(model.mealsPerDay, 'comida', 'comidas') }),
+              t('{count} días', { count: projection.days }),
+              projection.extraMeals ? t('+{count} extra', { count: projection.extraMeals }) : null,
             ].filter(Boolean).join(' · ')),
           // The number the counter actually quotes: not the invoice's due date
           // with its grace days, but the day this person turns up again — the
           // day after this fortnight ends, to pay for it.
           h('div.t-sm.w-600', { style: { marginTop: '2px' } },
-            `Se paga el ${weekdayName(payDayAfter(period))} `
-            + `${formatDay(payDayAfter(period))}, cuando termine`),
+            t('Se paga el {weekday} {day}, cuando termine', {
+              weekday: weekdayName(payDayAfter(period)), day: formatDay(payDayAfter(period)),
+            })),
 
           // Whether that date is a day somebody confirmed or a placeholder
           // inherited from the rancho. While the notebook is being migrated
@@ -304,38 +311,40 @@ export function renderClientDetail(context) {
           // were settled is how the wrong day gets told to a client.
           h('div.t-xs.c-faint',
             cycleIsSet(model)
-              ? `${capitalize(periodWord(model))} fijada con el pago del `
-                + `${formatDay(model.cycleSetOn)}.`
-              : `Su ${periodWord(model)} todavía es la del rancho. Si no es la suya, `
-                + 'cámbiala en Editar.')),
+              ? capitalize(t('{period} fijada con el pago del {day}.', {
+                period: t(periodWord(model)), day: formatDay(model.cycleSetOn),
+              }))
+              : t('Su {period} todavía es la del rancho. Si no es la suya, cámbiala en Editar.', {
+                period: t(periodWord(model)),
+              }))),
 
         priced
           ? null
-          : alert('Su plan no tiene precio. Ponlo en Ajustes → Precios para poder cobrarle.', 'warn'),
+          : alert(t('Su plan no tiene precio. Ponlo en Ajustes → Precios para poder cobrarle.'), 'warn'),
 
         h('div.btn-group',
-          button('Cobrar', {
+          button(t('Cobrar'), {
             variant: 'primary', size: 'sm', icon: 'cash', onClick: () => charge(model),
           }),
-          button('Agregar deuda', {
+          button(t('Agregar deuda'), {
             variant: 'ghost', size: 'sm', icon: 'plus', onClick: () => addDebt(model),
           }),
           // Only where there is something to correct: on an account at zero
           // the way to move the number up is to add a debt, which is the
           // button right next to it.
           billing.balance > 0.005
-            ? button('Corregir saldo', {
+            ? button(t('Corregir saldo'), {
                 variant: 'ghost', size: 'sm', icon: 'edit', onClick: () => fixBalance(model),
               })
             : null,
-          button('Cerrar y facturar', {
+          button(t('Cerrar y facturar'), {
             variant: 'ghost', size: 'sm', icon: 'receipt', onClick: () => issueCycle(model),
           })))),
 
       loaded
         ? (rows.length
             ? list(rows.slice(0, 6).map((invoice) => invoiceRow(invoice)), { card: true })
-            : card(h('p.t-sm.c-soft.center', 'Todavía no hay facturas para este cliente.')))
+            : card(h('p.t-sm.c-soft.center', t('Todavía no hay facturas para este cliente.'))))
         : loading());
   }
 
@@ -358,31 +367,31 @@ export function renderClientDetail(context) {
       .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || stamp(b) - stamp(a))[0];
 
     return h('div.stack.stack-3',
-      sectionLabel('Historial de pagos', receipts.length
-        ? h('span.t-sm.c-soft', `${money(paid, { round: true })} en total`)
+      sectionLabel(t('Historial de pagos'), receipts.length
+        ? h('span.t-sm.c-soft', t('{amount} en total', { amount: money(paid, { round: true }) }))
         : null),
 
       receipts.length
         ? h('div.stack.stack-2',
             last
-              ? h('p.t-xs.c-faint', `Última vez que pagó: ${formatDayLong(last.date)}.`)
+              ? h('p.t-xs.c-faint', t('Última vez que pagó: {day}.', { day: formatDayLong(last.date) }))
               : null,
             list(receipts.slice(0, 12).map((row) => receiptRow(row, voided.has(row.id))), { card: true }),
-            button('Registrar un pago anterior', {
+            button(t('Registrar un pago anterior'), {
               variant: 'ghost', block: true, size: 'sm', icon: 'clipboard',
               onClick: () => addHistory(client),
             }))
         : card(h('div.stack.stack-3',
-            h('p.t-sm.c-soft.center', 'Todavía no se le ha registrado ningún pago.'),
+            h('p.t-sm.c-soft.center', t('Todavía no se le ha registrado ningún pago.')),
             // The whole first notebook is in this state: registered before
             // payments could be recorded at all. Typing the last one in is
             // what puts their fortnight where it belongs.
-            button('Registrar un pago anterior', {
+            button(t('Registrar un pago anterior'), {
               variant: 'primary', block: true, icon: 'clipboard',
               onClick: () => addHistory(client),
             }),
             !invoices.length
-              ? button('Traer saldo del cuaderno', {
+              ? button(t('Traer saldo del cuaderno'), {
                   variant: 'ghost', block: true, icon: 'receipt',
                   onClick: () => bringOverBalance(client),
                 })
@@ -392,7 +401,7 @@ export function renderClientDetail(context) {
   function receiptRow(receipt, wasCancelled = false) {
     const reversal = Number(receipt.amount) < 0;
     const dead = reversal || wasCancelled;
-    const covers = paidFor(receipt, invoices).map(appliedTitle).join(', ');
+    const covers = paidFor(receipt, invoices).map((row) => tx(appliedTitle(row))).join(', ');
 
     return itemRow({
       lead: h('div.avatar.avatar--sm', {
@@ -404,9 +413,9 @@ export function renderClientDetail(context) {
       meta: [formatDay(receipt.date), paymentMethodMeta(receipt.method).label, covers]
         .filter(Boolean).join(' · '),
       end: reversal
-        ? badge('Cancelación', 'bad')
+        ? badge(t('Cancelación'), 'bad')
         : wasCancelled
-          ? badge('Cancelado', 'bad')
+          ? badge(t('Cancelado'), 'bad')
           : h('span.t-xs.c-faint', receipt.folio || ''),
       onClick: () => go(`/receipts/${receipt.id}`),
     });
@@ -445,30 +454,29 @@ export function renderClientDetail(context) {
   async function editDayNote(model) {
     const box = input({
       value: dayNoteOf(model),
-      placeholder: 'Hoy no viene, dejar con su hermano…',
+      placeholder: t('Hoy no viene, dejar con su hermano…'),
       maxlength: 90,
     });
 
     await sheet({
-      title: 'Nota de hoy',
+      title: t('Nota de hoy'),
       build: (close) => h('form.stack.stack-3', {
         onsubmit: async (event) => {
           event.preventDefault();
           try {
             await setDayNote(model.id, box.value, today());
-            toastOk(box.value.trim() ? 'Nota de hoy guardada' : 'Nota de hoy quitada');
+            toastOk(box.value.trim() ? t('Nota de hoy guardada') : t('Nota de hoy quitada'));
             close(true);
           } catch (error) { toastBad(errorText(error)); }
         },
       },
       h('p.t-sm.c-soft',
-        `Sale en la etiqueta de ${model.name} en lugar de su nota de siempre, y solo hoy. `
-        + 'Mañana desaparece sola.'),
-      model.notes ? h('p.t-sm.c-faint', `Su nota de siempre: ${model.notes}`) : null,
-      fieldGroup({ label: 'Lo de hoy', control: box }),
-      h('button.btn.btn--primary.btn--block.btn--lg', { type: 'submit' }, 'Guardar'),
+        t('Sale en la etiqueta de {name} en lugar de su nota de siempre, y solo hoy. Mañana desaparece sola.', { name: model.name })),
+      model.notes ? h('p.t-sm.c-faint', t('Su nota de siempre: {note}', { note: model.notes })) : null,
+      fieldGroup({ label: t('Lo de hoy', { ctx: 'note' }), control: box }),
+      h('button.btn.btn--primary.btn--block.btn--lg', { type: 'submit' }, t('Guardar')),
       dayNoteOf(model)
-        ? button('Quitar la de hoy', {
+        ? button(t('Quitar la de hoy'), {
           variant: 'ghost', block: true,
           onClick: async () => { box.value = ''; },
         })
@@ -478,22 +486,23 @@ export function renderClientDetail(context) {
 
   async function setLastDay(model) {
     const choices = [
-      ['Hoy es su último día', 0],
-      ['Mañana', 1],
-      ['En 2 días', 2],
-      ['En 3 días', 3],
-      ['En una semana', 7],
+      [t('Hoy es su último día'), 0],
+      [t('Mañana'), 1],
+      [t('En 2 días'), 2],
+      [t('En 3 días'), 3],
+      [t('En una semana'), 7],
     ];
 
     await sheet({
-      title: 'Hasta cuándo se le sirve',
+      title: t('Hasta cuándo se le sirve'),
       build: (close) => h('div.stack.stack-3',
         h('p.t-sm.c-soft',
-          `Después de ese día ${model.name} deja de aparecer en la libreta y no se le `
-          + `factura ninguna ${periodWord(model)} más. Su saldo pendiente no se toca.`),
+          t('Después de ese día {name} deja de aparecer en la libreta y no se le factura ninguna {period} más. Su saldo pendiente no se toca.', {
+            name: model.name, period: t(periodWord(model)),
+          })),
 
         model.endsOn
-          ? alert(`Ahora mismo termina el ${formatDayLong(model.endsOn)}.`,
+          ? alert(t('Ahora mismo termina el {day}.', { day: formatDayLong(model.endsOn) }),
               model.endsOn < today() ? 'bad' : 'warn')
           : null,
 
@@ -503,7 +512,7 @@ export function renderClientDetail(context) {
         })),
 
         fieldGroup({
-          label: 'Otra fecha',
+          label: t('Otra fecha'),
           control: input({
             type: 'date', value: model.endsOn || '', min: today(),
             onchange: async (event) => {
@@ -515,7 +524,7 @@ export function renderClientDetail(context) {
         }),
 
         model.endsOn
-          ? button('Quitar la fecha — sigue indefinidamente', {
+          ? button(t('Quitar la fecha — sigue indefinidamente'), {
               variant: 'ghost', block: true, icon: 'refresh',
               onClick: async () => { close(); await saveLastDay(model, ''); },
             })
@@ -526,7 +535,7 @@ export function renderClientDetail(context) {
   async function saveLastDay(model, endsOn) {
     try {
       await setEndsOn(model.id, endsOn);
-      toastOk(endsOn ? `Termina el ${formatDay(endsOn)}` : 'Sin fecha de término');
+      toastOk(endsOn ? t('Termina el {day}', { day: formatDay(endsOn) }) : t('Sin fecha de término'));
     } catch (error) { toastBad(errorText(error)); }
   }
 
@@ -561,15 +570,15 @@ export function renderClientDetail(context) {
     const status = invoiceStatus(invoice, today());
     const balance = balanceOf(invoice);
     return itemRow({
-      title: invoiceTitle(invoice),
+      title: tx(invoiceTitle(invoice)),
       meta: isCharge(invoice)
-        ? `${moneyFull(invoice.amount)} · deuda del ${formatDay(invoice.periodStart)}`
+        ? t('{amount} · deuda del {day}', { amount: moneyFull(invoice.amount), day: formatDay(invoice.periodStart) })
         : invoice.fromNotebook
-          ? `${moneyFull(invoice.amount)} · del cuaderno`
-          : `${moneyFull(invoice.amount)} · ${number(invoice.meals)} comidas entregadas`,
+          ? t('{amount} · del cuaderno', { amount: moneyFull(invoice.amount) })
+          : t('{amount} · {meals} comidas entregadas', { amount: moneyFull(invoice.amount), meals: number(invoice.meals) }),
       end: [
-        badge(STATUS_LABEL[status], STATUS_TONE[status]),
-        balance > 0 ? h('span.t-xs.c-soft', `Saldo ${money(balance)}`) : null,
+        badge(t(STATUS_LABEL[status]), STATUS_TONE[status]),
+        balance > 0 ? h('span.t-xs.c-soft', t('Saldo {amount}', { amount: money(balance) })) : null,
       ].filter(Boolean),
       onClick: () => go(`/invoices/${invoice.id}`),
     });
@@ -582,23 +591,21 @@ export function renderClientDetail(context) {
    */
   function accessCard(model) {
     return h('div.stack.stack-3',
-      sectionLabel('Acceso a su app'),
+      sectionLabel(t('Acceso a su app')),
       card(h('div.stack.stack-3',
         h('div.row.row--between',
           h('div', { style: { minWidth: 0 } },
-            h('div.t-xs.upper.c-faint.w-700', 'Correo de acceso'),
+            h('div.t-xs.upper.c-faint.w-700', t('Correo de acceso')),
             h('div', { style: { marginTop: '6px' } }, emailChip(model.email || '—'))),
           model.email
-            ? button('Copiar', { variant: 'ghost', size: 'sm', icon: 'copy', onClick: () => copy(model.email) })
+            ? button(t('Copiar'), { variant: 'ghost', size: 'sm', icon: 'copy', onClick: () => copy(model.email) })
             : null),
 
         model.email
-          ? alert('Entra a la app con este correo y la contraseña que él mismo elija. '
-            + 'No hay códigos que compartir.', 'info')
-          : alert('Sin correo registrado no puede abrir la app. Puedes agregarlo cuando lo tenga; '
-            + 'sus entregas y su cuenta se siguen registrando igual.', 'info'),
+          ? alert(t('Entra a la app con este correo y la contraseña que él mismo elija. No hay códigos que compartir.'), 'info')
+          : alert(t('Sin correo registrado no puede abrir la app. Puedes agregarlo cuando lo tenga; sus entregas y su cuenta se siguen registrando igual.'), 'info'),
 
-        button(model.email ? 'Cambiar correo de acceso' : 'Agregar correo', {
+        button(model.email ? t('Cambiar correo de acceso') : t('Agregar correo'), {
           variant: 'ghost', size: 'sm', block: true, icon: 'mail',
           onClick: () => changeEmail(model),
         }))));
@@ -608,36 +615,35 @@ export function renderClientDetail(context) {
     const price = periodPrice(model);
 
     return h('div.stack.stack-3',
-      sectionLabel('Condiciones del servicio', model.farmId
+      sectionLabel(t('Condiciones del servicio'), model.farmId
         ? h('button.btn.btn--quiet.btn--sm', {
             type: 'button', onclick: () => go(`/farms/${model.farmId}/edit`),
-          }, icon('edit'), 'Editar en el rancho')
+          }, icon('edit'), t('Editar en el rancho'))
         : null),
       card(h('div.stack.stack-3',
         h('div.stack.stack-2',
-          h('div.t-xs.upper.c-faint.w-700', 'Su semana'),
+          h('div.t-xs.upper.c-faint.w-700', t('Su semana')),
           weekStrip(model)),
 
         defList([
           ...chargeRows(periodCharge(model, store.pricing), !!price),
-          defRow('Paga', capitalize(cadenceWord(model))),
-          defRow(`Precio por ${periodWord(model)}`,
-            price ? moneyFull(price) : 'Sin precio', { total: true }),
-          defRow('Horario', model.deliveryWindow || '—'),
+          defRow(t('Paga'), capitalize(t(cadenceWord(model)))),
+          defRow(t('Precio por {period}', { period: t(periodWord(model)) }),
+            price ? moneyFull(price) : t('Sin precio'), { total: true }),
+          defRow(t('Horario'), model.deliveryWindow || '—'),
           // Two dates that are easy to confuse and mean different things: the
           // anchor is the rancho's calendar, this one is the day this person
           // started owing for it.
-          defRow('Come aquí desde', servingSince(model)
+          defRow(t('Come aquí desde'), servingSince(model)
             ? formatDayLong(servingSince(model))
-            : 'Sin fecha'),
-          defRow('Inicio del ciclo', formatDayLong(model.cycleAnchor || today())),
-          defRow('Días de gracia', model.graceDays === 0 ? 'Mismo día' : `${model.graceDays} días`),
+            : t('Sin fecha')),
+          defRow(t('Inicio del ciclo'), formatDayLong(model.cycleAnchor || today())),
+          defRow(t('Días de gracia'), model.graceDays === 0 ? t('Mismo día') : t('{count} días', { count: model.graceDays })),
         ]),
         h('p.t-xs.c-faint',
-          'El precio del plan se cambia en Ajustes → Precios; los días, las comidas extra y '
-          + 'cada cuánto paga, '
-          + 'aquí en su ficha. '
-          + (model.farmName ? `El horario y el ciclo vienen de ${model.farmName}.` : '')))));
+          t('El precio del plan se cambia en Ajustes → Precios; los días, las comidas extra y cada cuánto paga, aquí en su ficha.')
+          + ' '
+          + (model.farmName ? t('El horario y el ciclo vienen de {farm}.', { farm: model.farmName }) : '')))));
   }
 
   /**
@@ -684,22 +690,23 @@ export function renderClientDetail(context) {
     // service ends inside it, in which case it ended with them.
     const runningOk = isPayable(current, model);
     const choice = await sheet({
-      title: 'Cerrar y facturar',
+      title: t('Cerrar y facturar'),
       build: (close) => h('div.stack.stack-3',
-        h('p.t-sm.c-soft', `Se emite la factura de la ${periodWord(model)} al precio de su `
-          + 'plan. Solo de lo ya servido: la que está en curso se factura cuando termine.'),
+        h('p.t-sm.c-soft', t('Se emite la factura de la {period} al precio de su plan. Solo de lo ya servido: la que está en curso se factura cuando termine.', {
+          period: t(periodWord(model)),
+        })),
         h('div.stack.stack-2',
-          periodOption(periodOfIndex(model, current.index - 1), 'Periodo anterior (cerrado)', close),
+          periodOption(periodOfIndex(model, current.index - 1), t('Periodo anterior (cerrado)'), close),
           periodOption(current, runningOk
-            ? `Periodo en curso · su servicio terminó el ${formatDay(model.endsOn)}`
-            : `Periodo en curso · se factura cuando termine, el ${formatDay(payDayAfter(current))}`,
+            ? t('Periodo en curso · su servicio terminó el {day}', { day: formatDay(model.endsOn) })
+            : t('Periodo en curso · se factura cuando termine, el {day}', { day: formatDay(payDayAfter(current)) }),
           close, !runningOk))),
     });
     if (!choice) return;
 
     const price = periodPrice(model);
     if (!price) {
-      toastBad('Su plan no tiene precio. Ponlo en Ajustes → Precios.');
+      toastBad(t('Su plan no tiene precio. Ponlo en Ajustes → Precios.'));
       return;
     }
 
@@ -707,21 +714,25 @@ export function renderClientDetail(context) {
     // one already paid in the notebook, or one before they started eating.
     const since = servingSince(model);
     const doubt = isCovered(choice, model.paidThrough)
-      ? `Según su cuenta ya pagó hasta el ${formatDay(model.paidThrough)}, y esta ${periodWord(model)} entra ahí.`
+      ? t('Según su cuenta ya pagó hasta el {day}, y esta {period} entra ahí.', {
+        day: formatDay(model.paidThrough), period: t(periodWord(model)),
+      })
       : (since && choice.start < since
-        ? `Empezó a comer el ${formatDay(since)}, después de que empezó esta ${periodWord(model)}.`
+        ? t('Empezó a comer el {day}, después de que empezó esta {period}.', {
+          day: formatDay(since), period: t(periodWord(model)),
+        })
         : '');
     if (doubt && !await confirm({
-      title: '¿Facturarla de todos modos?',
-      message: `${doubt} Si la facturas, la va a deber.`,
-      confirmLabel: 'Facturar',
+      title: t('¿Facturarla de todos modos?'),
+      message: t('{doubt} Si la facturas, la va a deber.', { doubt }),
+      confirmLabel: t('Facturar'),
     })) return;
 
     try {
       const charge = periodCharge(model, store.pricing);
       const bill = await issueInvoice(model, choice, charge, charge.meals,
         { uid: session.uid, name: session.displayName });
-      toastOk(bill.existed ? 'Esa factura ya estaba hecha' : 'Factura generada');
+      toastOk(bill.existed ? t('Esa factura ya estaba hecha') : t('Factura generada'));
       go(`/invoices/${invoiceId(model.id, choice.start)}`);
     } catch (error) {
       toastBad(errorText(error));
@@ -749,22 +760,22 @@ export function renderClientDetail(context) {
    */
   async function changeEmail(model) {
     const next = await sheet({
-      title: 'Correo de acceso',
+      title: t('Correo de acceso'),
       build: (close) => {
         let value = model.email || '';
         return h('div.stack.stack-4',
           model.email
-            ? alert('El correo anterior dejará de abrir la app en cuanto guardes.', 'warn')
-            : alert('Con este correo podrá entrar a su app.', 'info'),
+            ? alert(t('El correo anterior dejará de abrir la app en cuanto guardes.'), 'warn')
+            : alert(t('Con este correo podrá entrar a su app.'), 'info'),
           field({
-            label: 'Correo de la persona',
-            hint: 'Déjalo vacío para quitarle el acceso.',
+            label: t('Correo de la persona'),
+            hint: t('Déjalo vacío para quitarle el acceso.'),
             control: input({
-              value, type: 'email', inputmode: 'email', placeholder: 'persona@correo.com',
+              value, type: 'email', inputmode: 'email', placeholder: t('persona@correo.com'),
               oninput: (event) => { value = event.target.value; },
             }),
           }),
-          button('Guardar', {
+          button(t('Guardar'), {
             variant: 'primary', block: true,
             onClick: () => close(value.trim()),
           }));
@@ -774,7 +785,7 @@ export function renderClientDetail(context) {
 
     try {
       await updateClient(model.id, { email: next, name: model.name }, model.email);
-      toastOk(next ? 'Correo de acceso actualizado' : 'Acceso retirado');
+      toastOk(next ? t('Correo de acceso actualizado') : t('Acceso retirado'));
     } catch (error) { toastBad(errorText(error)); }
   }
 
@@ -785,7 +796,7 @@ export function renderClientDetail(context) {
    */
   async function changePlace(model) {
     const picked = await sheet({
-      title: 'Cambiar de ubicación',
+      title: t('Cambiar de ubicación'),
       build: (close) => {
         let farmId = model.farmId || store.farms[0]?.id || '';
         const places = h('div.stack.stack-2');
@@ -802,29 +813,29 @@ export function renderClientDetail(context) {
               h('span.item__ico', icon('pin')),
               h('div.item__main',
                 h('div.item__title', place.name),
-                place.id === model.locationId ? h('div.item__meta', 'Donde está ahora') : null),
+                place.id === model.locationId ? h('div.item__meta', t('Donde está ahora')) : null),
               icon('chevronR', 'rowlink__chev')))
-            : alert('Ese rancho todavía no tiene ubicaciones.', 'warn'));
+            : alert(t('Ese rancho todavía no tiene ubicaciones.'), 'warn'));
         };
         paint();
 
         return h('div.stack.stack-4',
           field({
-            label: 'Rancho',
+            label: t('Rancho'),
             control: select({
               value: farmId,
               options: store.farms.map((row) => ({ value: row.id, label: row.name })),
               onchange: (event) => { farmId = event.target.value; paint(); },
             }),
           }),
-          field({ label: 'Ubicación', control: places }));
+          field({ label: t('Ubicación'), control: places }));
       },
     });
     if (!picked || (picked.farm.id === model.farmId && picked.locationId === model.locationId)) return;
 
     try {
       await moveClient(model.id, picked.farm, picked.locationId, model.farmId);
-      toastOk('Ubicación actualizada');
+      toastOk(t('Ubicación actualizada'));
     } catch (error) { toastBad(errorText(error)); }
   }
 
@@ -847,9 +858,9 @@ async function copy(text) {
   if (!text) return;
   try {
     await navigator.clipboard.writeText(text);
-    toastOk('Correo copiado');
+    toastOk(t('Correo copiado'));
   } catch {
-    toastBad('No se pudo copiar. Anótalo manualmente.');
+    toastBad(t('No se pudo copiar. Anótalo manualmente.'));
   }
 }
 

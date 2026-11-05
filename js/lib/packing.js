@@ -35,6 +35,7 @@
 
 import { mealsOn } from './pricing.js';
 import { weekdayOf, today as todayKey } from '../lib/dates.js';
+import { t } from './i18n.js';
 
 /** The two lists the kitchen packs from. Named so the manager can rename them. */
 export const DEFAULT_LINES = [
@@ -207,7 +208,7 @@ export function allPlaces(farms = [], clients = []) {
       out.push({
         key: placeKey(farm.id, ''),
         farm,
-        place: { id: '', name: 'Sin ubicación' },
+        place: { id: '', name: t('Sin ubicación') },
       });
     }
   }
@@ -714,25 +715,24 @@ export function packerByPin(packers, pin) {
  * the keys they need — and they are honest about being exactly that.
  */
 export const ABILITIES = [
-  { key: 'pack', title: 'Empacar',
-    hint: 'Escoger una libreta y empacarla, con sus etiquetas.' },
-  { key: 'newFarm', title: 'Nueva farma',
-    hint: 'Dar de alta una farma con sus ubicaciones.' },
-  { key: 'week', title: 'Calendario semanal',
-    hint: 'Cambiar qué días tiene pedido una persona.' },
-  { key: 'meals', title: 'Cantidad de pedidos',
-    hint: 'Cambiar cuántos pedidos lleva al día.' },
-  { key: 'diet', title: 'No puede comer',
-    hint: 'Cambiar lo que una persona no puede comer: no pollo, no puerco…' },
-  { key: 'organize', title: 'Organizar libreta',
-    hint: 'Acomodar el orden de su libreta y meterle las ubicaciones nuevas que no '
-      + 'están en ninguna.' },
-  { key: 'newClient', title: 'Nuevo cliente',
-    hint: 'Dar de alta a una persona en una farma.' },
-  { key: 'status', title: 'Pausar o reactivar',
-    hint: 'Poner a alguien en pausa, o volverlo a activar.' },
-  { key: 'lastDay', title: 'Último día de pedido',
-    hint: 'Poner hasta qué día recibe pedido una persona.' },
+  { key: 'pack', title: t('Empacar'),
+    hint: t('Escoger una libreta y empacarla, con sus etiquetas.') },
+  { key: 'newFarm', title: t('Nueva farma'),
+    hint: t('Dar de alta una farma con sus ubicaciones.') },
+  { key: 'week', title: t('Calendario semanal'),
+    hint: t('Cambiar qué días tiene pedido una persona.') },
+  { key: 'meals', title: t('Cantidad de pedidos'),
+    hint: t('Cambiar cuántos pedidos lleva al día.') },
+  { key: 'diet', title: t('No puede comer'),
+    hint: t('Cambiar lo que una persona no puede comer: no pollo, no puerco…') },
+  { key: 'organize', title: t('Organizar libreta'),
+    hint: t('Acomodar el orden de su libreta y meterle las ubicaciones nuevas que no están en ninguna.') },
+  { key: 'newClient', title: t('Nuevo cliente'),
+    hint: t('Dar de alta a una persona en una farma.') },
+  { key: 'status', title: t('Pausar o reactivar'),
+    hint: t('Poner a alguien en pausa, o volverlo a activar.') },
+  { key: 'lastDay', title: t('Último día de pedido'),
+    hint: t('Poner hasta qué día recibe pedido una persona.') },
 ];
 
 /**
@@ -767,11 +767,11 @@ export const canDo = (packer, key) => abilitiesOf(packer)[key] === true;
 export function abilitiesInWords(packer) {
   const mine = abilitiesOf(packer);
   const allowed = ABILITIES.filter(({ key }) => mine[key]);
-  if (allowed.length === ABILITIES.length) return 'Puede hacer todo';
-  if (!allowed.length) return 'Sin permisos';
-  if (allowed.length === 1) return `Solo ${allowed[0].title.toLowerCase()}`;
-  if (allowed.length === 2) return allowed.map((one) => one.title).join(' y ');
-  return `${allowed.length} de ${ABILITIES.length} permisos`;
+  if (allowed.length === ABILITIES.length) return t('Puede hacer todo');
+  if (!allowed.length) return t('Sin permisos');
+  if (allowed.length === 1) return t('Solo {what}', { what: allowed[0].title.toLowerCase() });
+  if (allowed.length === 2) return allowed.map((one) => one.title).join(` ${t('y')} `);
+  return t('{n} de {total} permisos', { n: allowed.length, total: ABILITIES.length });
 }
 
 /**
