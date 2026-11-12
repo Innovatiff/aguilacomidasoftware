@@ -762,6 +762,15 @@
 
 .rwhen { display: flex; flex-direction: column; gap: var(--s3); }
 
+/* The question, and on its right the summary's small "Otras impresiones". */
+.rwhen__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  flex-wrap: wrap;
+}
+
 .rwhen__opts {
   display: flex;
   flex-wrap: wrap;
@@ -937,6 +946,8 @@
   cursor: pointer;
 }
 .rmenu__item:hover { background: var(--surface-alt); border-color: var(--border-strong); }
+/* The same row as a button, where it prints rather than opens a list. */
+button.rmenu__item { width: 100%; font: inherit; text-align: left; }
 
 .rmenu__ico {
   flex: 0 0 auto;

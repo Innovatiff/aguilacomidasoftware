@@ -14,7 +14,7 @@
 import { formatDayShort } from './lib/dates.js';
 import { t } from './lib/i18n.js';
 
-export const VERSION = { n: 80, day: '2026-11-05', what: t('El panel en inglés y en español') };
+export const VERSION = { n: 81, day: '2026-11-12', what: t('Imprimir los comentarios de los clientes') };
 
 /** "Versión 75" — for the corners with room for a word and a number. */
 export const versionShort = () => t('Versión {n}', { n: VERSION.n });

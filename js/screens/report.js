@@ -33,15 +33,17 @@ import { icon } from '../lib/icons.js';
 import { screen, topbarButton, lifetime } from '../ui/shell.js';
 import {
   card, button, avatar, itemRow, list, badge, searchInput,
-  emptyState, skeletonRows, alert, dataErrorCard, field,
+  emptyState, skeletonRows, alert, dataErrorCard, field, switchRow,
 } from '../ui/kit.js';
 import { sheet, toastBad } from '../ui/overlay.js';
 import { columnChart } from '../ui/viz.js';
-import { reportSheet, listSheet } from '../ui/report-sheet.js';
+import { reportSheet, listSheet, commentsSheet } from '../ui/report-sheet.js';
 import { printSheet } from '../ui/print.js';
 import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
-import { store, subscribe, activeClients, isReady } from '../data/store.js';
+import { store, subscribe, activeClients, isReady, farmById } from '../data/store.js';
+import { servingStatus } from '../data/clients.js';
+import { findLocation } from '../data/farms.js';
 import { loadPeriod, forgetPeriod, cachedPeriod } from '../data/reports.js';
 import { buildReport, freshen, debtWord, debtWhy } from '../lib/report.js';
 import {
@@ -52,7 +54,7 @@ import {
   today, addDays, formatDayShort, formatDay, formatDayLong, formatTime, humanDelta, daysBetween, capitalize,
 } from '../lib/dates.js';
 import { money, number, plural, percent, matches } from '../lib/format.js';
-import { paymentMethodMeta } from '../lib/model.js';
+import { paymentMethodMeta, clientStatusMeta } from '../lib/model.js';
 import { loadMovements, cachedMovements, withMine } from '../data/movements.js';
 import {
   KINDS, kindOf, movementsFrom, filterMovements, countByKind, dayHeading,
@@ -204,7 +206,7 @@ function drawSummary(view) {
     sunken: true,
     actions: [topbarButton('refresh', { label: t('Volver a leer'), onClick: view.reload })],
     body: h('div.page__inner.rbig.stack.stack-5',
-      picker(view.range, ''),
+      picker(view.range, '', undefined, otherPrintsButton()),
       view.failure()
         ? dataErrorCard(view.failure(), { onRetry: view.reload })
         : view.ready() && report ? summary(report, view) : skeletonRows(4)),
@@ -321,16 +323,20 @@ const smallBox = (label, value, note, tone) =>
  *   that screen again rather than the summary
  * @param {Function} [keep]  more of the address to carry along — a filter —
  *   asked at the moment of the click, since the filter changes under it
+ * @param {Node} [aside]  something small to sit beside the question, on the
+ *   right — the summary's "Otras impresiones"
  */
-function picker(range, list = '', keep = () => ({})) {
+function picker(range, list = '', keep = () => ({}), aside = null) {
   const ahead = isFuture(shiftRange(range, 1));
   const open = (next) => go(urlFor(next, list, keep()), { replace: true });
   // Changing the span keeps the day you are looking at, so "este mes" from a
   // week in March is March, not today.
   const anchor = () => (rangeHolds(range) ? today() : range.start);
 
+  const ask = h('h2.rhead', t('¿Qué quieres ver?'));
+
   return h('div.rwhen',
-    h('h2.rhead', t('¿Qué quieres ver?')),
+    aside ? h('div.rwhen__head', ask, aside) : ask,
     h('div.rwhen__opts',
       WHEN.map((option) => h(
         `button.ropt${range.grain === option.grain ? '.is-active' : ''}`,
@@ -417,6 +423,104 @@ async function pickDates(range) {
 function printReport(report) {
   if (!report) { toastBad(t('Todavía se está leyendo el periodo.')); return; }
   printSheet(reportSheet(report, {
+    business: store.business,
+    by: session.displayName || session.email || '',
+  }));
+}
+
+/* --- Other prints ------------------------------------------------------------ */
+
+/*
+ * Sheets that have nothing to do with the period — what the clients have
+ * written down about themselves, today. A small button rather than another
+ * row in the menu of lists, because they are asked for now and then, not every
+ * time somebody sits down with the month.
+ */
+function otherPrintsButton() {
+  return button(t('Otras impresiones'), {
+    variant: 'soft', size: 'sm', icon: 'printer', onClick: otherPrints,
+  });
+}
+
+function otherPrints() {
+  if (!isReady()) { toastBad(t('Todavía se están leyendo los clientes.')); return; }
+  const day = today();
+  const now = commentsOf({ day });
+  const all = commentsOf({ day, everyone: true });
+  let everyone = false;
+
+  const sub = (rows) => (rows.length
+    ? t('{clients} con comentarios, por rancho y ubicación', { clients: plural(rows.length, 'cliente', 'clientes') })
+    : t('Ningún cliente tiene comentarios'));
+
+  sheet({
+    title: t('Otras impresiones'),
+    build: (close) => {
+      const note = h('span.rmenu__s', sub(now));
+      return h('div.stack.stack-4',
+        h('button.rmenu__item', {
+          type: 'button',
+          onclick: () => { close(); printComments(everyone ? all : now, { day, everyone }); },
+        },
+          h('span.rmenu__ico', icon('note')),
+          h('span.rmenu__main', h('span.rmenu__t', t('Comentarios de los clientes')), note),
+          icon('printer', 'rmenu__chev')),
+
+        // Only offered when it would change the sheet: somebody who no longer
+        // orders and still has something written on their file.
+        all.length > now.length
+          ? switchRow(t('Incluir a los que ya no piden'), {
+            hint: t('{clients} más, con comentarios', { clients: plural(all.length - now.length, 'cliente', 'clientes') }),
+            onChange: (on) => { everyone = on; note.textContent = sub(on ? all : now); },
+          })
+          : null,
+
+        h('p.rfoot', t('Salen en hojas tamaño carta, en el idioma de esta pantalla.')));
+    },
+  });
+}
+
+/**
+ * Everybody with something written on their file: the note that stays with
+ * them, and today's note when there is one. Yesterday's is gone — it was for
+ * yesterday. In the kitchen's order: farm by farm, the farm's locations in
+ * the order it keeps them, and the people at each by name.
+ *
+ * @param {boolean} [everyone]  also the people who no longer order
+ */
+function commentsOf({ day = today(), everyone = false } = {}) {
+  const byText = (a, b) => String(a).localeCompare(String(b), 'es', { sensitivity: 'base' });
+  const rows = [];
+
+  for (const client of store.clients) {
+    const status = servingStatus(client, day);
+    if (status === 'inactive' && !everyone) continue;
+    const note = String(client.notes || '').trim();
+    const todays = client.notaDelDiaOn === day ? String(client.notaDelDia || '').trim() : '';
+    if (!note && !todays) continue;
+
+    const farm = farmById(client.farmId);
+    const place = findLocation(farm, client.locationId);
+    const spot = farm && place ? farm.locations.indexOf(place) : Number.MAX_SAFE_INTEGER;
+    rows.push({
+      name: client.name || '—',
+      farm: farm?.name || client.farmName || '',
+      where: place?.name || client.locationName || '',
+      status: status === 'active' ? '' : clientStatusMeta(status).label,
+      note,
+      todays,
+      spot,
+    });
+  }
+
+  return rows.sort((a, b) => (!a.farm - !b.farm) || byText(a.farm, b.farm)
+    || a.spot - b.spot || byText(a.where, b.where) || byText(a.name, b.name));
+}
+
+function printComments(rows, { day, everyone }) {
+  printSheet(commentsSheet(rows, {
+    day,
+    everyone,
     business: store.business,
     by: session.displayName || session.email || '',
   }));

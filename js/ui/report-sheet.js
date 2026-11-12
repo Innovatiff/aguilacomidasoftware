@@ -240,3 +240,84 @@ function table(head, rows, total, text = []) {
     h('tbody', rows.map((row) => h('tr', cells(row, 'td')))),
     total ? h('tfoot', h('tr', cells(total, 'td'))) : null);
 }
+
+/* --- What the clients have on file ------------------------------------------ */
+
+/**
+ * Every client's comments — the note that stays on their file, and today's —
+ * farm by farm, for the manager to read with a pen in her hand.
+ *
+ * Not a period's: a comment is whatever is written there the day it is
+ * printed, so the sheet carries that day rather than a span. It may run to
+ * several pages; a farm's name opens its people, and the column titles come
+ * back at the top of every page, like the other lists.
+ *
+ * @param {object[]} rows  in order, from the screen: `{ name, farm, where,
+ *   status, note, todays }`
+ * @param {string}  day       the day it is printed for
+ * @param {boolean} everyone  whether the people who no longer order are in it
+ */
+export function commentsSheet(rows, {
+  day, everyone = false, business = {}, by = '',
+} = {}) {
+  const now = new Date();
+  const name = t('Comentarios de los clientes');
+  const brand = business.name || 'El Águila Cocina';
+
+  const farms = [];
+  for (const row of rows) {
+    const last = farms[farms.length - 1];
+    if (last && last.farm === row.farm) last.rows.push(row);
+    else farms.push({ farm: row.farm, rows: [row] });
+  }
+
+  const person = (row) => h('tr',
+    h('td',
+      h('div.rep__who', row.name),
+      row.status ? h('div.rep__tag', row.status) : null),
+    h('td.rep__text', row.where || '—'),
+    h('td.rep__text.rep__say',
+      row.note ? h('div.rep__said', row.note) : null,
+      row.todays
+        ? h('div.rep__said', h('b', t('Nota de hoy:')), ' ', row.todays)
+        : null));
+
+  return h('div.rep.rep--list.rep--notes',
+    h('div.rep__top',
+      h('div',
+        h('div.rep__brand', brand),
+        h('div.rep__sub', [business.address, business.city].filter(Boolean).join(' · '))),
+      h('div.rep__stamp',
+        h('div.rep__kind', t('Lista')),
+        h('div.rep__period', name),
+        h('div.rep__sub', formatDayLong(day, { year: true })))),
+
+    rows.length
+      ? h('p.rep__lead', t('{clients} con comentarios, por rancho y ubicación.', {
+        clients: plural(rows.length, 'cliente', 'clientes'),
+      }))
+      : null,
+
+    h('p.rep__note', everyone
+      ? t('Incluye a los que ya no piden.')
+      : t('Los que están comiendo y los que están en pausa. No incluye a los que ya no piden.')),
+
+    rows.length
+      ? h('table.rep__t',
+        h('thead', h('tr',
+          h('th', t('Cliente')),
+          h('th.rep__text', t('Ubicación')),
+          h('th.rep__text', t('Comentarios')))),
+        farms.map((group) => h('tbody',
+          h('tr.rep__grp',
+            h('td', { colSpan: 3 },
+              group.farm || t('Sin rancho'),
+              h('span.rep__grp-n', ` · ${plural(group.rows.length, 'cliente', 'clientes')}`))),
+          group.rows.map(person))))
+      : h('p.rep__none', t('Ningún cliente tiene comentarios.')),
+
+    h('div.rep__foot',
+      h('span', `${brand} · ${name} · ${formatDayShort(day)}`),
+      h('span', t('Impreso el {day} a las {time}', { day: formatDayShort(day), time: formatTime(now) })
+        + `${by ? ` · ${by}` : ''}`)));
+}

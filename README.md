@@ -1077,6 +1077,22 @@ del cambio; si no se puede guardar, el cambio del cliente sí se guarda.
    botón **Crear el índice de mensajes en Firebase**: tócalo, confirma en la
    consola y espera unos minutos. Hasta entonces se ve todo menos los mensajes.
 
+### Otras impresiones: los comentarios de los clientes
+
+En **Reportes**, arriba a la derecha (junto a «¿Qué quieres ver?»), está el
+botón chico **Otras impresiones**. Ahí está **Comentarios de los clientes**:
+una lista para imprimir con la **nota** de cada cliente y su **nota de hoy**,
+por rancho, en el orden de sus ubicaciones, y por nombre.
+
+- Salen los que están comiendo y los que están **en pausa** (dice «En pausa»
+  debajo del nombre). El interruptor **Incluir a los que ya no piden** agrega a
+  los demás.
+- Sólo los que tienen algo escrito; la nota de un día que ya pasó no sale.
+- **No lleva** lo que no puede comer ni las preferencias: sólo los
+  comentarios.
+- Hoja tamaño carta; si son muchos, sigue en otra hoja con los títulos de las
+  columnas otra vez. Sale en el idioma de la pantalla.
+
 ### Español · English
 
 El panel y la cocina se pueden ver **en español o en inglés**. El botón

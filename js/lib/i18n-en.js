@@ -1993,6 +1993,21 @@ export const EN = {
   "La pantalla, los reportes, los recibos y las etiquetas salen en este idioma.": "Screens, reports, receipts and labels all come out in this language.",
   "later|Después": "Later",
   "note|Lo de hoy": "For today",
+  "Otras impresiones": "Other prints",
+  "Todavía se están leyendo los clientes.": "The clients are still loading.",
+  "{clients} con comentarios, por rancho y ubicación": "{clients} with comments, by farm and location",
+  "{clients} con comentarios, por rancho y ubicación.": "{clients} with comments, by farm and location.",
+  "Ningún cliente tiene comentarios": "No client has comments",
+  "Ningún cliente tiene comentarios.": "No client has comments.",
+  "Comentarios de los clientes": "Client comments",
+  "Incluir a los que ya no piden": "Include clients who no longer order",
+  "{clients} más, con comentarios": "Plus {clients} with comments",
+  "Salen en hojas tamaño carta, en el idioma de esta pantalla.": "Printed on letter-size paper, in this screen’s language.",
+  "Nota de hoy:": "Today’s note:",
+  "Incluye a los que ya no piden.": "Includes clients who no longer order.",
+  "Los que están comiendo y los que están en pausa. No incluye a los que ya no piden.": "Active and paused clients. Clients who no longer order are not included.",
+  "Comentarios": "Comments",
+  "Imprimir los comentarios de los clientes": "Print client comments",
 };
 
 /** Sentences the panel wrote to the database earlier, with their variable parts. */
