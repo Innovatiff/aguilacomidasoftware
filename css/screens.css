@@ -948,6 +948,16 @@
 .rmenu__item:hover { background: var(--surface-alt); border-color: var(--border-strong); }
 /* The same row as a button, where it prints rather than opens a list. */
 button.rmenu__item { width: 100%; font: inherit; text-align: left; }
+button.rmenu__item:disabled { opacity: .55; cursor: default; }
+/* A small heading between groups of rows in a menu. */
+.rsub {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-top: var(--s2);
+}
 
 .rmenu__ico {
   flex: 0 0 auto;

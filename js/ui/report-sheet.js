@@ -65,6 +65,17 @@ function till(methods) {
     figure(t('Otras formas'), money(others)));
 }
 
+/** Where "clientes activos" and "comidas al día" come from, in one line. */
+function dailyWords(people) {
+  if (people.from === 'packed') {
+    return t('Clientes activos y comidas al día: el promedio de los {days} que se empacó en este periodo.', {
+      days: plural(people.days, 'día', 'días'),
+    });
+  }
+  if (people.from === 'today') return t('Clientes activos y comidas al día: los de hoy, según la lista de clientes.');
+  return t('Clientes activos y comidas al día: no hay empaque registrado en este periodo.');
+}
+
 /* --- The sheet -------------------------------------------------------------- */
 
 /**
@@ -130,13 +141,16 @@ export function reportSheet(report, { business = {}, by = '' } = {}) {
           // the two beside it.
           row(t('Promedio por día'), money(days.elapsed ? cash.collected / days.elapsed : 0))),
         h('div.rep__col',
-          row(t('Clientes activos'), number(people.active)),
+          row(t('Clientes activos'), people.active === null ? '—' : number(people.active)),
           // Lo que la cocina pone en la estufa un día cualquiera. No es lo
           // mismo que "comidas facturadas", que es lo vendido en todo el
           // periodo; esto es contra lo que se compra el mandado.
-          row(t('Comidas al día'), number(people.meals)),
+          row(t('Comidas al día'), people.meals === null ? '—' : number(people.meals)),
           row(t('Clientes dados de alta'), number(people.added)),
-          row(t('Clientes que terminaron'), number(people.ended))))),
+          row(t('Clientes que terminaron'), number(people.ended)))),
+      // Two of these figures are a day's, not the period's sum; said here
+      // which day, or which days.
+      h('p.rep__note.rep__note--after', dailyWords(people))),
 
     /* --- Today's photograph, kept clearly apart from the period --------- */
     h('section.rep__block',
@@ -318,6 +332,80 @@ export function commentsSheet(rows, {
 
     h('div.rep__foot',
       h('span', `${brand} · ${name} · ${formatDayShort(day)}`),
+      h('span', t('Impreso el {day} a las {time}', { day: formatDayShort(day), time: formatTime(now) })
+        + `${by ? ` · ${by}` : ''}`)));
+}
+
+/* --- A libreta, on paper ------------------------------------------------------ */
+
+/**
+ * One libreta as it is packed today: farm by farm, location by location, and
+ * the people at each with how many comidas they take — in the order the
+ * packing screen walks it, because it is built from the same sequence.
+ *
+ * For the kitchen, so nothing about money is on it, and nothing anybody cannot
+ * eat either: that stays on the packing screen. Two columns, read down the
+ * first and then the second, so a libreta of a hundred and thirty people is
+ * two or three pages and not five; a person is never split from their line,
+ * and a heading never ends a column on its own.
+ *
+ * @param {object} line  the libreta, `{ id, name }`
+ * @param {object} plan  what `packingSequence` returns for it
+ * @param {string} day   the day it is packed
+ */
+export function libretaSheet({
+  line, plan, day, business = {}, by = '',
+} = {}) {
+  const now = new Date();
+  const brand = business.name || 'El Águila Cocina';
+  const plates = new Map(plan.slides
+    .filter((slide) => slide.kind === 'client')
+    .map((slide) => [slide.client.id, slide.plates]));
+  const count = (clients) => {
+    const meals = clients.reduce((total, client) => total + (plates.get(client.id) || 0), 0);
+    return t('{people} · {meals}', {
+      people: plural(clients.length, 'persona', 'personas'),
+      meals: plural(meals, 'comida', 'comidas'),
+    });
+  };
+
+  return h('div.rep.rep--libreta',
+    h('div.rep__top',
+      h('div',
+        h('div.rep__brand', brand),
+        h('div.rep__sub', [business.address, business.city].filter(Boolean).join(' · '))),
+      h('div.rep__stamp',
+        h('div.rep__kind', t('Libreta')),
+        h('div.rep__period', line.name),
+        h('div.rep__sub', formatDayLong(day, { year: true })))),
+
+    h('p.rep__lead', t('{people} · {meals} · {farms}', {
+      people: plural(plan.people, 'persona', 'personas'),
+      meals: plural(plan.plates, 'comida', 'comidas'),
+      farms: plural(plan.farmCount, 'farma', 'farmas'),
+    })),
+    h('p.rep__note', t('En el orden en que se empaca, sólo los que comen este día. El número a la derecha es cuántas comidas lleva cada persona.')),
+
+    plan.farms.length
+      ? h('div.lib', plan.farms.map((stretch) => h('div.lib__farm',
+        h('div.lib__fhead',
+          h('span', stretch.farm.name),
+          h('span.lib__n', count(stretch.groups.flatMap((group) => group.clients)))),
+        stretch.groups.map((group) => h('div.lib__place',
+          h('div.lib__phead',
+            h('span', group.place?.name || t('Sin ubicación')),
+            h('span.lib__n', count(group.clients))),
+          group.clients.map((client) => {
+            const n = plates.get(client.id) || 0;
+            return h('div.lib__row',
+              h('span.lib__box'),
+              h('span.lib__name', client.name),
+              h(`span.lib__q${n > 1 ? '.lib__q--more' : ''}`, number(n)));
+          }))))))
+      : h('p.rep__none', t('No hay nada que empacar hoy.')),
+
+    h('div.rep__foot',
+      h('span', `${brand} · ${line.name} · ${formatDayShort(day)}`),
       h('span', t('Impreso el {day} a las {time}', { day: formatDayShort(day), time: formatTime(now) })
         + `${by ? ` · ${by}` : ''}`)));
 }

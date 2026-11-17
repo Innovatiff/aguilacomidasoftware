@@ -91,8 +91,16 @@ export function loadPeriod(range, { fresh = false } = {}) {
     // button would say September's food was sold in October.
     getDocs(query(collection(db, 'invoices'),
       where('periodStart', '>=', range.start), where('periodStart', '<=', range.end))).then(listData),
-  ]).then(([receipts, invoices]) => {
-    const found = { receipts, invoices, readAt: new Date() };
+
+    // The libretas packed in the span, one per libreta per morning, with how
+    // many people and plates each held — what "clientes activos" and "comidas
+    // al día" of a period are worked out from. Apart, and never the period's
+    // failure: without them the money is still the money.
+    getDocs(query(collection(db, 'packRuns'),
+      where('date', '>=', range.start), where('date', '<=', range.end))).then(listData)
+      .catch(() => null),
+  ]).then(([receipts, invoices, runs]) => {
+    const found = { receipts, invoices, runs, readAt: new Date() };
     if (settled(range)) cache.set(key, found);
     return found;
   }).finally(() => inFlight.delete(key));

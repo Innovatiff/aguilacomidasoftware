@@ -81,7 +81,7 @@ const inRange = (day, range) => !!day && day >= range.start && day <= range.end;
  */
 export function buildReport({
   range, receipts = [], invoices = [], clients = [], outstanding = [], buckets = [],
-  serving = [], pricing = null, day = today(),
+  serving = [], runs = null, pricing = null, day = today(),
 }) {
   const takings = receipts.filter((row) => Number(row.amount) > 0);
   const givenBack = receipts.filter((row) => Number(row.amount) < 0);
@@ -143,7 +143,7 @@ export function buildReport({
 
     /* --- Where the book stands, today ----------------------------------- */
     standing: standingOf(outstanding, day),
-    people: registerOf(clients, range, serving),
+    people: registerOf(clients, range, serving, runs, day),
   };
 }
 
@@ -408,6 +408,47 @@ function standingOf(outstanding, day) {
 }
 
 /**
+ * How many people ate, and how many plates went out, on a day of the period.
+ *
+ * Read off the libretas: every morning each one is written down with the
+ * people and the plates it held, so a day's figures are its libretas added up,
+ * and the period's are the average of the days that were packed — Sundays and
+ * holidays, with nothing packed, are not days of the period's kitchen. That
+ * is what a month answers, where the roster only knows about today.
+ *
+ * Today is left out while it is still being packed: half of today's libretas
+ * would pull the average down. A span with no packed day before today — "hoy",
+ * or the first of the month — falls back to today's roster, as Inicio counts
+ * it; one with none at all says so (`from: 'none'`) rather than show a guess.
+ *
+ * @returns {{ active, meals, from: 'packed'|'today'|'none', days }}
+ */
+function dailyOf(range, serving, runs, day) {
+  const days = new Map();
+  for (const run of runs || []) {
+    if (!inRange(run.date, range) || run.date >= day) continue;
+    const found = days.get(run.date) || { people: 0, plates: 0 };
+    found.people += Number(run.people) || 0;
+    found.plates += Number(run.plates) || 0;
+    days.set(run.date, found);
+  }
+  const packed = [...days.values()].filter((one) => one.people > 0);
+  if (packed.length) {
+    const mean = (pick) => Math.round(packed.reduce((total, one) => total + pick(one), 0) / packed.length);
+    return { active: mean((one) => one.people), meals: mean((one) => one.plates), from: 'packed', days: packed.length };
+  }
+  if (inRange(day, range)) {
+    return {
+      active: serving.length,
+      meals: serving.reduce((total, client) => total + (Number(client.mealsPerDay) || 0), 0),
+      from: 'today',
+      days: 0,
+    };
+  }
+  return { active: null, meals: null, from: 'none', days: 0 };
+}
+
+/**
  * The register: who is on the books, how much food that is, who joined, who
  * finished.
  *
@@ -425,10 +466,9 @@ function standingOf(outstanding, day) {
  * facturadas", which is how many were sold over a fortnight — this is the
  * number somebody buys ingredients against.
  */
-function registerOf(clients, range, serving) {
+function registerOf(clients, range, serving, runs, day) {
   return {
-    active: serving.length,
-    meals: serving.reduce((total, client) => total + (Number(client.mealsPerDay) || 0), 0),
+    ...dailyOf(range, serving, runs, day),
     total: clients.length,
     added: clients.filter((client) => inRange(dayOf(client.createdAt), range)).length,
     ended: clients.filter((client) => inRange(client.endsOn, range)).length,

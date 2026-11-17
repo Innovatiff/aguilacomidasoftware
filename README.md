@@ -1093,6 +1093,26 @@ por rancho, en el orden de sus ubicaciones, y por nombre.
 - Hoja tamaño carta; si son muchos, sigue en otra hoja con los títulos de las
   columnas otra vez. Sale en el idioma de la pantalla.
 
+### Imprimir una libreta
+
+En **Otras impresiones** también están **las libretas de hoy** (con sus
+nombres, como en Empaque), cada una con sus personas, comidas y farmas. Tocar
+una imprime esa libreta: farma por farma, ubicación por ubicación y cada
+persona con cuántas comidas lleva, **en el mismo orden en que se empaca**
+(sale del mismo cálculo que la pantalla de empaque). Sólo los que comen ese
+día; sin precios ni dinero y sin lo que no puede comer. Va en dos columnas,
+con un cuadrito para palomear a cada persona.
+
+### Clientes activos y comidas al día, del periodo
+
+En el reporte, **Clientes activos** y **Comidas al día** son ahora del
+periodo: el **promedio de los días que se empacó**, sacado de lo que cada
+libreta registró esa mañana (personas y comidas). El día de hoy no cuenta
+mientras se empaca. Si el periodo no tiene días empacados todavía (por ejemplo
+«Hoy») salen los de hoy según la lista de clientes; si es un periodo de antes
+de que se empacara con el sistema, sale «—». La hoja impresa lo dice abajo
+de los números.
+
 ### Español · English
 
 El panel y la cocina se pueden ver **en español o en inglés**. El botón

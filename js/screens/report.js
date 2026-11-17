@@ -28,7 +28,7 @@
  * not leave a year of history to press back through.
  */
 
-import { h } from '../lib/dom.js';
+import { h, mount } from '../lib/dom.js';
 import { icon } from '../lib/icons.js';
 import { screen, topbarButton, lifetime } from '../ui/shell.js';
 import {
@@ -37,13 +37,15 @@ import {
 } from '../ui/kit.js';
 import { sheet, toastBad } from '../ui/overlay.js';
 import { columnChart } from '../ui/viz.js';
-import { reportSheet, listSheet, commentsSheet } from '../ui/report-sheet.js';
+import { reportSheet, listSheet, commentsSheet, libretaSheet } from '../ui/report-sheet.js';
 import { printSheet } from '../ui/print.js';
 import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
 import { store, subscribe, activeClients, isReady, farmById } from '../data/store.js';
 import { servingStatus } from '../data/clients.js';
 import { findLocation } from '../data/farms.js';
+import { getPacking } from '../data/packing.js';
+import { packingSequence } from '../lib/packing.js';
 import { loadPeriod, forgetPeriod, cachedPeriod } from '../data/reports.js';
 import { buildReport, freshen, debtWord, debtWhy } from '../lib/report.js';
 import {
@@ -154,6 +156,7 @@ function periodView(context, paint, state = {}, { movements = false } = {}) {
       outstanding: store.outstanding,
       buckets: bucketsOf(range),
       serving: activeClients(),
+      runs: docs.runs,
       pricing: store.pricing,
       day: today(),
     });
@@ -230,10 +233,9 @@ function summary(report, view) {
           clients: plural(standing.debtors.length, 'cliente', 'clientes'),
           amount: money(standing.overdue, { round: true }),
         }), 'warn'),
-      // Lo que la cocina pone en la estufa un día cualquiera. Es de hoy, no del
-      // periodo, y por eso el pie lo dice.
-      smallBox(t('Comidas al día'), number(people.meals),
-        t('{clients} hoy', { clients: plural(people.active, 'cliente activo', 'clientes activos') }))),
+      // Lo que la cocina pone en la estufa un día cualquiera del periodo: el
+      // promedio de lo que se empacó. El pie dice de dónde sale.
+      smallBox(t('Comidas al día'), people.meals === null ? '—' : number(people.meals), dailyNote(people))),
 
     counts.refunds
       ? alert((counts.refunds === 1
@@ -276,6 +278,23 @@ function summary(report, view) {
       }),
       h('p.rfoot',
         t('Sale en una sola hoja tamaño carta, con los totales de este periodo. Las listas de personas se quedan aquí en la pantalla.'))));
+}
+
+/**
+ * Where the clients and the plates of the period come from, under the figure:
+ * the average of the days packed, today's roster, or nothing to go on.
+ */
+function dailyNote(people) {
+  if (people.from === 'packed') {
+    return t('{clients} · promedio de {days}', {
+      clients: plural(people.active, 'cliente activo', 'clientes activos'),
+      days: plural(people.days, 'día de empaque', 'días de empaque'),
+    });
+  }
+  if (people.from === 'today') {
+    return t('{clients} hoy', { clients: plural(people.active, 'cliente activo', 'clientes activos') });
+  }
+  return t('No hay empaque registrado en este periodo');
 }
 
 /** The one figure the screen exists for, set as large as it deserves. */
@@ -432,7 +451,7 @@ function printReport(report) {
 
 /*
  * Sheets that have nothing to do with the period — what the clients have
- * written down about themselves, today. A small button rather than another
+ * written down about themselves, today's libretas. A small button rather than another
  * row in the menu of lists, because they are asked for now and then, not every
  * time somebody sits down with the month.
  */
@@ -475,9 +494,65 @@ function otherPrints() {
           })
           : null,
 
+        libretas(close, day),
+
         h('p.rfoot', t('Salen en hojas tamaño carta, en el idioma de esta pantalla.')));
     },
   });
+}
+
+/**
+ * Today's libretas, one row each, to print the one chosen: its farms, its
+ * locations and its people, with how many comidas each takes, in the order
+ * it is packed. Worked out by the same code the packing screen walks, so the
+ * paper and the screen cannot disagree about who comes next. No money on it:
+ * it goes to the kitchen.
+ *
+ * The setup is read when the menu opens — it is not part of what the panel
+ * keeps loaded — so the rows arrive a moment after the rest.
+ */
+function libretas(close, day) {
+  const host = h('div.stack.stack-2', h('p.rnote', t('Cargando las libretas…')));
+  const roster = activeClients();
+
+  getPacking().then((setup) => {
+    const rows = (setup?.lines || []).map((line) => {
+      const plan = packingSequence({ line, lines: setup.lines, farms: store.farms, clients: roster, day });
+      return h('button.rmenu__item', {
+        type: 'button',
+        disabled: !plan.people,
+        onclick: () => { close(); printLibreta(line, plan, day); },
+      },
+        h('span.rmenu__ico', icon('clipboard')),
+        h('span.rmenu__main',
+          h('span.rmenu__t', line.name),
+          h('span.rmenu__s', plan.people
+            ? t('{people} · {meals} · {farms}', {
+              people: plural(plan.people, 'persona', 'personas'),
+              meals: plural(plan.plates, 'comida', 'comidas'),
+              farms: plural(plan.farmCount, 'farma', 'farmas'),
+            })
+            : t('No hay nada que empacar hoy'))),
+        icon('printer', 'rmenu__chev'));
+    });
+    mount(host,
+      h('div.rsub', t('Libretas de hoy, en el orden en que se empacan')),
+      ...rows);
+  }).catch(() => {
+    mount(host, h('p.rnote', t('No se pudieron leer las libretas. Revisa el internet y vuelve a abrir este menú.')));
+  });
+
+  return host;
+}
+
+function printLibreta(line, plan, day) {
+  printSheet(libretaSheet({
+    line,
+    plan,
+    day,
+    business: store.business,
+    by: session.displayName || session.email || '',
+  }));
 }
 
 /**

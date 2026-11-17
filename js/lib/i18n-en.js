@@ -2008,6 +2008,22 @@ export const EN = {
   "Los que están comiendo y los que están en pausa. No incluye a los que ya no piden.": "Active and paused clients. Clients who no longer order are not included.",
   "Comentarios": "Comments",
   "Imprimir los comentarios de los clientes": "Print client comments",
+  "{clients} · promedio de {days}": "{clients} · average of {days}",
+  "día de empaque": "packing day",
+  "días de empaque": "packing days",
+  "No hay empaque registrado en este periodo": "No packing recorded in this period",
+  "Cargando las libretas…": "Loading the logbooks…",
+  "{people} · {meals} · {farms}": "{people} · {meals} · {farms}",
+  "{people} · {meals}": "{people} · {meals}",
+  "No hay nada que empacar hoy": "Nothing to pack today",
+  "No hay nada que empacar hoy.": "Nothing to pack today.",
+  "Libretas de hoy, en el orden en que se empacan": "Today’s logbooks, in packing order",
+  "No se pudieron leer las libretas. Revisa el internet y vuelve a abrir este menú.": "The logbooks couldn’t be loaded. Check the internet connection and open this menu again.",
+  "Clientes activos y comidas al día: el promedio de los {days} que se empacó en este periodo.": "Active clients and meals per day: the average of the {days} packed in this period.",
+  "Clientes activos y comidas al día: los de hoy, según la lista de clientes.": "Active clients and meals per day: today’s, from the client list.",
+  "Clientes activos y comidas al día: no hay empaque registrado en este periodo.": "Active clients and meals per day: no packing recorded in this period.",
+  "En el orden en que se empaca, sólo los que comen este día. El número a la derecha es cuántas comidas lleva cada persona.": "In packing order, only the people who eat this day. The number on the right is how many meals each person gets.",
+  "Imprimir una libreta; clientes y comidas del periodo": "Print a logbook; clients and meals for the period",
 };
 
 /** Sentences the panel wrote to the database earlier, with their variable parts. */
