@@ -25,6 +25,17 @@ export function parseDay(key) {
   return new Date(y, (m || 1) - 1, d || 1);
 }
 
+/**
+ * Whether a date box holds a whole date, rather than one still being typed.
+ *
+ * Typed on a keyboard, a date box reports a value after every key, and the
+ * year arrives one digit at a time: "2" is the year 0002, "20" the year 0020.
+ * Nothing this kitchen does happened before 2000, so an earlier year is a
+ * year that is not finished yet — and acting on it saved a last day eighteen
+ * centuries ago, or took the cursor out of the box mid-date.
+ */
+export const isWholeDay = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value || '') && value >= '2000-01-01';
+
 export function addDays(key, amount) {
   const date = parseDay(key);
   date.setDate(date.getDate() + amount);

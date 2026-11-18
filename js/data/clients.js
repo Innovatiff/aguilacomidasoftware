@@ -340,10 +340,16 @@ export async function updateClient(clientId, patch, previousEmail, farm) {
     : {};
 
   const before = clientBefore(clientId);
+  // Made active before the day they were registered to start: see
+  // `startingEarly`. A start date typed in the same edit is the one that counts.
+  const early = patch.status === 'active' ? startingEarly(before) : {};
+  if (early.startedOn && patch.startedOn && patch.startedOn <= early.startedOn) delete early.startedOn;
+
   const batch = writeBatch(db);
   batch.update(doc(db, 'clients', clientId), {
     ...sanitize(patch),
     ...(patch.status !== undefined ? { statusLog: arrayUnion(statusEntry(patch.status)) } : {}),
+    ...early,
     ...placed,
     ...(patchEmail ? { email } : {}),
     updatedAt: serverTimestamp(),
@@ -352,9 +358,13 @@ export async function updateClient(clientId, patch, previousEmail, farm) {
   if (patchEmail) {
     if (previous && previous !== email) batch.delete(doc(db, 'clientEmails', previous));
     if (email) {
+      // The name it already has, when this edit is not about the name:
+      // changing only the address used to blank it, and "Ese correo ya es
+      // de…" then had nobody to name.
+      const name = patch.name ?? before?.name;
       batch.set(doc(db, 'clientEmails', email), {
         clientId,
-        clientName: patch.name || '',
+        ...(name !== undefined ? { clientName: name || '' } : {}),
         updatedAt: serverTimestamp(),
       }, { merge: true });
     }
@@ -398,6 +408,13 @@ export async function setPaidThrough(clientId, paidThrough) {
 }
 
 export async function setClientStatus(clientId, status, client = null) {
+  // The status they already have is not a change, and must not be logged as
+  // one: `onPlanOn` reads the first entry of the log as the day they became
+  // that, and so as the end of having been the opposite — every day before it
+  // changes sides. (Active with a last day behind them is the exception:
+  // setting them active again is what brings them back.)
+  if (client && client.status === status && !(status === 'active' && lastDayGone(client))) return;
+
   await saved(updateDoc(doc(db, 'clients', clientId), {
     status,
     // Appended without reading the client first, so it works with no internet.
@@ -405,9 +422,23 @@ export async function setClientStatus(clientId, status, client = null) {
     // Brought back after their last day went by: that day is over, and left
     // in place it would keep them out of the libreta however active they are.
     ...(status === 'active' && lastDayGone(client) ? { endsOn: '' } : {}),
+    ...(status === 'active' ? startingEarly(client) : {}),
     updatedAt: serverTimestamp(),
   }));
 }
+
+/**
+ * Somebody registered to start on a later day, made active before it.
+ *
+ * They start today, then, and their record has to say so. Left on the day
+ * they were going to start, billing kept reading that day as their first —
+ * "nothing that closed before it is theirs" — and the fortnight they really
+ * began eating in was never charged; and their file went on saying «Empieza
+ * el…» about somebody already in the libreta.
+ */
+const startingEarly = (client, day = today()) => (client?.startsOn && client.startsOn > day
+  ? { startsOn: day, startedOn: day }
+  : {});
 
 /** Their last day ("Hasta cuándo come") is behind them. */
 export const lastDayGone = (client, day = today()) => !!client?.endsOn && client.endsOn < day;

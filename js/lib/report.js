@@ -246,6 +246,10 @@ function byFarm(receipts, invoices) {
     if (Number(row.amount) > 0 && row.clientId) entry.payers.add(row.clientId);
   }
   for (const row of invoices) {
+    // Fortnights and weeks only, as "Se facturó" at the top counts them: a
+    // debt written by hand is not something the kitchen billed for food, and
+    // with it in, the farms added up to more than the total above them.
+    if (isCharge(row)) continue;
     const entry = at(row.farmId, row.farmName);
     entry.billed = round2(entry.billed + (Number(row.amount) || 0));
   }
@@ -259,7 +263,8 @@ function byFarm(receipts, invoices) {
 function fill(buckets, receipts, invoices) {
   return buckets.map((bucket) => {
     const inside = receipts.filter((row) => row.date >= bucket.start && row.date <= bucket.end);
-    const billed = invoices.filter((row) => row.periodStart >= bucket.start && row.periodStart <= bucket.end);
+    const billed = invoices.filter((row) => !isCharge(row)
+      && row.periodStart >= bucket.start && row.periodStart <= bucket.end);
     return {
       ...bucket,
       day: bucket.start,      // what `columnChart` keys a tooltip on

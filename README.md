@@ -1113,6 +1113,112 @@ mientras se empaca. Si el periodo no tiene días empacados todavía (por ejemplo
 de que se empacara con el sistema, sale «—». La hoja impresa lo dice abajo
 de los números.
 
+### Versión 83: repaso de diseño y correcciones
+
+Un repaso de todo el sistema, pantalla por pantalla, en computadora, tableta
+y teléfono. No cambia dónde está cada cosa: se ve más parejo y se corrigieron
+los errores que salieron al revisarlo. Lo que **no** se tocó son las reglas de
+cobro (qué se factura y cuándo).
+
+**Cómo se ve**
+
+- Todas las páginas van sobre el mismo fondo claro, con las tarjetas en
+  blanco. Inicio abre con lo que hay por cobrar y su botón de **Cobrar**, los
+  accesos en mosaico, y los avisos con el mismo formato que en Clientes.
+- En computadora el botón principal de cada pantalla está en la barra de
+  arriba, y las filas y los botones se resaltan al pasar el cursor.
+- En teléfono y tableta la barra de arriba y la de abajo ya no se mueven: lo
+  que se desliza es la página. El buscador se queda en su lugar, una
+  conversación abre en el último mensaje con la caja para escribir a la vista,
+  y cada pantalla se acuerda de dónde se quedó.
+- En teléfono los textos largos bajan a un segundo renglón en vez de cortarse,
+  los botones de la ficha ya no se salen de su tarjeta y la barra de abajo
+  nombra sólo la pestaña en la que se está.
+
+**En el mostrador y en la cocina**
+
+- **Teclado de dinero.** El monto que ya viene puesto (lo que debe) aparece
+  marcado y **se reemplaza al teclear**: antes los números se agregaban al
+  final o no hacían nada, y se cobraba lo que debía en vez de lo que dio. Los
+  números del teclado de la computadora también sirven, y Enter pasa al
+  siguiente paso.
+- **Doble clic.** Un doble clic ya no contesta la pregunta siguiente, no
+  imprime dos etiquetas especiales, no pausa dos veces ni cierra el resultado
+  antes de leerlo. Una hoja que se está cerrando ya no deja pasar el clic a lo
+  que tiene debajo.
+- **Pausar o reactivar** ya no guarda nada si se escoge lo que la persona ya
+  es (antes eso cambiaba su historial y, con él, lo que se le facturaba).
+- **Nuevo cliente** muestra, antes de confirmar, los días y el precio de su
+  farma (por semana o por quincena), que es lo que de verdad se guarda.
+- **Empacar.** Siguiente y Atrás se quedan siempre a la vista; después de
+  reordenar la libreta abre desde arriba; la tarjeta «va en 3 de 5» ya no
+  regresa a cero en otra computadora; quien no tiene permiso de empacar no
+  puede abrir una libreta por su dirección. En **Organizar libreta**,
+  acomodar una ya no le quita casas a la otra, y «Está bien ahí» deja la casa
+  donde está.
+- **Novedades** dice «+2 comidas» (no «−2») de alguien que empieza hoy, y el
+  **Tablero de hoy** se dibuja aunque haya fallado algo que no usa.
+- Una computadora que se queda abierta pasada la medianoche ya muestra lo
+  cobrado del día nuevo.
+- Mientras dice «Cobrando…» la hoja de cobro no se puede cerrar (cerrarla
+  podía terminar en dos cobros), y el buscador ya no le quita el cursor a la
+  caja del monto.
+
+**Clientes y ranchos**
+
+- **Fechas escritas con el teclado.** Las cajas de fecha ya no actúan a media
+  fecha: «Otra fecha» del último día tiene su propio botón **Guardar esta
+  fecha** (antes guardaba con el primer número del año y la persona quedaba en
+  pausa al instante), y en los formularios el cursor ya no se sale de la caja.
+- **Rancho elegido dentro del formulario.** Registrar desde Clientes y escoger
+  ahí el rancho ya trae sus días, su horario, sus días de gracia, su plan y si
+  paga por semana o quincena. Cambiar a alguien de rancho al editar trae el
+  horario y la gracia del rancho nuevo.
+- La primera factura y el primer recibo de alguien recién registrado ya llevan
+  su rancho y su ubicación.
+- **Reactivar antes de tiempo** a quien estaba registrado para empezar otro
+  día lo hace empezar hoy, y su primera quincena sí se factura.
+- Lo escrito en **No puede comer** o **Preferencias** sin tocar «Agregar» se
+  guarda al guardar la ficha.
+- El último día se compara con el día en que empezó (no con el día de pago) y
+  el error se ve en su campo; no se puede guardar a alguien sin ningún día.
+- El cuadro **Al corriente** cuenta lo mismo que su lista; buscar en Ranchos
+  dice «12 de 15» cuando no caben todos; los nombres con acento o en
+  minúsculas ya salen en su lugar del abecedario.
+- Quien recibe un segundo último día queda en pausa solo también en una
+  computadora que llevaba días abierta.
+- **Programador:** dos cambios para la misma mañana se aplican en el orden en
+  que se programaron; dos «Ubicación nueva» del mismo rancho el mismo día
+  quedan las dos; «Intentar otra vez» funciona al momento.
+
+**Dinero y reportes**
+
+- Las facturas que escribe un cobro ya guardan sus comidas: la factura decía
+  «Comidas de la quincena 0» y los reportes contaban de menos.
+- El recibo de una cancelación y el de un pago traído del cuaderno ya no dicen
+  «Al corriente» (ni lo imprimen): ese saldo nunca se calculó.
+- **Cobranza** cuenta sólo lo que ya se debe (antes «Pendientes 1» sobre una
+  lista vacía) y, después de **Emitir**, Clientes deja de ofrecer esas
+  facturas.
+- A quien paga por semana se le dice «1 semana», no «1 quincena».
+- En Inicio, **Vencidos** cuenta a todos los atrasados, también a los que
+  están en pausa.
+- En Reportes, lo facturado por rancho y por día ya no incluye las deudas
+  anotadas a mano (cuadra con «Se facturó»); sin internet dice «Sin conexión»
+  en lugar de mostrar cifras incompletas.
+- Una factura vieja sin fecha límite ya no deja congeladas las pantallas.
+
+**Navegación y mensajes**
+
+- La flecha de regreso ya no rebota entre dos pantallas, y al volver a
+  Movimientos se conserva el filtro.
+- En una conversación la caja conserva el cursor después de enviar, lo escrito
+  sin enviar se guarda al salir y volver, y un mensaje sólo se marca como
+  leído con la ventana al frente.
+- Los buscadores no pierden el cursor cuando llega un cambio; abrir una
+  conversación desde Mensajes es inmediato.
+- Al entrar, un error ya no borra el correo ni la contraseña escritos.
+
 ### Español · English
 
 El panel y la cocina se pueden ver **en español o en inglés**. El botón

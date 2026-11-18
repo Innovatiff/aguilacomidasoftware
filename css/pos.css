@@ -549,6 +549,12 @@
   color: var(--pos-brand-dark); line-height: 1.05;
 }
 
+/* An amount the screen put there (what they owe, a quick amount) rather than
+   one that was typed: marked the way selected text is, because the first key
+   pressed replaces it. */
+.posamount__n { padding: 0 10px; margin-right: -10px; border-radius: 8px; }
+.posamount.is-fresh .posamount__n { background: #ffdcbf; }
+
 .poschips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
 .poschip {
   min-height: 54px; padding: 0 18px;
@@ -1346,7 +1352,16 @@
 
 /* --- The two buttons, always in the same two places ------------------------- */
 
-.pkfoot { display: flex; gap: var(--s3); }
+/* Atrás and Siguiente stay on the screen whatever the card above them holds.
+   They used to sit under the card, so a long name with a restriction, a note
+   and the "falta alguien" banner pushed them below the 768px of the kitchen's
+   monitors — Siguiente was four pixels of orange at the bottom edge, or not
+   there at all. Pinned to the bottom of the window, the card scrolls and the
+   buttons do not. */
+.pkfoot {
+  display: flex; gap: var(--s3);
+  position: sticky; bottom: 12px; z-index: 3;
+}
 
 .pkbtn {
   display: flex; align-items: center; justify-content: center; gap: var(--s2);
@@ -1990,4 +2005,32 @@
   .poskinds .postile--pick .postile__ico svg { width: 24px; height: 24px; }
   .poskinds .postile--pick .postile__name { font-size: 16px; }
   .poskinds .postile--pick .postile__sub { font-size: 13px; }
+}
+
+/* ==========================================================================
+   On a phone.
+
+   The counter itself is not offered below 900px, but its step-by-step screens
+   are: the Programador, and "Programar un cambio" in a client's file, open
+   them from the office's phone. The frame was only ever measured on the
+   kitchen computers, so at 390px the date pushed "Paso 1 de 2" off the right
+   of the bar and Siguiente lost its last pixels past the edge. The bar keeps
+   what is needed to get out and to know where you are; the two buttons at the
+   foot share the width whatever their words are.
+   ========================================================================== */
+
+@media (max-width: 699px) {
+  .pos__bar { gap: 10px; padding: 10px 12px; }
+  .pos__mark, .pos__day, .pos__ver { display: none; }
+  .pos__title {
+    flex: 1 1 auto; min-width: 0;
+    font-size: 20px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .pos__step { margin-left: 0; flex: none; font-size: 14px; padding: 5px 11px; }
+  .pos__exit { min-height: 44px; padding: 0 12px; font-size: 16px; flex: none; }
+
+  .pos__foot { gap: 10px; padding: 10px 12px; }
+  .pos__foot > * { min-width: 0; }
+  .pos__foot .posbtn { min-width: 0; min-height: 60px; padding: 0 12px; font-size: 18px; }
 }

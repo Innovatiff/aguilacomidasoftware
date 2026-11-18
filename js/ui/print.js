@@ -113,7 +113,9 @@ export function receiptSheet(receipt, {
       // Kept whole when it could not be spread over their bills: the money is
       // in, and what they owe is worked out afterwards — so it says neither
       // "al corriente" nor a balance it does not know.
-      : receipt.held
+      // Nor one copied in from the notebook: its balance was never worked
+      // out, and the zero it carries would print "QUEDA AL CORRIENTE".
+      : receipt.held || receipt.fromNotebook
         ? h('div.rcp__ok', t('PAGO RECIBIDO'))
         : (Number(receipt.balanceAfter) || 0) > 0.005
           ? pair(t('QUEDA DEBIENDO'), money(receipt.balanceAfter), '.rcp__pair--total')

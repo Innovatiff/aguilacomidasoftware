@@ -63,14 +63,19 @@ export function specialLabel({
     go.disabled = !people.length;
   }
 
+  // One sticker per sheet. The second half of a double click on the button
+  // found it still there, and a second sticker came out for the same bag.
+  let sent = false;
+
   function send() {
     const people = picked();
-    if (!people.length) return;
+    if (!people.length || sent) return;
     // The houses of the people in it, in the order they come — usually one.
     const placeNames = [...new Set(people
       .map((one) => (one.place?.id ? one.place.name : ''))
       .filter(Boolean))];
     try {
+      sent = true;
       printStickers({
         special: {
           farmName: farm?.name || '',
@@ -84,6 +89,7 @@ export function specialLabel({
       toastOk(t('Etiqueta especial impresa'));
       close(true);
     } catch (error) {
+      sent = false;
       toastBad(t('No se pudo imprimir la etiqueta: {error}', { error: errorText(error) }));
     }
   }

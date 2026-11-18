@@ -85,7 +85,7 @@ export function novedades({
       items.push({
         kind, client, on: entry.on,
         at: Number(entry.at) || startOf(entry.on),
-        plates: !today ? 0 : kind === 'volvio' ? plates(client) : -plates(client),
+        plates: !today ? 0 : kind === 'volvio' || kind === 'empieza' ? plates(client) : -plates(client),
         line: kind === 'volvio' || kind === 'empieza' ? where(client) : null,
       });
     }

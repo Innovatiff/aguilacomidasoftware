@@ -13,6 +13,7 @@ import { configureShell, clearShell, setTabBadge, splash, notePath, screen } fro
 import { register, setNotFound, start, stop as stopRouter, go, onNavigate } from './lib/router.js';
 import { startSession, watchSession, session, signOutNow } from './data/session.js';
 import { startStore, stopStore, subscribe, unreadCount } from './data/store.js';
+import { closeSheets } from './ui/overlay.js';
 import { renderAuth, renderNoAccess } from './screens/login.js';
 import { renderDashboard } from './screens/dashboard.js';
 import { renderNotebook } from './screens/notebook.js';
@@ -114,6 +115,10 @@ function enter(next) {
     stopBadge?.();
     stopBadge = null;
     stopStore();
+    // And whatever was open over the screens: a sheet is hung on the document,
+    // not on the page, so it used to stay there over the sign-in form — with
+    // the last account's data in it.
+    closeSheets();
   }
   phase = next;
 

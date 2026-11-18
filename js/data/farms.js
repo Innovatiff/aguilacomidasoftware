@@ -142,11 +142,13 @@ const FARM_WORDS = {
   deliveryWindow: 'Horario de entrega', graceDays: 'Días de gracia', defaultMealsPerDay: 'Comidas por defecto',
   defaultPayEvery: 'Paga por defecto', status: 'Estado',
 };
+const shown = (value) => (value === undefined || value === null || value === '' ? '—' : value);
 function logFarmChanges(farmId, previous, clean) {
   const name = clean.name || previous?.name || '';
   const lines = Object.entries(FARM_WORDS)
     .filter(([field]) => clean[field] !== undefined && !same(clean[field] ?? '', previous?.[field] ?? ''))
-    .map(([field, label]) => `${label}: ${previous?.[field] ?? '—'} → ${clean[field] || '—'}`);
+    // Zero is a value — "Días de gracia: 3 → 0" — and only nothing is a dash.
+    .map(([field, label]) => `${label}: ${shown(previous?.[field])} → ${shown(clean[field])}`);
   if (clean.deliveryDays !== undefined && !same(clean.deliveryDays, previous?.deliveryDays)) {
     lines.push('Días de entrega cambiados');
   }

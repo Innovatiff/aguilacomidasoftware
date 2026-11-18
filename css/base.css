@@ -57,6 +57,21 @@ img, svg { display: block; max-width: 100%; }
   #app { min-height: 100dvh; }
 }
 
+/* Once somebody is in, the frame is exactly one screen tall and the page
+   inside it is what scrolls — at every width, not only on a computer.
+
+   On a phone or a tablet the frame used to grow with its contents, so it was
+   the whole document that scrolled and never the page. Everything built on
+   the page scrolling quietly did nothing there: a conversation opened on its
+   oldest message with the box to write in below all of it, the search bar
+   scrolled away instead of staying put, and a screen opened wherever the one
+   before it had been left. (`vh` first, for browsers that do not know `dvh`.) */
+#app.app--shell {
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+}
+
 /* A tablet in portrait is still a touch device — the bar belongs at the bottom,
    under a thumb — but a 520px column on a 800px screen is half a screen wasted.
    Widening the canvas is one variable: the frame, the bar, the action button
@@ -118,12 +133,18 @@ img, svg { display: block; max-width: 100%; }
 
 /* --- Scrolling page body -------------------------------------------------- */
 
+/* Every page stands on the same pale ground, and what is on it — cards,
+   lists, tiles — is white. Half the screens already did (reports, an invoice,
+   a receipt, the libreta) and half were white on white, where a card was only
+   an outline; going from a client's file to their invoice changed the colour
+   of the room. `page--sunken` is kept for the screens that ask for it by
+   name, and now says what every page says. */
 .page {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  background: var(--bg);
+  background: var(--bg-sunken);
   padding-bottom: calc(var(--tabbar-h) + var(--safe-bottom) + var(--s6));
 }
 .page--flush { padding-bottom: 0; }
@@ -197,16 +218,41 @@ img, svg { display: block; max-width: 100%; }
   box-sizing: content-box;
 }
 
-/* Seven tabs on a small phone leave the words shoulder to shoulder: measured
-   at 320px, the labels filled the bar edge to edge with nothing between them.
-   A slightly smaller label gives each word air on both sides. */
-@media (max-width: 400px) {
-  .tab { font-size: 10px; letter-spacing: 0; }
-}
-/* Eight tabs on a phone: a long word ("Programador") is cut rather than
-   pushing into its neighbours. */
-@media (max-width: 899px) {
-  .tab > span:not(.tab__dot) { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Eight tabs do not fit eight words on a phone. Measured: at 390px each tab
+   has 48px and "Programador" needs 60, so the labels ran into each other, and
+   at 360px the last one left the screen. (`1fr` is `minmax(auto, 1fr)`: a long
+   word widens its own column instead of being cut, which is why cutting it
+   never worked.) So below the tablet width the bar shows the eight icons, in
+   the order they have always been, and names only the one you are on — the
+   top bar already says where you are. The names are still there for a screen
+   reader; they are only taken off the glass.
+
+   A row rather than a grid here, so the open tab can be as wide as its word
+   and the other seven share what is left: a name wider than its column would
+   otherwise be cut by the edge of the screen on the first and last tabs. */
+@media (max-width: 699px) {
+  .tabbar { display: flex; }
+  .tab {
+    flex: 1 1 0; min-width: 0;
+    gap: 2px;
+    font-size: 10.5px; letter-spacing: 0;
+  }
+  .tab svg { width: 24px; height: 24px; }
+  .tab > span:not(.tab__dot) {
+    position: absolute;
+    width: 1px; height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .tab.is-active { flex: 0 0 auto; padding-inline: 7px; min-width: 52px; }
+  .tab.is-active svg { width: 22px; height: 22px; }
+  .tab.is-active > span:not(.tab__dot) {
+    position: static;
+    width: auto; height: auto;
+    overflow: visible;
+    clip-path: none;
+  }
 }
 
 /* --- Utilities ------------------------------------------------------------ */
@@ -350,6 +396,18 @@ img, svg { display: block; max-width: 100%; }
      field. Everything else earns the full width. */
   .page__inner--narrow { max-width: var(--content-narrow); }
 
+  /* A list that is the whole page — the inbox — runs edge to edge on a phone,
+     which is what a phone's lists do. In a window it was the one list without
+     an outline, its rows starting a few pixels to the left of the search box
+     above them. Here it is a card in the content column, like every other
+     list in the panel. */
+  .page > .list {
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    overflow: hidden;
+    margin: var(--s6) max(var(--s6), calc((100% - var(--content-max)) / 2)) var(--s9);
+  }
+
   /* --- The rail ---------------------------------------------------------- */
 
   .tabbar {
@@ -449,6 +507,15 @@ img, svg { display: block; max-width: 100%; }
     margin-bottom: var(--s4);
   }
   .page__inner--flow > .span-all { column-span: all; }
+  /* A heading goes where its card goes. Without this the last thing in the
+     first column could be a section's name, with the section itself starting
+     at the top of the second — "Desglose" under a paid invoice, and nothing
+     below it. */
+  .page__inner--flow > .section-label {
+    break-after: avoid;
+    -webkit-column-break-after: avoid;
+    margin-bottom: 0;
+  }
 
   /* Repeated blocks — route locations, invoice groups — tile instead of
      stacking, because on a wide screen a single column is mostly empty space. */
@@ -491,10 +558,53 @@ img, svg { display: block; max-width: 100%; }
 
 @media (hover: hover) and (pointer: fine) {
   .item:hover { background: var(--ink-50); }
+  .crow__main:hover { background: var(--ink-50); }
+  .rowlink:hover { background: var(--ink-50); }
+  .shortcut:hover { background: var(--ink-50); border-color: var(--border-strong); }
+  .person:hover { border-color: var(--ink-300); box-shadow: var(--sh-1); }
   .tab:hover { color: var(--nav-fg-active); }
+  .tab:not(.is-active):hover { background: rgba(255, 255, 255, .04); }
   .topbar__btn:hover { background: rgba(255, 255, 255, .12); }
   .btn:hover:not(:disabled) { filter: brightness(.96); }
-  .fab:hover { transform: translateY(-1px); }
-  .stat:hover { border-color: var(--ink-200); }
+  .fab:hover { filter: brightness(.96); }
+  /* Only a tile that goes somewhere answers the mouse: most are just figures. */
+  button.stat { cursor: pointer; transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
+  button.stat:hover { border-color: var(--ink-300); box-shadow: var(--sh-1); }
   .chip:hover { border-color: var(--ink-300); }
+  .quickie:hover { background: var(--brand-50); border-color: var(--brand-200); }
+  .segmented__item:not(.is-active):hover { color: var(--ink-900); }
+  .step:hover:not(:disabled) { border-color: var(--ink-300); color: var(--text); }
+  .week__day:hover .week__name { color: var(--text); }
+}
+
+/* --- Scrollbars -------------------------------------------------------------
+   The office and the kitchen run Windows, where a scrolling pane gets a wide
+   grey trough with arrows at both ends — beside a dark bar and white cards it
+   was the heaviest thing on the screen. A plain rounded thumb, wide enough to
+   grab, and no trough. Only where there is a mouse: a phone's scrollbars are
+   already out of the way. */
+
+@media (hover: hover) and (pointer: fine) {
+  /* Firefox only takes two colours. Chrome would take them too — and then
+     ignore the rules below — so it is not offered them. */
+  @supports not selector(::-webkit-scrollbar) {
+    .page, .sheet__body, .chat__scroll, .textarea {
+      scrollbar-color: var(--ink-200) transparent;
+    }
+  }
+  .page::-webkit-scrollbar, .sheet__body::-webkit-scrollbar,
+  .chat__scroll::-webkit-scrollbar, .textarea::-webkit-scrollbar { width: 12px; height: 12px; }
+  .page::-webkit-scrollbar-track, .sheet__body::-webkit-scrollbar-track,
+  .chat__scroll::-webkit-scrollbar-track, .textarea::-webkit-scrollbar-track { background: transparent; }
+  .page::-webkit-scrollbar-thumb, .sheet__body::-webkit-scrollbar-thumb,
+  .chat__scroll::-webkit-scrollbar-thumb, .textarea::-webkit-scrollbar-thumb {
+    background: var(--ink-200);
+    border: 3px solid transparent;
+    background-clip: padding-box;
+    border-radius: var(--r-full);
+  }
+  .page::-webkit-scrollbar-thumb:hover, .sheet__body::-webkit-scrollbar-thumb:hover,
+  .chat__scroll::-webkit-scrollbar-thumb:hover, .textarea::-webkit-scrollbar-thumb:hover {
+    background-color: var(--ink-300);
+  }
 }

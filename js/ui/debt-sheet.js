@@ -96,6 +96,7 @@ export function openDebtSheet({ client, invoices = [], author }) {
           if (!reason.trim()) { toastBad(t('Escribe de qué es la deuda.')); return; }
 
           busy = true;
+          close.hold(true);
           submit.disabled = true;
           mount(submit, h('span.spinner.spinner--light'), t('Agregando…'));
 
@@ -109,6 +110,7 @@ export function openDebtSheet({ client, invoices = [], author }) {
             close(charge);
           } catch (error) {
             busy = false;
+            close.hold(false);
             repaint();
             toastBad(errorText(error));
           }

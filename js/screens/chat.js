@@ -22,6 +22,8 @@ export function renderChat(context) {
   const clientId = context.params.id;
   let client = store.clients.find((row) => row.id === clientId) || null;
   let view = null;
+  /** What the top bar said the last time it was painted. */
+  let painted = null;
 
   // The store may not have loaded yet on a deep link straight into a thread.
   // If the read lands after they have moved on, it is not theirs to paint.
@@ -48,6 +50,24 @@ export function renderChat(context) {
     const billing = client ? billingFor(client) : null;
     const owes = (billing?.balance || 0) > 0;
 
+    /*
+     * The thread keeps itself up to date; all this screen adds is the bar on
+     * top — who it is and what they owe. It used to be repainted on every
+     * change anywhere in the panel, and repainting takes the thread out of the
+     * page and puts it back: the box lost the cursor after every message sent
+     * (sending one is itself a change), and the thread jumped to its first
+     * message whenever somebody took a payment on another computer. So the
+     * bar is painted when what it says changes, and when it is, the place in
+     * the thread and the cursor are put back.
+     */
+    const key = [client?.name || '', owes ? billing.balance : 0, billing?.status || ''].join('|');
+    if (key === painted) return;
+    painted = key;
+    const scroller = view.node.querySelector('.chat__scroll');
+    const box = view.node.querySelector('.chat__input');
+    const top = scroller ? scroller.scrollTop : 0;
+    const typing = !!box && document.activeElement === box;
+
     const page = screen({
       title: client?.name || t('Conversación'),
       backTo: '/messages',
@@ -72,6 +92,8 @@ export function renderChat(context) {
     });
 
     page.classList.add('page--chat');
+    if (scroller) scroller.scrollTop = top;
+    if (typing) box.focus();
   }
 
   const unsubscribe = subscribe(() => {

@@ -29,7 +29,7 @@ import {
   periodFor, PAY_EVERY, servingDays, payDayOnOrAfter, periodWord,
 } from '../lib/billing.js';
 import { payDaysWords } from '../lib/billing-words.js';
-import { WEEKDAYS_SHORT, today, formatRange } from '../lib/dates.js';
+import { WEEKDAYS_SHORT, today, formatRange, isWholeDay } from '../lib/dates.js';
 import { plural } from '../lib/format.js';
 import { errorText } from '../firebase.js';
 import { t } from '../lib/i18n.js';
@@ -231,12 +231,14 @@ export async function renderFarmForm(context) {
             value: model.cycleAnchor, type: 'date',
             // Snapped: a cycle that does not start on a collection day would
             // put every new person here on a day the kitchen never collects.
-            // Snapping changes the value in the box, so the field has to be
-            // redrawn rather than patched in place.
+            // Kept once the date is whole, and shown — as the collection day
+            // it was moved to — when the box is left. Redrawing on every
+            // change took the cursor out of the box after the first key of a
+            // date typed by hand, with the year still at 0002.
             onchange: (e) => {
-              update({ cycleAnchor: payDayOnOrAfter(e.target.value || today()) });
-              draw();
+              if (isWholeDay(e.target.value)) update({ cycleAnchor: payDayOnOrAfter(e.target.value) });
             },
+            onblur: (e) => { e.target.value = model.cycleAnchor || payDayOnOrAfter(today()); },
           }),
         }),
         field({
@@ -244,7 +246,7 @@ export async function renderFarmForm(context) {
           hint: t('Días después de cerrar el periodo antes de marcarlo como vencido.'),
           control: select({
             value: String(model.graceDays),
-            options: [0, 1, 2, 3, 5, 7].map((n) => ({ value: String(n), label: n === 0 ? t('Mismo día') : n === 1 ? t('1 días') : t('{n} días', { n }) })),
+            options: [0, 1, 2, 3, 5, 7].map((n) => ({ value: String(n), label: n === 0 ? t('Mismo día') : plural(n, 'día', 'días') })),
             onchange: (e) => update({ graceDays: Number(e.target.value) }),
           }),
         }),

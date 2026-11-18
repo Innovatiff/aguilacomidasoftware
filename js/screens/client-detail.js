@@ -36,11 +36,12 @@ import {
   periodOf, periodOfIndex, projectPeriod, balanceOf, invoiceStatus,
   STATUS_LABEL, STATUS_TONE, invoiceId, isCharge, invoiceTitle, appliedTitle,
   payDayAfter, periodWord, cadenceWord, paidThroughOn, paidFor, isPayable, isCovered,
+  DEFAULT_GRACE_DAYS,
 } from '../lib/billing.js';
 import { tierFor, periodCharge, mealsOn } from '../lib/pricing.js';
 import {
   formatRange, formatDayLong, today, addDays, humanDelta, formatDay,
-  weekdayName, capitalize, WEEKDAYS_SHORT,
+  weekdayName, capitalize, WEEKDAYS_SHORT, isWholeDay,
 } from '../lib/dates.js';
 import { money, moneyFull, plural, phone as fmtPhone, telHref, number } from '../lib/format.js';
 import { clientStatusMeta, paymentMethodMeta } from '../lib/model.js';
@@ -511,17 +512,7 @@ export function renderClientDetail(context) {
           onClick: async () => { close(); await saveLastDay(model, addDays(today(), days)); },
         })),
 
-        fieldGroup({
-          label: t('Otra fecha'),
-          control: input({
-            type: 'date', value: model.endsOn || '', min: today(),
-            onchange: async (event) => {
-              if (!event.target.value) return;
-              close();
-              await saveLastDay(model, event.target.value);
-            },
-          }),
-        }),
+        otherDay(model, close),
 
         model.endsOn
           ? button(t('Quitar la fecha — sigue indefinidamente'), {
@@ -530,6 +521,49 @@ export function renderClientDetail(context) {
             })
           : null),
     });
+  }
+
+  /**
+   * «Otra fecha»: the box, and a button of its own.
+   *
+   * The box used to save by itself as soon as it held a date. Typed on a
+   * keyboard, a date box holds one after the first digit of the year —
+   * "2" is the year 0002 — so the client's last day was saved eighteen
+   * centuries back and they were paused on the spot, mid-keystroke. Nothing is
+   * written now until the button is pressed, and the button only lights up
+   * for a day from today on.
+   */
+  function otherDay(model, close) {
+    const usable = (day) => isWholeDay(day) && day >= today();
+    const box = input({ type: 'date', value: model.endsOn || '', min: today() });
+    const past = h('span.field__error', { hidden: true }, t('Tiene que ser de hoy en adelante.'));
+    const save = button(t('Guardar esta fecha'), {
+      variant: 'primary', disabled: true,
+      onClick: async () => {
+        const day = box.value;
+        if (!usable(day)) return;
+        close();
+        await saveLastDay(model, day);
+      },
+    });
+
+    const check = () => {
+      const day = box.value;
+      // A year still being typed says nothing; a real day already gone does.
+      past.hidden = !isWholeDay(day) || usable(day);
+      // The date it already has is not a change worth a button.
+      save.disabled = !usable(day) || day === model.endsOn;
+    };
+    box.addEventListener('input', check);
+    box.addEventListener('change', check);
+    check();
+
+    return h('div.field',
+      h('span.field__label', t('Otra fecha')),
+      h('div.row', { style: { gap: 'var(--s2)', flexWrap: 'wrap' } },
+        h('div.grow', { style: { minWidth: '160px' } }, box),
+        save),
+      past);
   }
 
   async function saveLastDay(model, endsOn) {
@@ -596,7 +630,9 @@ export function renderClientDetail(context) {
         h('div.row.row--between',
           h('div', { style: { minWidth: 0 } },
             h('div.t-xs.upper.c-faint.w-700', t('Correo de acceso')),
-            h('div', { style: { marginTop: '6px' } }, emailChip(model.email || '—'))),
+            h('div', { style: { marginTop: '6px' } }, model.email
+              ? emailChip(model.email)
+              : h('span.c-soft.w-600', t('Sin correo')))),
           model.email
             ? button(t('Copiar'), { variant: 'ghost', size: 'sm', icon: 'copy', onClick: () => copy(model.email) })
             : null),
@@ -638,7 +674,7 @@ export function renderClientDetail(context) {
             ? formatDayLong(servingSince(model))
             : t('Sin fecha')),
           defRow(t('Inicio del ciclo'), formatDayLong(model.cycleAnchor || today())),
-          defRow(t('Días de gracia'), model.graceDays === 0 ? t('Mismo día') : t('{count} días', { count: model.graceDays })),
+          defRow(t('Días de gracia'), graceWords(model.graceDays)),
         ]),
         h('p.t-xs.c-faint',
           t('El precio del plan se cambia en Ajustes → Precios; los días, las comidas extra y cada cuánto paga, aquí en su ficha.')
@@ -870,4 +906,14 @@ function periodProgress(period) {
   const elapsed = Math.max(0, Math.min(total,
     (new Date(`${today()}T12:00:00`) - new Date(`${period.start}T12:00:00`)) / 86400000 + 1));
   return Math.round((elapsed / total) * 100);
+}
+
+/**
+ * "3 días", "1 día", "Mismo día" — and, for a file from before the field
+ * existed, the three days billing gives it anyway rather than a bare
+ * "{count} días".
+ */
+function graceWords(days) {
+  const n = Math.max(0, Number(days ?? DEFAULT_GRACE_DAYS) || 0);
+  return n === 0 ? t('Mismo día') : plural(n, 'día', 'días');
 }

@@ -74,6 +74,23 @@ export const forgetPeriods = () => { cache.clear(); inFlight.clear(); };
  * needs the other's answer, so a year's report waits for the slower of the two
  * instead of for both in turn.
  */
+/**
+ * The rows of an answer — from the server, or not at all.
+ *
+ * With no internet a query still answers, from what this computer happens to
+ * have saved: the receipts somebody looked at last week, and nothing else.
+ * A report built on that says the month took in $200, with no sign that it is
+ * a fragment — and, for a month already over, it was then kept for the rest
+ * of the session, connection or not. Better the card that says there is no
+ * connection, with its button to try again.
+ */
+function fromServer(snapshot) {
+  if (snapshot?.metadata?.fromCache) {
+    throw Object.assign(new Error('offline'), { code: 'unavailable' });
+  }
+  return listData(snapshot);
+}
+
 export function loadPeriod(range, { fresh = false } = {}) {
   const key = keyOf(range);
   if (fresh) { cache.delete(key); inFlight.delete(key); }
@@ -82,7 +99,7 @@ export function loadPeriod(range, { fresh = false } = {}) {
 
   const reading = Promise.all([
     getDocs(query(collection(db, 'receipts'),
-      where('date', '>=', range.start), where('date', '<=', range.end))).then(listData),
+      where('date', '>=', range.start), where('date', '<=', range.end))).then(fromServer),
 
     // `periodStart` — the day the fortnight a bill covers *opens*, which is
     // also the day a hand-written debt was written. Not `issuedAt`: bills for
@@ -90,14 +107,14 @@ export function loadPeriod(range, { fresh = false } = {}) {
     // report that filed them under the day somebody got around to pressing the
     // button would say September's food was sold in October.
     getDocs(query(collection(db, 'invoices'),
-      where('periodStart', '>=', range.start), where('periodStart', '<=', range.end))).then(listData),
+      where('periodStart', '>=', range.start), where('periodStart', '<=', range.end))).then(fromServer),
 
     // The libretas packed in the span, one per libreta per morning, with how
     // many people and plates each held — what "clientes activos" and "comidas
     // al día" of a period are worked out from. Apart, and never the period's
     // failure: without them the money is still the money.
     getDocs(query(collection(db, 'packRuns'),
-      where('date', '>=', range.start), where('date', '<=', range.end))).then(listData)
+      where('date', '>=', range.start), where('date', '<=', range.end))).then(fromServer)
       .catch(() => null),
   ]).then(([receipts, invoices, runs]) => {
     const found = { receipts, invoices, runs, readAt: new Date() };

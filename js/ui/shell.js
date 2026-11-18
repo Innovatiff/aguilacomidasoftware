@@ -80,7 +80,7 @@ export function configureShell({ mount: host, tabs: tabConfig = [], brand } = {}
 
 /** Drops the frame — the sign-in and no-access screens stand on their own. */
 export function clearShell(host) {
-  host.classList.remove('app--shell');
+  host.classList.remove('app--shell', 'app--fab');
   host.replaceChildren();
 }
 
@@ -320,6 +320,12 @@ function paintFab(fab) {
   mounted?.remove();
   if (fab) root.append(fab);
   fabKey = key;
+
+  // On a desktop the button sits at the end of the top bar (see `.fab` in
+  // components.css), and the bar has to leave it room: its width, which
+  // depends on the word and the language, is handed to the stylesheet.
+  root.classList.toggle('app--fab', !!fab);
+  if (fab) root.style.setProperty('--fab-w', `${Math.ceil(fab.getBoundingClientRect().width)}px`);
 }
 
 let renderedPath = null;
@@ -359,7 +365,9 @@ function origin(here) {
  * remembers which screen led here.
  */
 export function notePath(path, href = path) {
-  if (page && page.scrollTop > 0) scrollMemory.set(lastPath, page.scrollTop);
+  // Zero included: a list left from its very top must come back at its top,
+  // not at wherever it had been scrolled to the time before.
+  if (page) scrollMemory.set(lastPath, page.scrollTop);
 
   // Coming back up out of a screen's own form does not rewrite where the
   // screen was reached from: somebody who opened a client from the roster,
@@ -370,11 +378,24 @@ export function notePath(path, href = path) {
   // and a chevron that dropped it landed somewhere the reader had not been.
   // Only the bare path is the key, because "which screen led here" is a fact
   // about screens.
-  if (path !== lastPath && !up) cameFrom.set(path, lastHref);
+  // Nor does going back to where this screen was reached from. Roster → file →
+  // chat, and back to the file: without this the file was now "reached from
+  // the chat", so its chevron opened the chat again, and the chat's opened
+  // the file, and the roster could not be reached with the chevron at all.
+  const returning = (cameFrom.get(lastPath) || '').split('?')[0] === path;
+  if (path !== lastPath && !up && !returning) cameFrom.set(path, lastHref);
 
   lastPath = path;
   lastHref = href;
 }
+
+/**
+ * For a screen that rewrites its own address without navigating — a filter
+ * kept in the query with `replaceState`, which fires no `hashchange`. The
+ * address the next screen's chevron returns to is the one the reader was
+ * actually on, filter and all.
+ */
+export const noteHref = (href) => { lastHref = href; };
 
 /** Swap only the page body — used when a listener pushes fresh data. */
 export const setBody = (...content) => mount(page, ...content);

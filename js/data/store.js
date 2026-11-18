@@ -70,14 +70,37 @@ export const store = state;
 // "before" comes from.
 setClientLookup((id) => state.clients.find((client) => client.id === id) || null);
 
-/** Subscribe to any store change. Fires immediately with the current state. */
+/**
+ * Subscribe to any store change. Fires immediately with the current state.
+ *
+ * A first draw that throws is not left subscribed. The caller never receives
+ * the function that would remove it, so it would be called — and would throw —
+ * on every change from then on, for the life of the page.
+ */
 export function subscribe(fn) {
   subscribers.add(fn);
-  fn(state);
+  try {
+    fn(state);
+  } catch (error) {
+    subscribers.delete(fn);
+    throw error;
+  }
   return () => subscribers.delete(fn);
 }
 
-const emit = () => { for (const fn of subscribers) fn(state); };
+/*
+ * Every listener hears every change, whatever happened to the one before it.
+ * The loop used to stop at the first draw that threw: one screen tripping over
+ * one odd record froze the tab badge, the dashboard and every screen opened
+ * afterwards on what they had last painted, with nothing on the screen to say
+ * so. The error still reaches the console.
+ */
+const emit = () => {
+  for (const fn of [...subscribers]) {
+    if (!subscribers.has(fn)) continue;
+    try { fn(state); } catch (error) { console.error(error); }
+  }
+};
 
 /*
  * The date moves on by itself. A kitchen computer is left on overnight with
@@ -111,16 +134,28 @@ function runDue() {
 
 /*
  * "Hasta cuándo come", carried out: the morning after somebody's last day they
- * are put in pause (`pauseAfterLastDay`). Asked once per person per session —
+ * are put in pause (`pauseAfterLastDay`). Asked once per person per last day —
  * the write comes back through the same listener, by then as paused.
+ *
+ * Remembered by the day itself, not just by the person: somebody brought back
+ * and given a new last day has to be paused again when that one goes by, also
+ * on a computer that has stayed open since the first.
+ *
+ * A write that is refused — no permission, the day's allowance spent — is
+ * tried again after a while and not at once: the refusal comes back through
+ * this same listener, and answering it with another attempt is a loop.
  */
-const pausing = new Set();
+const pausing = new Map();        // client id → the last day it was done for
+const PAUSE_AGAIN_AFTER = 5 * 60 * 1000;
 function pauseFinished() {
   for (const client of state.clients) {
     if (client.status !== 'active' || !client.endsOn || client.endsOn >= state.day) continue;
-    if (pausing.has(client.id)) continue;
-    pausing.add(client.id);
-    pauseAfterLastDay(client).catch(() => { pausing.delete(client.id); });
+    if (pausing.get(client.id) === client.endsOn) continue;
+    const { id, endsOn } = client;
+    pausing.set(id, endsOn);
+    pauseAfterLastDay(client).catch(() => {
+      setTimeout(() => { if (pausing.get(id) === endsOn) pausing.delete(id); }, PAUSE_AGAIN_AFTER);
+    });
   }
 }
 if (typeof document !== 'undefined') {
@@ -145,6 +180,14 @@ const failed = (key) => (error) => {
   emit();
 };
 
+/**
+ * Alphabetical the way Spanish is: Álvaro with the A's and Ñ after N. The
+ * database sorts by the bytes of the name, which puts every accented capital
+ * and every name typed in lower case after Zoila — at the bottom of a farm's
+ * list, where nobody looks for them.
+ */
+const byName = (a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'es');
+
 /** The first listener failure, if any — what the screens surface. */
 export const firstError = () => {
   const [key] = Object.keys(state.errors);
@@ -167,13 +210,13 @@ export function startStore() {
     }, failed('pricing')),
 
     watchFarms((rows) => {
-      state.farms = rows;
+      state.farms = [...rows].sort(byName);
       state.loaded.farms = true;
       emit();
     }, failed('farms')),
 
     watchClients((rows) => {
-      state.clients = rows;
+      state.clients = [...rows].sort(byName);
       state.loaded.clients = true;
       pauseFinished();
       runDue();

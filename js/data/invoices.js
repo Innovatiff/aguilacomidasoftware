@@ -750,7 +750,10 @@ async function applyPayment({
     for (const row of read) {
       const draft = row.data
         || (row.period
-          ? { ...draftInvoice(payer, row.period, charge, 0), issuedByName: author?.name || '' }
+          // With the meals the plan gives that period, as the billing scan
+          // writes them. A bill written here said 0 — «Comidas de la quincena
+          // 0» on the invoice, and that many fewer in the reports.
+          ? { ...draftInvoice(payer, row.period, charge, Number(charge?.meals) || 0), issuedByName: author?.name || '' }
           : null);
       if (!draft) continue;
 

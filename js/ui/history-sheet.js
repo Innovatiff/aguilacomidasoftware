@@ -91,6 +91,7 @@ export function openHistorySheet({ client, author }) {
           if (!(value > 0)) { toastBad(t('El monto debe ser mayor a cero.')); return; }
 
           busy = true;
+          close.hold(true);
           submit.disabled = true;
           mount(submit, h('span.spinner.spinner--light'), t('Registrando…'));
 
@@ -107,6 +108,7 @@ export function openHistorySheet({ client, author }) {
             close(receipt);
           } catch (error) {
             busy = false;
+            close.hold(false);
             repaint();
             toastBad(errorText(error));
           }

@@ -200,6 +200,9 @@ export function renderSchedule() {
       title: setTitle(set),
       meta,
       end: badge(set.state === 'pending' && set.on === day ? t('Hoy') : word, tone),
+      // Who and what on a phone is forty letters in room for twenty: wrapped,
+      // because "… — se pone en pausa" is the part that was being cut.
+      className: 'item--wrap item--stack',
       onClick: () => details(set),
     });
   }

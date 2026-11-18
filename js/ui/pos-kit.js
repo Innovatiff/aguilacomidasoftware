@@ -17,6 +17,7 @@ import { icon } from '../lib/icons.js';
 import { money, fold } from '../lib/format.js';
 import { t } from '../lib/i18n.js';
 import { matchesSearch } from '../data/clients.js';
+import { sheetOpen } from './overlay.js';
 import {
   WEEKDAYS_SHORT, today as todayKey, addDays, addMonths, weekdayOf, formatMonth, formatDayLong,
 } from '../lib/dates.js';
@@ -207,17 +208,41 @@ const initials = (name) => String(name || '?')
  * they owe, one fortnight, and both.
  */
 export function posMoney({ value, onChange, quick = [] }) {
-  let text = value ? String(value) : '';
+  // To the cent: what is owed arrives as arithmetic, and "31.250000000000004"
+  // is a number nobody can type a digit after. Whole dollars stay bare, and
+  // anything with cents shows both of them — "87.50", not "87.5".
+  const asTyped = (amount) => {
+    const cents = Math.round(Number(amount) * 100) / 100;
+    return Number.isInteger(cents) ? String(cents) : cents.toFixed(2);
+  };
+  let text = value ? asTyped(value) : '';
+
+  /**
+   * Whether the amount on screen was put there rather than typed — what they
+   * owe when the keypad opens, or a quick amount just tapped.
+   *
+   * Typing then starts a new amount instead of adding to that one. It used to
+   * be added: somebody owing $31.25 hands over a twenty, the cashier types
+   * 2 and 0, the cents were already full so both keys did nothing, and the
+   * till charged $31.25 for a $20 payment. The number is shown marked, the way
+   * selected text is, so it reads as "this is what typing replaces".
+   */
+  let fresh = !!text;
 
   const shown = h('span.posamount__n');
   const display = h('div.posamount', h('span.posamount__cur', '$'), shown);
 
   const paint = () => {
     shown.textContent = text || '0';
+    display.classList.toggle('is-fresh', fresh);
     onChange(text ? Number(text) : 0);
   };
 
   const press = (key) => {
+    const typing = key !== 'del' && key !== 'clear';
+    if (typing && fresh) text = '';
+    fresh = false;
+
     if (key === 'del') text = text.slice(0, -1);
     else if (key === 'clear') text = '';
     else if (key === '.') { if (!text.includes('.')) text = `${text || '0'}.`; }
@@ -228,8 +253,14 @@ export function posMoney({ value, onChange, quick = [] }) {
     paint();
   };
 
+  // The key lets go of the focus once pressed. It kept it, so Enter on the
+  // keyboard — "next" everywhere else on this screen — pressed the last digit
+  // again instead: 140 became 1400 on the way to the next step.
   const key = (label, action, className = '') =>
-    h(`button.poskey${className}`, { type: 'button', onclick: () => press(action) }, label);
+    h(`button.poskey${className}`, {
+      type: 'button',
+      onclick: (event) => { press(action); event.currentTarget.blur(); },
+    }, label);
 
   const pad = h('div.poskeys',
     ...['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((n) => key(n, n)),
@@ -240,7 +271,12 @@ export function posMoney({ value, onChange, quick = [] }) {
   const chips = quick.length
     ? h('div.poschips', quick.map((q) => h('button.poschip', {
         type: 'button',
-        onclick: () => { text = String(q.value); paint(); },
+        onclick: (event) => {
+          text = asTyped(q.value);
+          fresh = true;
+          paint();
+          event.currentTarget.blur();
+        },
       }, q.label)))
     : null;
 
@@ -248,7 +284,29 @@ export function posMoney({ value, onChange, quick = [] }) {
   // Its own column: a keypad stretched across a 1366px screen is three rows of
   // slabs the hand has to travel between. A till is narrow because a till is
   // used with one hand without looking.
-  return h('div.posmoney', display, chips, pad);
+  const wrap = h('div.posmoney', display, chips, pad);
+
+  /*
+   * The keyboard's own digits work too: a counter with a number pad beside the
+   * mouse should not have to click nine slabs to say "20". Only while this
+   * keypad is on screen, with nothing over it and no box being typed into.
+   */
+  const onKey = (event) => {
+    if (!wrap.isConnected) { document.removeEventListener('keydown', onKey); return; }
+    if (event.ctrlKey || event.metaKey || event.altKey || sheetOpen()) return;
+    const el = event.target;
+    if (el?.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el?.tagName)) return;
+
+    if (/^[0-9]$/.test(event.key)) press(event.key);
+    else if (event.key === '.' || event.key === ',') press('.');
+    else if (event.key === 'Backspace') press('del');
+    else if (event.key === 'Delete') press('clear');
+    else return;
+    event.preventDefault();
+  };
+  document.addEventListener('keydown', onKey);
+
+  return wrap;
 }
 
 /* --- The week -------------------------------------------------------------- */

@@ -68,8 +68,16 @@ export function renderFarms() {
       farms.length ? list(farms.map(farmRow), { card: false }) : null,
       people.length
         ? h('div.stack.stack-2',
-            sectionLabel(t('Clientes · {count}', { count: people.length })),
-            list(people.slice(0, 12).map(personRow), { card: true }))
+            // Says how many of them are on screen: "Clientes · 15" over
+            // twelve rows left three people nowhere, with nothing to say so.
+            sectionLabel(people.length > SHOWN
+              ? t('Clientes · {shown} de {count}', { shown: SHOWN, count: people.length })
+              : t('Clientes · {count}', { count: people.length })),
+            list(people.slice(0, SHOWN).map(personRow), { card: true }),
+            people.length > SHOWN
+              ? h('p.t-sm.c-faint', { style: { padding: '0 var(--s2)' } },
+                  t('Escribe un poco más del nombre para encontrar a los demás.'))
+              : null)
         : null);
   }
 
@@ -91,6 +99,9 @@ export function renderFarms() {
 
   return subscribe(draw);
 }
+
+/** How many people a search lists under the farms. */
+const SHOWN = 12;
 
 /* --- Rows -------------------------------------------------------------------- */
 

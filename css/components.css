@@ -61,7 +61,9 @@
 
 .btn--primary   { --btn-bg: var(--brand-500); box-shadow: var(--sh-brand); }
 .btn--dark      { --btn-bg: var(--ink-800); }
-.btn--ghost     { --btn-bg: transparent; --btn-fg: var(--ink-700); --btn-bd: var(--border-strong); }
+/* White, not see-through: on the page's pale ground an outline with nothing
+   in it read as a disabled button. Inside a card it looks as it always did. */
+.btn--ghost     { --btn-bg: var(--surface); --btn-fg: var(--ink-700); --btn-bd: var(--border-strong); }
 .btn--soft      { --btn-bg: var(--brand-50); --btn-fg: var(--brand-700); }
 .btn--quiet     { --btn-bg: transparent; --btn-fg: var(--text-soft); }
 .btn--danger    { --btn-bg: var(--bad-500); }
@@ -74,7 +76,12 @@
 .btn--lg { min-height: 52px; font-size: var(--fs-md); }
 .btn--icon { min-height: 40px; width: 40px; padding: 0; border-radius: var(--r-full); }
 
-.btn-group { display: flex; gap: var(--s2); }
+/* A row of buttons that share the width — and that goes onto a second line
+   when the words do not fit, instead of pushing the last button out of the
+   card. Four small buttons in a client's file measured 555px in a 497px card
+   at 1366, and in English more; on a phone the overflow made the whole page
+   scroll sideways. */
+.btn-group { display: flex; flex-wrap: wrap; gap: var(--s2); }
 .btn-group > .btn { flex: 1; }
 
 /* Floating action button */
@@ -452,6 +459,13 @@
 }
 @keyframes fade { from { opacity: 0; } }
 
+/* On its way out. It still covers the page for a moment — so the second half
+   of a double click lands on it rather than on whatever is underneath — but
+   nothing inside it can be pressed again: the same button, hit twice, used to
+   run twice. */
+.scrim--closing { backdrop-filter: none; }
+.scrim--closing .sheet { pointer-events: none; }
+
 .sheet {
   width: 100%; max-width: var(--app-max);
   max-height: 88dvh;
@@ -518,7 +532,8 @@
   display: grid; place-items: center;
   width: 60px; height: 60px; margin-bottom: var(--s1);
   border-radius: var(--r-full);
-  background: var(--ink-50); color: var(--ink-300);
+  /* One step darker than the page it stands on, or the circle is not there. */
+  background: var(--ink-100); color: var(--ink-400);
 }
 .empty__icon svg { width: 26px; height: 26px; }
 .empty__title { font-size: var(--fs-md); font-weight: 650; }
@@ -564,11 +579,28 @@
    ========================================================================== */
 
 @media (min-width: 900px) {
-  /* The action button sits in the corner of the window, clear of the rail. */
-  .fab {
-    right: var(--s6);
-    bottom: var(--s6);
+  /* The action button stops floating. Over a list it covered whatever the
+     row kept on its right — the button that takes a payment, the menu, the
+     "vencido" — and the row under it could not be used until it was scrolled
+     away. With a window this wide there is a better place: the right end of
+     the top bar, where it is always in the same spot and on top of nothing.
+     It is still the same node in the same frame; the grid just puts it in the
+     top bar's cell, and the bar leaves it room (`--fab-w`, measured by the
+     shell when it mounts the button). */
+  #app.app--shell > .fab {
+    position: static;
+    grid-area: topbar;
+    justify-self: end;
+    align-self: center;
+    z-index: 41;
+    height: 38px;
+    margin-right: var(--s6);
+    padding: 0 var(--s4);
+    font-size: var(--fs-sm);
+    box-shadow: none;
   }
+  #app.app--shell > .fab svg { width: 17px; height: 17px; }
+  #app.app--fab .topbar { padding-right: calc(var(--s6) + var(--fab-w, 132px) + var(--s4)); }
 
   /* A bar pinned under the top bar spans the window, but what is *in* it lines
      up with the content underneath — otherwise the search box floats a hand's
@@ -744,6 +776,32 @@
 @media (prefers-reduced-motion: reduce) {
   .viz__bar { transition: none; }
 }
+
+/* --- Notice: something to do, and the button that does it -------------------
+   The text takes the room and the button stands at its right; when the text
+   would be left with less than a readable column the button goes underneath,
+   in line with the words rather than with the icon. */
+
+.notice { display: flex; align-items: flex-start; gap: var(--s3); border-left-width: 4px; }
+.notice__ico { flex: none; margin-top: 2px; color: var(--ink-400); }
+.notice__body {
+  flex: 1; min-width: 0;
+  display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between;
+  gap: var(--s2) var(--s3);
+}
+.notice__main { flex: 1 1 200px; min-width: 0; }
+.notice__main .t-sm { margin-top: 1px; }
+.notice__cta { flex: none; }
+/* On a phone there is never room for both: the words get the line. */
+@media (max-width: 699px) {
+  .notice__main { flex-basis: 100%; }
+}
+
+.notice--info  { border-color: var(--info-500); }  .notice--info .notice__ico  { color: var(--info-500); }
+.notice--warn  { border-color: var(--warn-500); }  .notice--warn .notice__ico  { color: var(--warn-500); }
+.notice--bad   { border-color: var(--bad-500); }   .notice--bad .notice__ico   { color: var(--bad-500); }
+.notice--brand { border-color: var(--brand-500); } .notice--brand .notice__ico { color: var(--brand-500); }
+.notice--ok    { border-color: var(--ok-500); }    .notice--ok .notice__ico    { color: var(--ok-500); }
 
 /* Alerts sit side by side once there is room: stacked full-width they pushed
    the dashboard's own numbers below the fold, and there are never more than

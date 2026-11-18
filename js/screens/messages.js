@@ -1,5 +1,5 @@
 /**
- * Inbox — one thread per farm, most recent first, unread on top of the fold.
+ * Inbox — one thread per client, most recent first, unread on top of the fold.
  */
 
 import { h } from '../lib/dom.js';
@@ -12,6 +12,7 @@ import { store, subscribe } from '../data/store.js';
 import { ensureConversation } from '../data/chat.js';
 import { matchesSearch } from '../data/clients.js';
 import { formatStamp } from '../lib/dates.js';
+import { plural } from '../lib/format.js';
 import { toDate } from '../firebase.js';
 import { t } from '../lib/i18n.js';
 
@@ -26,7 +27,7 @@ export function renderMessages() {
       tab: 'messages',
       sticky: h('div.searchbar',
         searchInput({
-          placeholder: t('Buscar rancho…'),
+          placeholder: t('Buscar cliente o rancho…'),
           value: term,
           onInput: (value) => { term = value; redraw(); },
         })),
@@ -44,8 +45,8 @@ export function renderMessages() {
   }
 
   /**
-   * Every farm gets a row, whether or not a thread exists yet — staff should be
-   * able to start a conversation from here without hunting for the client first.
+   * Every client gets a row, whether or not a thread exists yet — staff should
+   * be able to start a conversation from here without opening their file first.
    */
   function threads() {
     return store.clients
@@ -82,8 +83,12 @@ export function renderMessages() {
         unread ? badge(unread > 99 ? '99+' : String(unread), 'brand') : null,
       ].filter(Boolean),
       chevron: false,
-      onClick: async () => {
-        if (!conversation) await ensureConversation(client);
+      // Straight in. The thread's summary is written on the way, not waited
+      // for: on a slow line the wait was several seconds of nothing, and then
+      // the chat opened over whatever screen the reader had moved on to. The
+      // chat does not need the summary to open — sending a message writes it.
+      onClick: () => {
+        if (!conversation) ensureConversation(client).catch(() => {});
         go(`/chat/${client.id}`);
       },
     });
@@ -91,22 +96,24 @@ export function renderMessages() {
 
   function unreadLabel() {
     const total = store.conversations.reduce((sum, row) => sum + (Number(row.unreadAdmin) || 0), 0);
-    if (!total) return t('{count} ranchos', { count: store.clients.length });
+    if (!total) return plural(store.clients.length, 'cliente', 'clientes');
     return t('{count} sin leer', { count: total });
   }
 
   function empty() {
     if (term) {
-      return emptyState({ icon: 'search', title: t('Sin resultados'), text: t('Ningún rancho coincide con “{term}”.', { term }) });
+      return emptyState({ icon: 'search', title: t('Sin resultados'), text: t('Ningún cliente coincide con “{term}”.', { term }) });
     }
     return emptyState({
       icon: 'chat',
-      title: t('Todavía no hay ranchos'),
-      text: t('Registra un rancho para poder escribirle.'),
+      title: t('Todavía no hay clientes'),
+      text: t('Registra un cliente para poder escribirle.'),
     });
   }
 
-  return subscribe(draw);
+  // While somebody is typing in the search box only the list is redrawn: a
+  // whole repaint rebuilds the box, and the rest of the word goes nowhere.
+  return subscribe(() => (document.activeElement?.closest?.('.searchbar') ? redraw() : draw()));
 }
 
 const unreadOf = (row) => Number(row.conversation?.unreadAdmin) || 0;

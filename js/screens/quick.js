@@ -33,7 +33,7 @@ import {
 } from '../data/store.js';
 import {
   createClient, updateClient, setClientStatus, setEndsOn, emptyClient, servingSince,
-  tagsInUse,
+  tagsInUse, lastDayGone,
 } from '../data/clients.js';
 import {
   takePayment, addCharge, adjustBalance, billsOf, payableRows, aheadRows, nothingOwedYet,
@@ -122,9 +122,15 @@ export function renderQuick() {
   // shows no takings, so it does not read the receipts at all.
   let takings = [];
 
+  // The day this screen was opened on. Its date in the bar and its till are
+  // that day's; left open past midnight it opens again (see the store's
+  // subscription below), as Empaque does.
+  const openedOn = today();
+  let closed = false;
+
   const stopTill = kitchen()
     ? null
-    : watchReceiptsOn(today(), (rows) => { takings = rows; paintTiles(); }, () => {});
+    : watchReceiptsOn(openedOn, (rows) => { takings = rows; paintTiles(); }, () => {});
 
   /*
    * Who is sitting at the kitchen computer, and what they are allowed — read
@@ -177,6 +183,13 @@ export function renderQuick() {
   const mealsWord = (n) => plural(n, w('comida', 'pedido'), w('comidas', 'pedidos'));
 
   const stop = subscribe(() => {
+    // A new day: yesterday's date in the bar, yesterday's "cobrado hoy", and a
+    // payment taken now missing from both. Not while a flow is open — that is
+    // somebody's hand; the first change after it closes brings this back here.
+    if (today() !== openedOn && !document.querySelector('.pos--flow')) {
+      setTimeout(() => { if (!closed) go('/rapido', { replace: true }); });
+      return;
+    }
     // Only the tile grid depends on the store; a flow running on top owns its
     // own copy of what it needs and must not be torn out from under a hand.
     if (panel && !document.querySelector('.pos--flow')) paintTiles();
@@ -1145,27 +1158,44 @@ export function renderQuick() {
               value: st.meals,
               onPick: (v) => { st.meals = v; api.revalidate(); },
               advance: api.next,
-              options: [1, 2, 3].map((n) => ({
-                value: n,
-                label: String(n),
-                sub: t('{amount} / quincena', { amount: money(tierFor(store.pricing, n)?.price || 0) }),
-              })),
+              // The price this farm's people pay — its own days, and by the
+              // week where it pays by the week — not the list price of a
+              // Monday-to-Saturday fortnight, which is what this said for
+              // every farm.
+              options: [1, 2, 3].map((n) => {
+                const draft = { ...emptyClient(farm), mealsPerDay: n };
+                return {
+                  value: n,
+                  label: String(n),
+                  sub: payEveryOf(draft) === PAY_EVERY.WEEK
+                    ? t('{amount} / semana', { amount: priceLabel(draft) })
+                    : t('{amount} / quincena', { amount: priceLabel(draft) }),
+                };
+              }),
             }),
           },
           {
             id: 'confirm',
             title: t('Revisa antes de darlo de alta'),
-            hint: w(t('Come de lunes a sábado y paga cada quincena. Los días y el periodo se ajustan después si hace falta.'),
-              t('Tiene pedido de lunes a sábado. Los días se cambian después con Calendario semanal si hace falta.')),
+            hint: w(t('Los días y el periodo son los de su rancho. Se ajustan después si hace falta.'),
+              t('Los días son los de su farma. Se cambian después con Calendario semanal si hace falta.')),
             last: true,
             next: t('Dar de alta'),
-            build: (st) => posSummary([
-              [t('Nombre'), st.name.trim()],
-              [w(t('Rancho'), t('Farma')), farm?.name || '—'],
-              [t('Ubicación'), (farm?.locations || []).find((l) => l.id === st.locationId)?.name || '—'],
-              [w(t('Comidas'), t('Pedidos')), t('{meals} al día', { meals: mealsWord(st.meals) })],
-              [t('Su quincena'), money(tierFor(store.pricing, st.meals)?.price || 0), { total: true }],
-            ]),
+            // Read off the record that is about to be written: the days and
+            // the price are the farm's. This used to say "lunes a sábado" and
+            // a fortnight's list price for everybody, also for a farm that
+            // eats Monday to Friday and pays by the week.
+            build: (st) => {
+              const draft = { ...emptyClient(farm), mealsPerDay: st.meals };
+              return posSummary([
+                [t('Nombre'), st.name.trim()],
+                [w(t('Rancho'), t('Farma')), farm?.name || '—'],
+                [t('Ubicación'), (farm?.locations || []).find((l) => l.id === st.locationId)?.name || '—'],
+                [w(t('Comidas'), t('Pedidos')), t('{meals} al día', { meals: mealsWord(st.meals) })],
+                [w(t('Días que come'), t('Días con pedido')), dayWords(draft.deliveryDays)],
+                [t('Su {period}', { period: t(periodWord(draft)) }), priceLabel(draft), { total: true }],
+              ]);
+            },
           },
         ];
       },
@@ -1569,6 +1599,14 @@ export function renderQuick() {
 
   /* --- Pausar o reactivar ------------------------------------------------- */
 
+  /**
+   * Whether picking `status` for this person changes anything. The one case
+   * where "the same" still does: active on paper, with a last day already
+   * behind them — «Sigue» is what brings them back.
+   */
+  const statusChanges = (client, status) => !!client
+    && (status !== client.status || (status === 'active' && lastDayGone(client)));
+
   function flowStatus() {
     start({
       title: t('Pausar o reactivar'),
@@ -1578,8 +1616,16 @@ export function renderQuick() {
         {
           id: 'status',
           title: t('¿Qué pasa con esta persona?'),
-          hint: s.client ? t('Ahora está {status}.', { status: statusWord(s.client.status) }) : '',
-          ready: (st) => !!st.status,
+          hint: s.client
+            ? t('Ahora está {status}. Toca lo que cambia; si sigue igual, no hay nada que guardar.', { status: statusWord(s.client.status) })
+            : '',
+          // Only a change goes on. The tile of what they already are is lit
+          // when the step opens, and pressing it used to be accepted — and
+          // written down as if it had happened today, which turned every day
+          // before it into the opposite: somebody who had never stopped
+          // eating lost their unbilled fortnights, and somebody paused since
+          // September was offered four of them to pay.
+          ready: (st) => !!st.status && statusChanges(st.client, st.status),
           build: (st, api) => posPick({
             columns: 3,
             value: st.status || st.client.status,
@@ -1994,6 +2040,7 @@ export function renderQuick() {
   }
 
   return () => {
+    closed = true;
     window.removeEventListener('resize', onResize);
     clearTimeout(resizeTimer);
     stop();

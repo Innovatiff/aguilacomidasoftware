@@ -20,7 +20,7 @@ import {
 import { toastOk, toastBad, sheet } from '../ui/overlay.js';
 import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
-import { store, subscribe, moneyStats, debtors, farmById } from '../data/store.js';
+import { store, subscribe, moneyStats, debtors, farmById, forgetPendingBills } from '../data/store.js';
 import { watchSettled } from '../data/invoices.js';
 import { pendingBilling, issueAll, byFarm as billingByFarm } from '../data/cycles.js';
 import {
@@ -53,8 +53,18 @@ export function renderBilling(context) {
     });
   };
 
+  /**
+   * The bills this screen is about: what is owed today.
+   *
+   * Not every unsettled bill is. One for a fortnight still running — written
+   * early by a payment that reached into it — is not money anybody owes yet,
+   * and the list below has never shown it. The counts did: "Pendientes 1"
+   * and "1 factura" over "$0 por cobrar" and an empty page.
+   */
+  const owed = () => debtors().flatMap((group) => group.invoices);
+
   function filters() {
-    const rows = store.outstanding;
+    const rows = owed();
     return [
       { value: 'all', label: t('Pendientes'), count: rows.length },
       { value: 'overdue', label: t('Vencidas'), count: rows.filter((r) => invoiceStatus(r, today()) === 'overdue').length },
@@ -76,7 +86,7 @@ export function renderBilling(context) {
       statGrid([
         stat({
           label: t('Por cobrar'), value: money(cash.outstanding, { round: true }),
-          foot: `${store.outstanding.length} ${store.outstanding.length === 1 ? t('factura') : t('facturas')}`,
+          foot: plural(owed().length, 'factura', 'facturas'),
           tone: cash.outstanding > 0 ? 'accent' : 'ok',
         }),
         stat({
@@ -94,7 +104,7 @@ export function renderBilling(context) {
   /* --- Lists --------------------------------------------------------------- */
 
   function outstandingList() {
-    const rows = store.outstanding.filter((invoice) => {
+    const rows = owed().filter((invoice) => {
       if (filter === 'overdue') return invoiceStatus(invoice, today()) === 'overdue';
       if (filter === 'due') return invoiceStatus(invoice, today()) === 'due';
       return true;
@@ -254,6 +264,10 @@ export function renderBilling(context) {
 
     try {
       const issued = await issueAll(pending.rows, { uid: session.uid, name: session.displayName });
+      // Clientes keeps its own count of what is waiting to be issued; told
+      // nothing, it went on offering "1 factura por emitir" for a bill that
+      // had just been written here.
+      forgetPendingBills();
       toastOk(`${plural(issued, 'factura emitida', 'facturas emitidas')}`);
     } catch (error) {
       toastBad(errorText(error));

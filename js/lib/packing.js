@@ -326,16 +326,24 @@ export const freePlaces = (lines, farms, clients = []) => allPlaces(farms, clien
  * @param {string[]} added  which of those were free
  */
 export function arrangeLine(lines, lineId, { order = [], added = [] }, farms, clients = []) {
+  const real = new Set(allPlaces(farms, clients).map((entry) => entry.key));
   return (lines || []).map((row) => {
+    // The other libreta is not this sheet's to write: it stays exactly as it
+    // is stored. Rewriting it "as it was chosen" dropped any key of a house
+    // that no longer exists — and that key could be the only thing tying the
+    // farm to that libreta, which is how its newer houses were being packed
+    // there. Saving this libreta's order then left five people in none.
+    if (row.id !== lineId) return row;
     // The libreta being arranged keeps what it was packing, including any new
     // location it had taken on with its farm — saving writes those in for
-    // good. The other one is written exactly as it was chosen.
-    const own = orderedPlaces(lines, row.id, farms, clients, { adopt: row.id === lineId })
+    // good.
+    const own = orderedPlaces(lines, row.id, farms, clients, { adopt: true })
       .map((entry) => entry.key);
-    if (row.id !== lineId) return { ...row, farmIds: [], placeIds: own };
     const free = new Set(freePlaces(lines, farms, clients).map((entry) => entry.key));
     const taken = added.filter((key) => free.has(key));
-    const placeIds = [...own, ...taken.filter((key) => !own.includes(key))];
+    // And, for the same reason, its own keys of houses that are gone.
+    const gone = (row.placeIds || []).filter((key) => !own.includes(key) && !real.has(key));
+    const placeIds = [...own, ...taken.filter((key) => !own.includes(key)), ...gone];
     const allowed = new Set(placeIds);
     const chosen = [...new Set(order)].filter((key) => allowed.has(key));
     // Anything of its own the order left out goes at the end, in the order it
@@ -421,10 +429,11 @@ export function confirmPlace(lines, lineId, key, farms, clients = []) {
     const placeIds = [...(row.placeIds || []), key];
     // No order of its own: the book's order already puts it with its farm.
     if (!row.order?.length) return { ...row, placeIds };
-    const order = row.order.filter((one) => one !== key);
-    const before = walk.slice(0, at).reverse().find((one) => order.includes(one));
-    order.splice(before ? order.indexOf(before) + 1 : 0, 0, key);
-    return { ...row, placeIds, order };
+    // The order becomes the walk as it is being packed right now, so saying
+    // "it is fine there" moves nothing. It used to be slotted in after the
+    // nearest house before it that the order named — skipping any house the
+    // order did not name, so the one being confirmed jumped ahead of those.
+    return { ...row, placeIds, order: walk };
   });
 }
 

@@ -29,7 +29,7 @@
 import { h, mount } from '../lib/dom.js';
 import { icon } from '../lib/icons.js';
 import { posNote } from './pos-kit.js';
-import { store, subscribe, activeClients, isReady, firstError } from '../data/store.js';
+import { store, subscribe, activeClients, isReady } from '../data/store.js';
 import { watchPacking, noteBoardSeen } from '../data/packing.js';
 import { dayBoard, NO_LINE } from '../lib/board.js';
 import { today, formatDayLong, capitalize } from '../lib/dates.js';
@@ -114,7 +114,10 @@ export function openDayBoard({ by = '' } = {}) {
   }
 
   function content() {
-    const broken = failure || firstError()?.error;
+    // Only what the board counts can stop it: the farms and the people. It
+    // used to refuse over any listener that had failed — the chat inbox, the
+    // receipts — with the count the cooks came for sitting right there.
+    const broken = failure || store.errors.farms || store.errors.clients || null;
     if (broken) {
       return posNote(t('No se pudieron leer los clientes: {error}', { error: errorText(broken) }), 'bad');
     }

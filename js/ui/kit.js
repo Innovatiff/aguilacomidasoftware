@@ -155,6 +155,26 @@ export function alert(text, tone = 'info', iconName) {
     h('span', text));
 }
 
+/**
+ * Something that wants doing, in a card with one button: what it is, a line
+ * about it, and the way to go and do it. Inicio and Clientes each had their
+ * own copy of this, a little different, and neither held up on a phone — the
+ * button stood beside the text and squeezed it into a column four words wide.
+ * Here the button drops under the text when there is no room beside it, and
+ * lines up with it.
+ *
+ * @param {'info'|'warn'|'bad'|'brand'|'ok'} tone  the colour of its edge and icon
+ */
+export function noticeCard({ tone = 'info', icon: ico, title, text, cta, onClick }) {
+  return h(`div.card.card--tight.notice.notice--${tone}`,
+    h('span.notice__ico', icon(ico || 'info')),
+    h('div.notice__body',
+      h('div.notice__main',
+        h('div.w-600', title),
+        text ? h('div.t-sm.c-soft', text) : null),
+      cta ? button(cta, { variant: 'soft', size: 'sm', onClick, className: 'notice__cta' }) : null));
+}
+
 export function emptyState({ icon: ico = 'box', title, text, action }) {
   return h('div.empty',
     h('div.empty__icon', icon(ico)),
@@ -280,7 +300,10 @@ export { frag };
  */
 export function chargeRows(charge, priced = true) {
   const days = Number(charge?.days ?? charge?.plannedDays) || 0;
-  const meals = Number(charge?.meals ?? charge?.plannedMeals) || 0;
+  // What the plan gives the period. On a bill that is `plannedMeals`; its
+  // `meals` is a count of what was delivered, which bills written by a
+  // payment stored as 0 — and the invoice then said "Comidas de la quincena 0".
+  const meals = Number(charge?.plannedMeals) || Number(charge?.meals) || 0;
   const perDay = Number(charge?.perDay ?? charge?.mealsPerDay) || 0;
   const base = Number(charge?.base ?? charge?.planPrice) || 0;
   const adjustment = Number(charge?.adjustment) || 0;
@@ -307,7 +330,10 @@ export function chargeRows(charge, priced = true) {
     rows.push(defRow(t('Precio del plan'), money(base)));
     if (Math.abs(adjustment) > 0.005) {
       const sign = adjustment > 0 ? '+' : '−';
-      const count = Math.abs(Number(charge?.difference) || 0);
+      // A bill keeps the amount and the price of one meal, not the count:
+      // it is worked back from them rather than shown as "(0 × $6.25)".
+      const count = Math.abs(Number(charge?.difference)
+        || (rate ? Math.round((adjustment / rate) * 100) / 100 : 0));
       rows.push(defRow(
         adjustment > 0 ? t('Comidas de más') : t('Comidas de menos'),
         `${sign}${money(Math.abs(adjustment))}`

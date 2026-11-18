@@ -111,6 +111,7 @@ export function openOpeningSheet({ client, pricing, author }) {
       submit.onclick = async () => {
         if (busy) return;
         busy = true;
+        close.hold(true);
         paint();
         mount(submit, h('span.spinner.spinner--light'), t('Registrando…'));
 
@@ -125,6 +126,7 @@ export function openOpeningSheet({ client, pricing, author }) {
           close(issued);
         } catch (error) {
           busy = false;
+          close.hold(false);
           paint();
           toastBad(errorText(error));
         }

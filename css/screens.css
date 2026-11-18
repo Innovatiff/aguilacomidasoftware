@@ -68,6 +68,63 @@
 .hero__stat-v { font-size: var(--fs-xl); font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 .hero__stat-l { font-size: var(--fs-xs); color: rgba(255,255,255,.6); font-weight: 550; }
 
+/* Inicio's: what is owed, set at the size of the thing the screen opens on.
+   It was 22px — smaller than the tiles underneath it. */
+.hero--money .hero__title {
+  font-size: clamp(2rem, 7vw, 2.75rem);
+  font-weight: 800; letter-spacing: -.03em; line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.hero__cta { margin-top: var(--s4); }
+
+/* With a window's width the three figures and the button share one line: the
+   total on the left, its two halves beside it, and a button the size of a
+   button — stacked, it was an orange bar a thousand pixels wide. */
+@media (min-width: 900px) {
+  .hero--money {
+    display: flex; align-items: center; gap: var(--s7);
+    padding: var(--s6);
+  }
+  .hero--money .hero__main { flex: 1 1 auto; min-width: 0; }
+  .hero--money .hero__stats {
+    flex: none;
+    grid-auto-columns: auto; gap: var(--s7);
+    margin-top: 0; padding: var(--s1) 0 var(--s1) var(--s7);
+    border-top: 0; border-left: 1px solid rgba(255,255,255,.14);
+  }
+  .hero--money .hero__cta { flex: none; margin-top: 0; }
+  .hero--money .hero__cta .btn { min-width: 200px; min-height: 52px; font-size: var(--fs-md); }
+}
+
+/* --- Ways in, on Inicio ------------------------------------------------------
+   One tile per place to go, all the same: the icon says which, the words say
+   what. Two across; an odd one out takes the whole row. */
+
+.shortcuts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s2); }
+.shortcuts > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+
+.shortcut {
+  display: flex; align-items: center; gap: var(--s3);
+  min-height: 60px; padding: var(--s2) var(--s3);
+  text-align: left; color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+              transform var(--dur) var(--ease);
+}
+.shortcut:active { transform: scale(.985); background: var(--ink-50); }
+.shortcut__ico {
+  flex: none; display: grid; place-items: center;
+  width: 38px; height: 38px; border-radius: var(--r-md);
+  background: var(--ink-50); color: var(--ink-600);
+}
+.shortcut__ico svg { width: 20px; height: 20px; }
+.shortcut__t { font-size: var(--fs-base); font-weight: 650; letter-spacing: -.005em; line-height: 1.25; min-width: 0; }
+/* The one done most: taking money. Marked by its icon, not by being a
+   different kind of button. */
+.shortcut--main .shortcut__ico { background: var(--brand-500); color: #fff; }
+
 /* --- Delivery status timeline ---------------------------------------------- */
 
 .track { display: flex; flex-direction: column; }
@@ -127,6 +184,39 @@
 .item__end { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex: none; }
 .item--tap-target { min-height: 62px; }
 
+/* A row's second line goes onto a second line of its own rather than end in
+   "…" — what a payment was for, who is on the team and when they last came
+   in. Two lines at most: a row is still a row. */
+.item__meta.truncate {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* On a phone the same goes for its first line: at 390px a name had room for
+   nine letters beside the amount, so two Fernandos were the same row. */
+@media (max-width: 699px) {
+  .item__title.truncate {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  /* A row that is mostly words gives them the width: what stood at its right
+     end — a state, an amount — goes underneath, in line with the text. */
+  .item--stack { flex-wrap: wrap; row-gap: var(--s2); }
+  .item--stack .item__main { flex-basis: 0; }
+  .item--stack .item__end {
+    order: 3; flex: 0 0 100%;
+    flex-direction: row; align-items: center; justify-content: flex-start;
+    padding-left: calc(40px + var(--s3));
+  }
+}
+
 /* Icon standing in for an avatar — a location, a period, a document. */
 .item__ico {
   flex: none; display: grid; place-items: center;
@@ -136,7 +226,11 @@
 
 .list { background: var(--surface); }
 .list > * + * { border-top: 1px solid var(--border); }
-.list--card {
+.list--card,
+/* A list set inside the page's margins is a card whether or not it was asked
+   to be: with white rows on the page's pale ground, the alternative is a
+   white rectangle with square corners. */
+.page__inner > .list {
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
   overflow: hidden;
@@ -652,8 +746,33 @@
 .crow__acts { display: flex; align-items: center; gap: 2px; flex: none; }
 .crow__acts .btn { width: 40px; padding: 0; }
 
-/* On a narrow phone the standing line under the badge is the first thing to
-   go: the badge and the amount already carry the state. */
+/* On any phone the row is tightened around the name: a smaller avatar,
+   smaller gaps and narrower buttons give it some twenty-five more pixels,
+   which is the difference between "Ana Domínguez" and "Ana Domín…".
+
+   And what the row says about money — the amount, the badge, the standing
+   line — goes under the name instead of beside it. Side by side they took
+   almost half of the row: on a 414px phone the name broke onto two lines
+   ("Eduardo / Márquez"), the standing line ran over the chips of what the
+   person cannot eat, and at 360px a chip was cut off at its edge. */
+@media (max-width: 699px) {
+  .crow { gap: var(--s1); padding-right: var(--s2); }
+  .crow__main { gap: 10px; padding-left: var(--s3); flex-wrap: wrap; row-gap: 6px; }
+  .crow__main .avatar { width: 36px; height: 36px; font-size: var(--fs-xs); }
+  .crow__main .item__main { flex: 1 1 0; }
+  .crow__acts .btn { width: 36px; }
+
+  .crow__state {
+    flex: 1 0 100%; max-width: none;
+    flex-direction: row; align-items: center; gap: var(--s2);
+    padding-left: 46px;      /* in line with the name, past the avatar */
+  }
+  /* The standing line takes what is left of that line, and no more. */
+  .crow__state .t-xs { flex: 1 1 0; min-width: 0; }
+}
+
+/* On a narrow phone the standing line is the first thing to go: the badge
+   and the amount already carry the state. */
 @media (max-width: 400px) {
   .crow__state .t-xs { display: none; }
 }
@@ -842,6 +961,11 @@
   font-size: var(--fs-sm);
   color: var(--text-soft);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* Between the two arrows on a small phone the dates and "en curso" do not fit
+   on one line in every language: they take two rather than lose the end. */
+@media (max-width: 400px) {
+  .rper__s { white-space: normal; }
 }
 
 /* --- The money ------------------------------------------------------------- */
@@ -1101,7 +1225,15 @@ button.rmenu__item:disabled { opacity: .55; cursor: default; }
    Where a payment that went to a fortnight before it was served is moved to.
    The old fortnight is struck through, the new one is the one to read. */
 
-.item--wrap .item__meta.truncate { white-space: normal; }
+/* A row that is all words — what was moved where, what will change and when —
+   shows every one of them, on as many lines as they take. */
+.item--wrap .item__title.truncate,
+.item--wrap .item__meta.truncate {
+  display: block;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  -webkit-line-clamp: unset;
+}
 
 .advrow {
   padding: var(--s3);

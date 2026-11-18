@@ -16,7 +16,7 @@
  */
 
 import { sameDiet } from './diet.js';
-import { formatDay, today as todayKey } from './dates.js';
+import { formatDay, addDays, today as todayKey } from './dates.js';
 import { t, english } from './i18n.js';
 
 /**
@@ -260,7 +260,9 @@ export function movementsFrom({
         id: `s:${client.id}:${entry.on}:${entry.tag || entry.at || entry.status}`, ms, exact, day, kind: 'estado',
         clientId: client.id, clientName: client.name,
         text: entry.auto
-          ? t('Quedó {status} solo: su último día fue el {day}', { status: t(word), day: formatDay(client.endsOn || entry.on) })
+          // The day before the pause, which is what that last day was — not
+          // the one their file holds today, which may be a later one.
+          ? t('Quedó {status} solo: su último día fue el {day}', { status: t(word), day: formatDay(addDays(entry.on, -1)) })
           : t(entry.status === 'active' ? 'Activo' : entry.status === 'paused' ? 'En pausa' : 'Ya no pide')
             + `${entry.on !== day ? ` ${t('desde el {day}', { day: formatDay(entry.on) })}` : ''}`
             + `${entry.prog ? ` (${t('Programador')})` : ''}`,

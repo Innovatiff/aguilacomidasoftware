@@ -117,6 +117,8 @@ export function rangeSpan(range) {
   const from = yearOf(range.start), to = yearOf(range.end);
   // "Nov 1 – 30, 2026" in English, where the year follows a comma.
   const year = english() ? ', ' : ' ';
+  // One day is a day, not a span from itself to itself: "18 – 18 nov 2026".
+  if (range.start === range.end) return `${formatDayShort(range.start)}${year}${to}`;
   if (from !== to) {
     return `${formatDayShort(range.start)}${year}${from} – ${formatDayShort(range.end)}${year}${to}`;
   }
@@ -125,6 +127,13 @@ export function rangeSpan(range) {
 
 /** "7 días" — the denominator under every average on the page. */
 export const rangeDays = (range) => spanOf(range);
+
+/**
+ * Whether the span would only repeat the headline. A month's headline is its
+ * name and its span says which days; a week's headline *is* its days, and so
+ * is a day's — written twice, one under the other, they read as a mistake.
+ */
+export const spanIsTitle = (range) => range.start === range.end || rangeTitle(range) === rangeSpan(range);
 
 /**
  * How to cut the range up for the chart and the table.

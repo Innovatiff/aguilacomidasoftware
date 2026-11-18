@@ -115,7 +115,10 @@ export function renderPackingRun(context) {
 
   // Nobody at the keyboard: the record would have no name on it, which is the
   // whole reason the number is asked for. Back to the door.
-  if (!packer) {
+  // Nor somebody who may not pack. The live list below takes a moment to
+  // answer, and by then a libreta reached by its address had already been
+  // opened in their name and had printed its first bag.
+  if (!packer || !canDo(packer, 'pack')) {
     go('/empaque', { replace: true });
     return () => {};
   }
@@ -150,7 +153,18 @@ export function renderPackingRun(context) {
     if (!placed) {
       placed = true;
       const spot = savedSpot(lineId, day);
-      if (spot) {
+      // Opened today and left on its first screen, before anybody was packed,
+      // is not a place to come back to: it opens at the top again, wherever
+      // the top now is. The spot is written the moment a libreta opens, by
+      // farm — so after its order was changed it used to reopen at that farm
+      // in the middle of the list, "5 de 13" with nobody packed and no bag
+      // sticker for the farm that is now first.
+      const untouched = !!spot && Array.isArray(spot.seen) && !spot.seen.length
+        && !(Number(spot.index) > 0);
+      if (spot && untouched) {
+        // The same farm on top as when it was left: its bag had its sticker.
+        resumed = slideKey(plan.slides, 0) === spot.key;
+      } else if (spot) {
         resumed = true;
         at = spot.index;
         atKey = spot.key;

@@ -57,6 +57,17 @@ import { t } from '../lib/i18n.js';
 /** How long a confirmation is on screen before it can be confirmed, in ms. */
 const CONFIRM_AFTER = 350;
 
+/**
+ * How long a slide that has just come in ignores the pointer, in ms.
+ *
+ * Plenty of people double-click everything. On a tile that answers and moves
+ * on, the first half picks the answer and the second half landed on whatever
+ * the next slide had put under the pointer — a question answered before it
+ * had been read. Windows counts two clicks as a double click for half a
+ * second, and the slide changes 130 ms into that.
+ */
+const SETTLE = 350;
+
 export function runFlow({ title, steps, state = {}, subject, commit, done, onExit }) {
   const model = { ...state };
   let index = 0;
@@ -64,6 +75,8 @@ export function runFlow({ title, steps, state = {}, subject, commit, done, onExi
   let busy = false;
   let finished = null;
   let shownAt = 0;         // when the step on screen was drawn
+  let movedAt = Date.now(); // when the flow last went to another step (or opened)
+  let doneAt = 0;          // when the "done" screen came up
 
   const stepsNow = () => steps(model);
 
@@ -79,7 +92,12 @@ export function runFlow({ title, steps, state = {}, subject, commit, done, onExi
   // handlers on one button is what caused a confirmation to commit twice.
   const nextBtn = h('button.posbtn.posbtn--go', {
     type: 'button',
-    onclick: () => (finished ? leave() : goNext()),
+    onclick: () => {
+      if (!finished) { goNext(); return; }
+      // The second half of a double click on Confirmar, arriving just as the
+      // result came up, would close it before anybody had seen it.
+      if (Date.now() - doneAt >= CONFIRM_AFTER) leave();
+    },
   });
   const foot = h('div.pos__foot', backBtn, h('div.pos__next', nextBtn));
 
@@ -94,6 +112,13 @@ export function runFlow({ title, steps, state = {}, subject, commit, done, onExi
     subjectBar,
     body,
     foot);
+
+  // Capture phase, so the click never reaches the tile it fell on.
+  body.addEventListener('click', (event) => {
+    if (Date.now() - movedAt >= SETTLE) return;
+    event.stopPropagation();
+    event.preventDefault();
+  }, true);
 
   const api = { refresh: draw, revalidate, next: goNext, set };
 
@@ -179,6 +204,7 @@ export function runFlow({ title, steps, state = {}, subject, commit, done, onExi
     if (index === 0) { leave(); return; }
     direction = 'back';
     index -= 1;
+    movedAt = Date.now();
     draw();
   }
 
@@ -201,10 +227,15 @@ export function runFlow({ title, steps, state = {}, subject, commit, done, onExi
     // it: the second half of a double click — or Enter pressed twice — would
     // save what nobody read. It has to be on screen a moment first.
     if (step.last && Date.now() - shownAt < CONFIRM_AFTER) return;
+    // One step per press. A tile that moves on by itself does it 130 ms after
+    // the tap, so a double tap asked for two steps — and the second question,
+    // which usually has an answer already lit, was skipped unseen.
+    if (Date.now() - movedAt < CONFIRM_AFTER) return;
 
     if (!step.last) {
       direction = 'next';
       index += 1;
+      movedAt = Date.now();
       draw();
       return;
     }
@@ -228,6 +259,7 @@ export function runFlow({ title, steps, state = {}, subject, commit, done, onExi
 
   function showDone() {
     busy = false;
+    doneAt = Date.now();
     stepBadge.hidden = true;
     subjectBar.hidden = true;
     mount(body, h('div.pos__inner.pos__slide',

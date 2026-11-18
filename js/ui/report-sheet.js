@@ -21,7 +21,7 @@
 import { h } from '../lib/dom.js';
 import { money, number, plural } from '../lib/format.js';
 import { formatDayLong, formatTime, formatDayShort } from '../lib/dates.js';
-import { rangeTitle, rangeSpan } from '../lib/periods.js';
+import { rangeTitle, rangeSpan, spanIsTitle } from '../lib/periods.js';
 import { debtWord } from '../lib/report.js';
 import { t } from '../lib/i18n.js';
 
@@ -97,7 +97,7 @@ export function reportSheet(report, { business = {}, by = '' } = {}) {
       h('div.rep__stamp',
         h('div.rep__kind', t('Reporte')),
         h('div.rep__period', rangeTitle(range)),
-        h('div.rep__sub', `${rangeSpan(range)} · ${plural(days.span, 'día', 'días')}`
+        h('div.rep__sub', `${spanIsTitle(range) ? '' : `${rangeSpan(range)} · `}${plural(days.span, 'día', 'días')}`
           + (days.running ? ` · ${t('{count} transcurridos', { count: days.elapsed })}` : '')))),
 
     /* --- What came in. The first thing anybody looks for, so the biggest. */
@@ -217,7 +217,7 @@ export function listSheet(report, {
       h('div.rep__stamp',
         h('div.rep__kind', t('Reporte')),
         h('div.rep__period', name),
-        h('div.rep__sub', `${rangeTitle(range)} · ${rangeSpan(range)}`))),
+        h('div.rep__sub', spanIsTitle(range) ? rangeTitle(range) : `${rangeTitle(range)} · ${rangeSpan(range)}`))),
 
     note ? h('p.rep__lead', note) : null,
 

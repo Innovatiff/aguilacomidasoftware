@@ -19,6 +19,15 @@ import { errorText } from '../firebase.js';
 import { t } from '../lib/i18n.js';
 
 /**
+ * What was being written to each thread, kept for as long as the app is open.
+ *
+ * The view is built again every time a thread is opened, and its box came
+ * back empty: half a message, a look at another screen to check an amount,
+ * and it was gone.
+ */
+const drafts = new Map();
+
+/**
  * @param {object} config
  * @param {string} config.clientId       the thread id
  * @param {'admin'|'client'} config.role
@@ -36,6 +45,8 @@ export function chatView({ clientId, role, sender, client, quickReplies = [], em
   /** Only auto-scroll when the reader is already at the bottom — otherwise a
    *  new message would yank them away from what they were reading. */
   let pinned = true;
+  /** The day the thread was last drawn on: "Hoy" is only true until midnight. */
+  let drawnOn = '';
 
   const scroll = h('div.chat__scroll', { onscroll: onScroll });
   const composer = buildComposer();
@@ -59,6 +70,7 @@ export function chatView({ clientId, role, sender, client, quickReplies = [], em
 
   function renderMessages() {
     const wasPinned = pinned;
+    drawnOn = dayKey();
 
     if (!loaded) {
       mount(scroll, h('div.loading', h('div.spinner')));
@@ -113,7 +125,10 @@ export function chatView({ clientId, role, sender, client, quickReplies = [], em
       maxlength: 4000,
       placeholder: t('Escribe un mensaje…'),
       'aria-label': t('Mensaje'),
-      oninput: () => { send.disabled = !box.value.trim() || sending; },
+      oninput: () => {
+        drafts.set(clientId, box.value);
+        send.disabled = !box.value.trim() || sending;
+      },
       onkeydown: (event) => {
         // Enter sends on a hardware keyboard; on a phone the key is a newline,
         // which is why the send button is always present.
@@ -137,6 +152,7 @@ export function chatView({ clientId, role, sender, client, quickReplies = [], em
       sending = true;
       send.disabled = true;
       box.value = '';
+      drafts.delete(clientId);
       box.style.height = 'auto';
       pinned = true;
 
@@ -148,6 +164,7 @@ export function chatView({ clientId, role, sender, client, quickReplies = [], em
         await Promise.race([sent, new Promise((resolve) => { setTimeout(resolve, 4000); })]);
       } catch (error) {
         box.value = text;         // never lose what someone typed
+        drafts.set(clientId, text);
         autosizeNow(box);
         toastBad(errorText(error));
       } finally {
@@ -158,11 +175,22 @@ export function chatView({ clientId, role, sender, client, quickReplies = [], em
 
     const form = h('div.chat__composer', box, send);
     form.insertText = (text) => {
-      box.value = box.value ? `${box.value} ${text}` : text;
+      // Once: a question already sitting in the box — kept from the last time
+      // this thread was open — is not asked a second time on the same line.
+      if (!box.value.includes(text)) box.value = box.value ? `${box.value} ${text}` : text;
+      drafts.set(clientId, box.value);
       autosizeNow(box);
       box.focus();
       send.disabled = !box.value.trim();
     };
+
+    // What was left unsent here the last time.
+    if (drafts.get(clientId)) {
+      box.value = drafts.get(clientId);
+      send.disabled = !box.value.trim();
+      // Its height can only be measured once it is on the page.
+      requestAnimationFrame(() => { if (box.isConnected) autosizeNow(box); });
+    }
     return form;
   }
 
@@ -193,7 +221,7 @@ export function chatView({ clientId, role, sender, client, quickReplies = [], em
    * which would be a write per frame.
    */
   function clearUnread() {
-    if (!messages.length) return;
+    if (!messages.length || !looking()) return;
     const unread = role === 'admin' ? conversation?.unreadAdmin : conversation?.unreadClient;
     const now = Date.now();
     if (!unread && now - markedAt < 5000) return;
@@ -201,10 +229,35 @@ export function chatView({ clientId, role, sender, client, quickReplies = [], em
     markRead(clientId, role);
   }
 
+  /*
+   * "Read" means somebody could be reading: the thread is on the screen, in
+   * the window in front, with a line to the other side. A thread left open in
+   * a tab nobody was looking at used to mark every new message read as it
+   * arrived — no badge anywhere, and two ticks on the sender's phone. And
+   * without signal the mark was queued, and went out later over messages that
+   * had come in the meantime and that nobody had opened.
+   */
+  function looking() {
+    return document.visibilityState === 'visible' && document.hasFocus() && navigator.onLine !== false;
+  }
+
+  // Coming back to the window is when the reading happens — and, if the
+  // date turned while it was away, when "Hoy" has to stop meaning yesterday.
+  const onLook = () => {
+    if (loaded && drawnOn && drawnOn !== dayKey()) renderMessages();
+    if (pinned) clearUnread();
+  };
+  document.addEventListener('visibilitychange', onLook);
+  window.addEventListener('focus', onLook);
+  window.addEventListener('online', onLook);
+
   return {
     node,
     destroy() {
       for (const stop of stops) { try { stop(); } catch { /* already detached */ } }
+      document.removeEventListener('visibilitychange', onLook);
+      window.removeEventListener('focus', onLook);
+      window.removeEventListener('online', onLook);
     },
   };
 }

@@ -267,10 +267,24 @@ export function revertChange(set, client, { farms = [] } = {}) {
   return { patch, skipped };
 }
 
-/** Sets whose day has come and that have not been carried out. */
+/** When a set was written down, in ms. One still on its way to the server is the newest there is. */
+const madeAt = (set) => {
+  const at = set?.createdAt;
+  if (at && typeof at.toMillis === 'function') return at.toMillis();
+  if (at && typeof at.seconds === 'number') return at.seconds * 1000 + (at.nanoseconds || 0) / 1e6;
+  return Number.MAX_SAFE_INTEGER;
+};
+
+/**
+ * Sets whose day has come and that have not been carried out — by their day,
+ * and within a day in the order they were planned. (It was by their id, which
+ * is random: "2 comidas" and then "3 comidas" for the same morning could be
+ * applied the other way round, and the first one planned was the one left.)
+ */
 export const dueNow = (sets, day = todayKey()) => (sets || [])
   .filter((set) => set.state === 'pending' && set.on && set.on <= day)
-  .sort((a, b) => a.on.localeCompare(b.on) || String(a.id).localeCompare(String(b.id)));
+  .sort((a, b) => a.on.localeCompare(b.on) || madeAt(a) - madeAt(b)
+    || String(a.id).localeCompare(String(b.id)));
 
 /** Sets carried out whose "until" has passed: to be put back. */
 export const dueBack = (sets, day = todayKey()) => (sets || [])

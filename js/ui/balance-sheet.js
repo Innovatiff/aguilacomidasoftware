@@ -152,6 +152,7 @@ export function openBalanceSheet({ client, invoices = [], author }) {
           }
 
           busy = true;
+          close.hold(true);
           submit.disabled = true;
           mount(submit, h('span.spinner.spinner--light'), t('Corrigiendo…'));
 
@@ -165,6 +166,7 @@ export function openBalanceSheet({ client, invoices = [], author }) {
             close(result);
           } catch (error) {
             busy = false;
+            close.hold(false);
             repaint();
             toastBad(errorText(error));
           }

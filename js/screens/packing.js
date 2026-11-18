@@ -162,7 +162,9 @@ export function renderPacking() {
     }
 
     function enter(found) {
-      packer = { id: found.id, name: found.name };
+      // With what they may do, as of this moment: the libreta checks it at
+      // its door, before the live list of users has had time to answer.
+      packer = { id: found.id, name: found.name, can: found.can || null };
       sitDown(packer);
       typed = '';
       // In the kitchen the number is the way in to the whole machine, and
@@ -187,8 +189,10 @@ export function renderPacking() {
         key('←', rub, '.pk__key--rub')),
       h('p.pk__ver', versionLabel()),
       // Before anybody types their number: whoever sits down can read the
-      // screen in their language from the first word.
-      langSwitch({ short: true }));
+      // screen in their language from the first word. Only in the kitchen —
+      // in the office the same switch is at the foot of the menu, and two of
+      // them on one screen is one too many.
+      kitchen() ? langSwitch({ short: true }) : null);
   }
 
   /* --- Which libreta ------------------------------------------------------- */
@@ -326,7 +330,7 @@ export function renderPacking() {
    */
   function resumeAt(line, plan, run) {
     // Finished — here or on the other computer — says who finished it.
-    const here = run?.done ? null : spotOf(line, plan);
+    const here = run?.done ? null : spotOf(line, plan, run);
     if (!here) return null;
     const who = here.slide.kind === 'client' ? here.slide.client.name
       : here.slide.kind === 'farm' ? t('la farma {farm}', { farm: here.slide.farm.name })
@@ -342,7 +346,7 @@ export function renderPacking() {
    * or finished it. Worked out from the list as it is now, so it is exact;
    * the day's record only counts every few people.
    */
-  function spotOf(line, plan = null) {
+  function spotOf(line, plan = null, run = null) {
     const spot = line ? savedSpot(line.id, day) : null;
     if (!spot) return null;
     const sequence = plan || packingSequence({
@@ -350,11 +354,18 @@ export function renderPacking() {
     });
     if (!sequence.slides.length) return null;
     const at = spotIndex(sequence.slides, spot);
-    return {
+    const here = {
       slide: sequence.slides[at],
       done: sequence.slides.slice(0, at + 1).filter((one) => one.kind === 'client').length,
       people: sequence.people,
     };
+    // The day's record is further along than this computer's own place: the
+    // libreta is being packed on the other one. A card tapped here by mistake
+    // and left at once used to leave a place of its own behind — "0 de 5" —
+    // and that was what this computer showed for the rest of the morning,
+    // while the other packer went on to five.
+    if (run && (Number(run.packed) || 0) > here.done) return null;
+    return here;
   }
 
   /* --- What has been packed today ------------------------------------------ */
@@ -375,7 +386,7 @@ export function renderPacking() {
 
   /** "23 de 174": exact where this computer has the place, the record's otherwise. */
   function progressOf(run) {
-    const here = spotOf(setup.lines.find((line) => line.id === run.lineId));
+    const here = spotOf(setup.lines.find((line) => line.id === run.lineId), null, run);
     return here
       ? t('{n} de {total}', { n: number(here.done), total: number(here.people) })
       : t('{n} de {total}', { n: number(run.packed || 0), total: number(run.people) });

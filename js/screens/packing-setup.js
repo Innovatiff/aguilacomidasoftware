@@ -217,7 +217,8 @@ export function renderPackingSetup() {
         const owners = (packers || []).filter((one) => one.active !== false && one.lineId === line.id)
           .map((one) => one.name);
         return owners.length
-          ? h('div.t-sm.c-soft', icon('users'), ` ${t('La empaca {names}', { names: owners.join(` ${t('y')} `) })}`)
+          ? h('div.row.t-sm.c-soft', { style: { gap: '6px' } },
+            icon('users'), h('span', t('La empaca {names}', { names: owners.join(` ${t('y')} `) })))
           : null;
       })(),
 
@@ -417,12 +418,12 @@ export function renderPackingSetup() {
 
     const next = setup.lines.map((row) => {
       if (row.id === line.id) return { ...row, farmIds: [], placeIds: mine };
-      // The other libreta keeps exactly what it had, in the order it had it.
-      // Nothing on this sheet can take from it — that is the whole point of
-      // the lock.
-      const theirs = orderedPlaces(setup.lines, row.id, store.farms, store.clients)
-        .map((one) => one.key);
-      return { ...row, farmIds: [], placeIds: theirs };
+      // The other libreta keeps exactly what it had — as it is stored, not
+      // written out again. Nothing on this sheet can take from it — that is
+      // the whole point of the lock — and writing it out again dropped the
+      // keys of houses that no longer exist, which a farm's newer houses may
+      // be relying on to be packed there (see `adoptingLine`).
+      return row;
     });
 
     try {

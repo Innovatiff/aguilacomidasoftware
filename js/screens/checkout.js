@@ -21,6 +21,7 @@ import {
   sectionLabel, statGrid, stat, skeletonRows, alert,
 } from '../ui/kit.js';
 import { openChargeSheet } from '../ui/charge-sheet.js';
+import { sheetOpen } from '../ui/overlay.js';
 import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
 import { store, subscribe, billingFor, invoicesFor, moneyStats } from '../data/store.js';
@@ -37,12 +38,24 @@ export function renderCheckout() {
   let term = '';
   let receipts = [];
 
-  const stops = [
-    watchReceiptsOn(today(), (rows) => { receipts = rows; draw(); }, () => {}),
-    subscribe(() => draw()),
-  ];
+  /*
+   * The day whose till is being watched. The screen is left open overnight on
+   * the counter's computer, and the title is read from the clock on every
+   * draw: without following it, Thursday's heading stood over Wednesday's
+   * takings until somebody left the screen and came back.
+   */
+  let day = today();
+  const watchTill = () => watchReceiptsOn(day, (rows) => { receipts = rows; draw(); }, () => {});
+  let stopTill = null;
 
   function draw() {
+    if (today() !== day) {
+      day = today();
+      receipts = [];
+      stopTill?.();
+      stopTill = watchTill();
+    }
+
     screen({
       title: t('Cobrar'),
       subtitle: formatDayLong(today()),
@@ -59,10 +72,13 @@ export function renderCheckout() {
       body: store.loaded.clients ? body() : skeletonRows(6),
     });
 
-    // The person is waiting: the cursor belongs in the box.
+    // The person is waiting: the cursor belongs in the box — unless a sheet
+    // is open over it. This runs on every change anywhere in the panel, and it
+    // used to pull the cursor out of the amount being typed: the digits went
+    // into the search box behind the sheet, and the amount stayed as it was.
     queueMicrotask(() => {
       const box = document.querySelector('.searchbar input');
-      if (box && document.activeElement !== box) box.focus();
+      if (box && document.activeElement !== box && !sheetOpen()) box.focus();
     });
   }
 
@@ -215,5 +231,8 @@ export function renderCheckout() {
     go(`/receipts/${receipt.id}`);
   }
 
-  return () => stops.forEach((stop) => stop?.());
+  stopTill = watchTill();
+  const stopStore = subscribe(() => draw());
+
+  return () => { stopTill?.(); stopStore(); };
 }

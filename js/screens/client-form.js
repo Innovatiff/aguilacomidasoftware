@@ -28,6 +28,7 @@ import {
   createClient, updateClient, getClient, emptyClient, deleteClient, setClientStatus,
   isValidEmail, termsOf, cleanTag, normalizeTags, tagsInUse, hasTag, servingSince, lastDayGone,
 } from '../data/clients.js';
+import { findLocation, TERM_FIELDS } from '../data/farms.js';
 import { ensureConversation } from '../data/chat.js';
 import { store, farmById, clientsOfFarm, whenReady, isReady } from '../data/store.js';
 import { openChargeSheet } from '../ui/charge-sheet.js';
@@ -39,7 +40,7 @@ import {
 import { payDaysWords } from '../lib/billing-words.js';
 import { chargeFor, tierFor, periodCharge, mealsOn } from '../lib/pricing.js';
 import {
-  today, addDays, formatRange, formatDayLong, formatDay, weekdayOf, WEEKDAYS, capitalize,
+  today, addDays, formatRange, formatDayLong, formatDay, weekdayOf, WEEKDAYS, capitalize, isWholeDay,
 } from '../lib/dates.js';
 import { money, plural } from '../lib/format.js';
 import { errorText } from '../firebase.js';
@@ -90,6 +91,8 @@ export async function renderClientForm(context) {
 
   let saving = false;
   let errors = {};
+  /** Text typed into a list box and not yet added — see `tagEditor`. */
+  let pending = [];
 
   const farm = () => farmById(model.farmId);
 
@@ -112,6 +115,42 @@ export async function renderClientForm(context) {
   function updateAndRedraw(patch) {
     Object.assign(model, patch);
     draw();
+  }
+
+  /**
+   * Picking the farm here brings what that farm proposes, the same as
+   * arriving from the farm's own page does.
+   *
+   * It did not: opened from Clientes, the form started from no farm at all —
+   * Monday to Saturday, 11 to 1, one meal, a fortnight — and kept that when
+   * the farm was chosen, while the card at the bottom showed the farm's terms.
+   * Somebody registered at a farm that eats Monday to Friday and pays by the
+   * week was saved eating six days and paying by the fortnight.
+   *
+   * Only what nobody has touched is replaced: a plan or a week already
+   * changed by hand in this form stays as it was set.
+   */
+  function changeFarm(farmId) {
+    const next = farmById(farmId);
+    const patch = { farmId, locationId: '' };
+
+    if (isNew) {
+      const was = emptyClient(farm());
+      const proposed = emptyClient(next);
+      for (const key of FARM_PROPOSES) {
+        if (sameValue(model[key], was[key])) patch[key] = proposed[key];
+      }
+    } else if (next && farmId !== opened.farmId) {
+      // Somebody already eating: their days, their plan and their pay day are
+      // theirs and go with them. Only what belongs to the farm changes — the
+      // delivery window and the days of grace — as moving them by hand does.
+      const terms = termsOf(next);
+      for (const key of TERM_FIELDS) patch[key] = terms[key];
+    } else if (next) {
+      // Back to the farm they were at: with what they had there.
+      for (const key of TERM_FIELDS) patch[key] = opened[key];
+    }
+    updateAndRedraw(patch);
   }
 
   /** Says, in words, what the date they picked means for this person. */
@@ -138,14 +177,27 @@ export async function renderClientForm(context) {
     if (model.cycleAnchor && !isPayDay(model.cycleAnchor)) {
       errors.cycleAnchor = t('El periodo empieza en {days}.', { days: payDaysWords() });
     }
-    if (model.endsOn && model.cycleAnchor && model.endsOn < model.cycleAnchor) {
-      errors.endsOn = t('No puede terminar antes de que empiece su periodo.');
+    // Against the day they started, and only when one of the two was set
+    // here. It used to be measured against the pay day — which the form moves
+    // forward by itself — so a perfectly good last day was refused, and
+    // refused without a word: the message was never drawn on any field.
+    const touched = (key) => isNew || !sameValue(model[key], opened[key]);
+    if (model.endsOn && model.startedOn && model.endsOn < model.startedOn
+      && (touched('endsOn') || touched('startedOn'))) {
+      errors.endsOn = t('El último día no puede ser antes del día en que empezó.');
+    }
+    // Nobody eats on no day. (Somebody already saved that way can still have
+    // their phone corrected without being made to pick days first.)
+    if (!(model.deliveryDays || []).length && touched('deliveryDays')) {
+      errors.deliveryDays = t('Marca por lo menos un día.');
     }
     return Object.keys(errors).length === 0;
   }
 
   async function save(event) {
     event.preventDefault();
+    // "sin pollo", typed and never added: it is what they meant to save.
+    pending.forEach((add) => add());
     if (!validate()) { draw(); toastBad(t('Revisa los campos marcados.')); return; }
 
     saving = true; draw();
@@ -157,7 +209,15 @@ export async function renderClientForm(context) {
         await ensureConversation({ id, name: model.name });
         toastOk(t('Cliente registrado'));
 
-        const fresh = { ...model, id };
+        // With the names the record was saved with: the first bill and the
+        // first receipt are written from this, and came out with no location
+        // on them — and no farm either, when the farm was picked in the form.
+        const fresh = {
+          ...model,
+          id,
+          farmName: farm()?.name || '',
+          locationName: findLocation(farm(), model.locationId)?.name || '',
+        };
 
         // Most of these people were already customers, on paper. Asking now —
         // while their file is open and the notebook is in hand — is the only
@@ -258,6 +318,7 @@ export async function renderClientForm(context) {
 
   function form() {
     if (!store.farms.length) return noFarms();
+    pending = [];
 
     return h('form.page__inner.page__inner--narrow.stack.stack-4', { onsubmit: save, novalidate: true },
 
@@ -273,7 +334,7 @@ export async function renderClientForm(context) {
               ...store.farms.map((row) => ({ value: row.id, label: row.name })),
             ],
             // Changing farm invalidates the chosen location: they belong to it.
-            onchange: (e) => updateAndRedraw({ farmId: e.target.value, locationId: '' }),
+            onchange: (e) => changeFarm(e.target.value),
           }),
         }),
         locationField())),
@@ -352,7 +413,10 @@ export async function renderClientForm(context) {
             type: 'date',
             value: model.startedOn || today(),
             max: today(),
-            onchange: (e) => update({ startedOn: e.target.value || today() }),
+            ...dateBox({
+              read: () => model.startedOn || today(),
+              write: (day) => update({ startedOn: day }),
+            }),
           }),
         }),
         field({
@@ -380,35 +444,18 @@ export async function renderClientForm(context) {
             // Typing it by hand is somebody saying "this is their day", which
             // is the same statement a payment makes. Marked as set either way,
             // so the counter stops offering to move it.
-            onchange: (e) => updateAndRedraw({
-              cycleAnchor: payDayOnOrAfter(e.target.value || today()),
-              cycleSetOn: today(),
+            ...dateBox({
+              read: () => model.cycleAnchor || payDayOnOrAfter(today()),
+              write: (day, box) => {
+                update({ cycleAnchor: payDayOnOrAfter(day), cycleSetOn: today() });
+                // What that day means, said again under the box.
+                const hint = box.closest('.field')?.querySelector('.field__hint');
+                if (hint) hint.textContent = cycleHint();
+              },
             }),
           }),
         }),
-        field({
-          label: t('Último día que se le sirve'),
-          hint: t('Sólo cuando ya se sabe que se va: "pagó y se queda hasta el jueves". Desde el día siguiente deja de aparecer en la libreta y no se le factura. Déjalo vacío si sigue.'),
-          control: h('div.stack.stack-2',
-            input({
-              type: 'date',
-              value: model.endsOn || '',
-              min: today(),
-              onchange: (e) => updateAndRedraw({ endsOn: e.target.value || '' }),
-            }),
-            h('div.row.row--wrap', { style: { gap: '6px' } },
-              [[t('Hoy'), 0], [t('Mañana'), 1], [t('En 2 días'), 2], [t('En 7 días'), 7]].map(
-                ([label, days]) => button(label, {
-                  variant: 'soft', size: 'sm',
-                  onClick: () => updateAndRedraw({ endsOn: addDays(today(), days) }),
-                })),
-              model.endsOn
-                ? button(t('Sin fecha'), {
-                    variant: 'ghost', size: 'sm',
-                    onClick: () => updateAndRedraw({ endsOn: '' }),
-                  })
-                : null)),
-        }),
+        lastDayField(),
         field({
           label: t('Estado'),
           control: select({
@@ -432,6 +479,62 @@ export async function renderClientForm(context) {
         })),
 
       isNew ? null : dangerZone());
+  }
+
+  /**
+   * How a date box in this form listens.
+   *
+   * Not by acting on every `change`: typed on a keyboard a date box fires one
+   * per key, with a year of 0002 on the way to 2026, and a form that redrew
+   * itself on each took the cursor out of the box after the first digit — the
+   * rest of the date was typed into nothing. A whole date is kept as it
+   * arrives, quietly; and when the box is left it shows what was kept, which
+   * for the pay day is the collection day it was moved to.
+   *
+   * @param {object} options
+   * @param {() => string} options.read    what the form holds now
+   * @param {(day: string, box: HTMLInputElement) => void} options.write
+   * @param {boolean} [options.empties]    whether clearing the box means "no date"
+   */
+  const dateBox = ({ read, write, empties = false }) => ({
+    onchange: (event) => {
+      const day = event.target.value;
+      if (isWholeDay(day) || (empties && !day)) write(day, event.target);
+    },
+    onblur: (event) => { event.target.value = read(); },
+  });
+
+  /** «Último día que se le sirve»: the box, the quick days, and "no date". */
+  function lastDayField() {
+    const none = button(t('Sin fecha'), {
+      variant: 'ghost', size: 'sm',
+      onClick: () => updateAndRedraw({ endsOn: '' }),
+    });
+    none.hidden = !model.endsOn;
+
+    return field({
+      label: t('Último día que se le sirve'),
+      error: errors.endsOn,
+      hint: t('Sólo cuando ya se sabe que se va: "pagó y se queda hasta el jueves". Desde el día siguiente deja de aparecer en la libreta y no se le factura. Déjalo vacío si sigue.'),
+      control: h('div.stack.stack-2',
+        input({
+          type: 'date',
+          value: model.endsOn || '',
+          min: today(),
+          ...dateBox({
+            empties: true,
+            read: () => model.endsOn || '',
+            write: (day) => { update({ endsOn: day }); none.hidden = !day; },
+          }),
+        }),
+        h('div.row.row--wrap', { style: { gap: '6px' } },
+          [[t('Hoy'), 0], [t('Mañana'), 1], [t('En 2 días'), 2], [t('En 7 días'), 7]].map(
+            ([label, days]) => button(label, {
+              variant: 'soft', size: 'sm',
+              onClick: () => updateAndRedraw({ endsOn: addDays(today(), days) }),
+            })),
+          none)),
+    });
   }
 
   /**
@@ -518,6 +621,16 @@ export async function renderClientForm(context) {
         event.target.value = '';
         commit([...chosen, tag]);
       },
+    });
+
+    // Typed and left in the box when the form is saved: added, as if
+    // «Agregar» had been pressed. It was dropped without a word — and in the
+    // first of these two lists that word is an allergy.
+    pending.push(() => {
+      const tag = cleanTag(box.value);
+      if (!tag) return;
+      box.value = '';
+      commit([...chosen, tag]);
     });
 
     function paint() {
@@ -679,7 +792,9 @@ export async function renderClientForm(context) {
     if (!current) return alert(t('Elige el rancho para ver sus condiciones.'), 'info');
 
     const terms = termsOf(current);
-    const period = periodOf({ ...model, cycleAnchor: terms.cycleAnchor });
+    // Their own cycle, which the «Día de pago» above may have moved off the
+    // farm's — the farm's is only where it starts from.
+    const period = periodOf({ ...model, cycleAnchor: model.cycleAnchor || terms.cycleAnchor });
     const charge = periodCharge(model, store.pricing);
     const priced = !!tierFor(store.pricing, model.mealsPerDay);
 
@@ -742,7 +857,9 @@ export async function renderClientForm(context) {
             confirmLabel: t('Eliminar definitivamente'), tone: 'danger', icon: 'alert',
           })) return;
           try {
-            await deleteClient(clientId, model.email);
+            // The address they were saved with, not one typed here and never
+            // saved: its lookup is the one that has to go with the file.
+            await deleteClient(clientId, original.email);
             toastOk(t('Cliente eliminado'));
             go(model.farmId ? `/farms/${model.farmId}` : '/clients', { replace: true });
           } catch (error) {
@@ -757,6 +874,11 @@ export async function renderClientForm(context) {
 
 /** Never written from this form, whatever it holds. */
 const LEFT_ALONE = new Set(['id', 'createdAt', 'updatedAt']);
+
+/** What a farm proposes for somebody new there — see `changeFarm`. */
+const FARM_PROPOSES = ['mealsPerDay', 'deliveryDays', 'deliveryWindow', 'cycleAnchor', 'payEvery', 'graceDays'];
+
+const sameValue = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
 const clientsAt = (farmId, locationId) =>
   clientsOfFarm(farmId).filter((client) => client.locationId === locationId).length;

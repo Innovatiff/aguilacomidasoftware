@@ -24,7 +24,7 @@ import { icon } from '../lib/icons.js';
 import { screen, topbarButton } from '../ui/shell.js';
 import {
   card, stat, statGrid, button, itemRow, list, avatar,
-  sectionLabel, skeletonRows, dataErrorCard,
+  sectionLabel, skeletonRows, dataErrorCard, noticeCard,
 } from '../ui/kit.js';
 import { go } from '../lib/router.js';
 import {
@@ -77,6 +77,10 @@ function body() {
   const overdue = active.filter((row) => row.state === 'overdue');
   const square = active.filter((row) => row.owed <= 0.005);
   const soon = active.length - overdue.length - square.length;
+  // Everybody behind, eating today or not — the list this tile opens. Counted
+  // among the active only, it said "0 · Nadie atrasado" right beside "$700
+  // vencidos": the money of people in pause is still owed.
+  const late = people.filter((row) => row.state === 'overdue');
 
   return h('div.page__inner.page__inner--flow.stack.stack-4',
     h('div.span-all', moneyHero(cash, cashToday)),
@@ -107,11 +111,11 @@ function body() {
         }),
         stat({
           label: t('Vencidos'),
-          value: number(overdue.length),
-          foot: overdue.length
+          value: number(late.length),
+          foot: late.length
             ? t('{amount} sin cobrar', { amount: money(cash.overdue, { round: true }) })
             : t('Nadie atrasado'),
-          tone: overdue.length ? 'bad' : undefined,
+          tone: late.length ? 'bad' : undefined,
           onClick: () => go('/clients?filter=overdue'),
         }),
       ], 4)),
@@ -153,12 +157,23 @@ function body() {
             h('span.quickcta__t', { style: { display: 'block' } }, t('Acción rápida')),
             h('span.quickcta__s', t('Pantalla grande para la tienda: cobrar, comidas, días…'))),
           icon('chevronR')),
-        button(t('Cobrar en la tienda'), { variant: 'primary', block: true, icon: 'cash', onClick: () => go('/cobrar') }),
-        button(t('Empacar la comida de hoy'), { variant: 'dark', block: true, icon: 'box', onClick: () => go('/empaque') }),
-        button(t('Ver reportes'), { variant: 'soft', block: true, icon: 'chart', onClick: () => go('/reportes') }),
-        button(t('Abrir la libreta'), { variant: 'dark', block: true, icon: 'clipboard', onClick: () => go('/libreta') }),
-        button(t('Registrar un cliente'), { variant: 'ghost', block: true, icon: 'userPlus', onClick: () => go('/clients/new') }))));
+        // The rest are ways in, and they look like one thing: the same tile
+        // five times, told apart by its icon and its words. They used to be
+        // five buttons in four colours, which made each one look like a
+        // different kind of thing.
+        h('div.shortcuts',
+          shortcut(t('Cobrar en la tienda'), 'cash', '/cobrar', true),
+          shortcut(t('Empacar la comida de hoy'), 'box', '/empaque'),
+          shortcut(t('Ver reportes'), 'chart', '/reportes'),
+          shortcut(t('Abrir la libreta'), 'clipboard', '/libreta'),
+          shortcut(t('Registrar un cliente'), 'userPlus', '/clients/new')))));
 }
+
+/** One way in from Inicio: an icon, what it opens, and the whole tile to press. */
+const shortcut = (label, ico, path, main = false) =>
+  h(`button.shortcut${main ? '.shortcut--main' : ''}`, { type: 'button', onclick: () => go(path) },
+    h('span.shortcut__ico', icon(ico)),
+    h('span.shortcut__t', label));
 
 /** "3 de 8 activos" — a count nobody can read without its denominator. */
 function share(part, whole) {
@@ -181,9 +196,10 @@ function takingsFoot(days) {
 function moneyHero(cash, cashToday) {
   const owed = cash.outstanding > 0;
 
-  return h('div.hero',
-    h('div.hero__eyebrow', t('Por cobrar')),
-    h('div.hero__title', money(cash.outstanding, { round: true })),
+  return h('div.hero.hero--money',
+    h('div.hero__main',
+      h('div.hero__eyebrow', t('Por cobrar')),
+      h('div.hero__title', money(cash.outstanding, { round: true }))),
 
     // The three figures that used to sit here are the row of tiles below now.
     // Saying them twice on one screen — three times counting the alert card —
@@ -192,7 +208,7 @@ function moneyHero(cash, cashToday) {
       heroStat(money(cash.overdue, { round: true }), t('De eso, vencido')),
       heroStat(money(cash.dueSoon, { round: true }), t('Todavía en plazo'))),
 
-    h('div', { style: { marginTop: '16px' } },
+    h('div.hero__cta',
       button(owed ? t('Cobrar') : t('Abrir cobranza'), {
         variant: owed ? 'primary' : 'soft',
         block: true,
@@ -212,7 +228,7 @@ function alerts({ cash, unread, gaps }) {
   // The Programador: a reminder whose day came, or a change it could not make.
   for (const set of store.schedule.filter((one) => one.state === 'remind')) {
     const v = set.value || {};
-    rows.push(actionCard({
+    rows.push(noticeCard({
       tone: 'info', icon: 'bell',
       title: t('Recordatorio: {name}', { name: set.clientName || t('para hoy') }),
       text: [v.amount ? money(v.amount) : '', v.note].filter(Boolean).join(' · '),
@@ -221,7 +237,7 @@ function alerts({ cash, unread, gaps }) {
   }
   const failed = store.schedule.filter((one) => one.state === 'failed');
   if (failed.length) {
-    rows.push(actionCard({
+    rows.push(noticeCard({
       tone: 'bad', icon: 'clock',
       title: t('{changes} hacer', {
         changes: plural(failed.length, 'cambio programado no se pudo', 'cambios programados no se pudieron'),
@@ -233,7 +249,7 @@ function alerts({ cash, unread, gaps }) {
   }
 
   if (cash.overdueCount) {
-    rows.push(actionCard({
+    rows.push(noticeCard({
       tone: 'bad', icon: 'wallet',
       title: t('{amount} vencidos', { amount: money(cash.overdue, { round: true }) }),
       text: cash.overdueCount === 1
@@ -244,7 +260,7 @@ function alerts({ cash, unread, gaps }) {
   }
 
   if (unread) {
-    rows.push(actionCard({
+    rows.push(noticeCard({
       tone: 'brand', icon: 'chat',
       title: unread === 1 ? t('{count} mensaje sin leer', { count: unread }) : t('{count} mensajes sin leer', { count: unread }),
       text: t('Hay clientes esperando respuesta.'),
@@ -253,7 +269,7 @@ function alerts({ cash, unread, gaps }) {
   }
 
   if (gaps.length) {
-    rows.push(actionCard({
+    rows.push(noticeCard({
       tone: 'warn', icon: 'alert',
       title: `${plural(gaps.length, 'cliente por revisar', 'clientes por revisar')}`,
       text: t('Les falta ubicación o precio en su plan, así que no se les puede cobrar.'),
@@ -273,18 +289,6 @@ function alerts({ cash, unread, gaps }) {
   // the screen exists for below the fold.
   return h('div.alertgrid', rows);
 }
-
-function actionCard({ tone, icon: ico, title, text, cta, onClick }) {
-  return h('div.card.card--tight', { style: { borderColor: `var(--${toneVar(tone)}-500)`, borderLeftWidth: '4px' } },
-    h('div.row.row--top',
-      h('span', { style: { color: `var(--${toneVar(tone)}-500)`, marginTop: '2px' } }, icon(ico)),
-      h('div.grow',
-        h('div.w-600', title),
-        h('div.t-sm.c-soft', { style: { marginTop: '1px' } }, text)),
-      h('button.btn.btn--sm.btn--ghost', { type: 'button', onclick: onClick }, cta)));
-}
-
-const toneVar = (tone) => ({ warn: 'warn', bad: 'bad', brand: 'brand', ok: 'ok', info: 'info' }[tone] || 'ink');
 
 /* --- Debtors --------------------------------------------------------------- */
 

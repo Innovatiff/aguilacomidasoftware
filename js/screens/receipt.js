@@ -136,7 +136,11 @@ export function renderReceipt(context) {
           { reason: heldReason(receipt.heldWhy) }), 'warn')
         : null,
 
-      receipt.held ? null : card(h('div.row.row--between',
+      // Only a payment taken at the counter knows the balance it left. A
+      // cancellation and a payment copied in from the notebook store a zero
+      // that was never worked out — and a zero here reads "Al corriente",
+      // about somebody who may owe three fortnights.
+      receipt.held || reversal || receipt.fromNotebook ? null : card(h('div.row.row--between',
         h('div.w-650', isVoid ? t('Saldo que quedó en su momento') : t('Saldo después de este pago')),
         h('div.row', { style: { gap: '8px' } },
           h('span.t-lg.w-700', money(receipt.balanceAfter || 0)),

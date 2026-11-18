@@ -275,10 +275,16 @@ export const chargeIdFor = (clientId, day, unique) => `${clientId}_${day}_x${uni
  */
 export function owedBreakdown(invoices = []) {
   const charges = invoices.filter(isCharge).length;
-  const periods = invoices.length - charges;
+  // A week is called a week: somebody who pays every seven days was told
+  // they owed "1 quincena" for one.
+  const weeks = invoices.filter((invoice) => !isCharge(invoice)
+    && Number(invoice.payEvery) === PAY_EVERY.WEEK).length;
+  const fortnights = invoices.length - charges - weeks;
   const parts = [];
-  if (periods) parts.push(`${periods} ${periods === 1 ? 'quincena' : 'quincenas'}`);
+  if (fortnights) parts.push(`${fortnights} ${fortnights === 1 ? 'quincena' : 'quincenas'}`);
+  if (weeks) parts.push(`${weeks} ${weeks === 1 ? 'semana' : 'semanas'}`);
   if (charges) parts.push(`${charges} ${charges === 1 ? 'deuda' : 'deudas'}`);
+  if (parts.length > 2) return `${parts.slice(0, -1).join(', ')} y ${parts[parts.length - 1]}`;
   return parts.join(' y ') || 'nada';
 }
 
@@ -411,7 +417,9 @@ export function summarize(client, invoices = [], day = todayKey()) {
     .filter((inv) => balanceOf(inv) > 0.005)
     .filter((inv) => isCharge(inv)
       || isPayable({ start: inv.periodStart, end: inv.periodEnd }, client, day))
-    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+    // As text, whatever is there: a bill saved long ago without a due date
+    // must sort first, not stop the screen that is adding the balance up.
+    .sort((a, b) => String(a.dueDate || '').localeCompare(String(b.dueDate || '')));
 
   const overdue = outstanding.filter((inv) => invoiceStatus(inv, day) === 'overdue');
   const balance = round2(outstanding.reduce((sum, inv) => sum + balanceOf(inv), 0));

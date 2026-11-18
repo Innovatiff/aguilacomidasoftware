@@ -48,7 +48,8 @@ export function columnChart(rows, {
   today: todayKey, height = 168,
   tick = (row) => weekdayName(row.day).slice(0, 3),
   label = (row) => formatDayLong(row.day, { year: false }),
-  axis = [t('Hace {count} días', { count: rows.length }), t('Hoy')],
+  // Fourteen columns ending today begin thirteen days ago, not fourteen.
+  axis = [t('Hace {count} días', { count: Math.max(1, rows.length - 1) }), t('Hoy')],
 } = {}) {
   const top = Math.max(...rows.map((r) => r.amount), 1);
   const best = rows.reduce((a, b) => (b.amount > a.amount ? b : a), rows[0]);

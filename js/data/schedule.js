@@ -32,7 +32,7 @@ import { logMovement, logClientChanges } from './movements.js';
 import { addDays, today, formatDay } from '../lib/dates.js';
 import { t, inSpanish } from '../lib/i18n.js';
 import { createClient } from './clients.js';
-import { createFarm, addLocations, newLocationId } from './farms.js';
+import { createFarm, addLocations, newLocationId, getFarm } from './farms.js';
 import { addCharge, takePayment, adjustBalance } from './invoices.js';
 
 const setsRef = () => collection(db, 'scheduled');
@@ -150,10 +150,16 @@ export const closeSet = (set, author) => saved(updateDoc(doc(db, 'scheduled', se
   state: 'done', doneAt: serverTimestamp(), closedByName: author?.name || '',
 }));
 
-/** Tried again: back to waiting, so the next computer to look carries it out. */
-export const retrySet = (set) => saved(updateDoc(doc(db, 'scheduled', set.id), {
-  state: 'pending', error: '',
-}));
+/**
+ * Tried again: back to waiting, so the next computer to look carries it out —
+ * this one included, now. The memory of having just tried it is dropped, or
+ * «Intentar otra vez» did nothing here for the five minutes that follow a
+ * failure, which is exactly when it is pressed.
+ */
+export const retrySet = (set) => {
+  tried.delete(`apply:${set.id}`);
+  return saved(updateDoc(doc(db, 'scheduled', set.id), { state: 'pending', error: '' }));
+};
 
 /** Ends a change that has an "until" now instead of on its day. */
 export const endNow = (set) => saved(updateDoc(doc(db, 'scheduled', set.id), {
@@ -278,7 +284,11 @@ async function applyOperation(set, { clients, farms, pricing, by }) {
       }, author));
       text = made?.id ? 'Farma dada de alta.' : '';
     } else if (set.kind === 'place') {
-      const farm = farms.find((one) => one.id === set.farmId);
+      if (!farms.some((one) => one.id === set.farmId)) throw new Error('Esa farma ya no existe.');
+      // The farm as it is this instant, not as it was when this round began:
+      // two «Ubicación nueva» for one farm on one morning each wrote the list
+      // they had started with plus their own, and the second erased the first.
+      const farm = await getFarm(set.farmId);
       if (!farm) throw new Error('Esa farma ya no existe.');
       await inSpanish(() => addLocations(farm, v.names || []));
       text = `${(v.names || []).join(', ')} en ${farm.name}.`;

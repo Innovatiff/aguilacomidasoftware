@@ -21,7 +21,7 @@ import { icon } from '../lib/icons.js';
 import { screen, topbarButton, lifetime } from '../ui/shell.js';
 import {
   searchInput, chips, list, avatar, badge, emptyState, button, card, select,
-  sectionLabel, statGrid, stat, skeletonRows, alert, dataErrorCard, tagList,
+  sectionLabel, statGrid, stat, skeletonRows, alert, dataErrorCard, tagList, noticeCard,
 } from '../ui/kit.js';
 import { toastOk, toastBad, confirm, sheet } from '../ui/overlay.js';
 import { openChargeSheet } from '../ui/charge-sheet.js';
@@ -56,6 +56,9 @@ const STATE = {
   inactive: { label: t('Inactivo'),    tone: 'muted' },
 };
 
+/** Eating today and owing nothing for what was already served. */
+const isCurrent = (row) => row.serving === 'active' && row.owed <= 0.005;
+
 const FILTERS = [
   { value: 'all',      label: t('Todos'),      match: () => true },
   { value: 'overdue',  label: t('Vencidos'),   match: (row) => row.state === 'overdue' },
@@ -66,8 +69,7 @@ const FILTERS = [
    * and links here; when the two disagreed, the number on the dashboard opened
    * a list that contradicted it.
    */
-  { value: 'current',  label: t('Al corriente'),
-    match: (row) => row.serving === 'active' && row.owed <= 0.005 },
+  { value: 'current',  label: t('Al corriente'), match: (row) => isCurrent(row) },
   { value: 'advance',  label: t('Pago adelantado'), match: (row) => row.advance },
   { value: 'active',   label: t('Activos'),    match: (row) => row.serving === 'active' },
   { value: 'paused',   label: t('En pausa'),   match: (row) => row.client.status === 'paused' },
@@ -115,7 +117,7 @@ export function renderClients(context) {
             onInput: (value) => { term = value; redraw(); },
           })),
           store.farms.length > 1
-            ? h('div', { style: { flex: '1 1 160px', minWidth: 0 } }, select({
+            ? h('div', { style: { flex: '1 1 200px', minWidth: 0 } }, select({
                 value: farmId,
                 options: [
                   { value: '', label: t('Todos los ranchos') },
@@ -198,7 +200,9 @@ export function renderClients(context) {
         }),
         stat({
           label: t('Al corriente'),
-          value: number(rows.filter((row) => row.owed <= 0 && row.serving !== 'inactive').length),
+          // The same people its list shows: counted with the paused ones in,
+          // the tile said 41 and opened a list of 38.
+          value: number(rows.filter(isCurrent).length),
           foot: rows.some((row) => row.advance)
             ? t('{clients} por corregir', { clients: plural(rows.filter((row) => row.advance).length, 'con pago adelantado', 'con pago adelantado') })
             : t('Sin deber nada de lo ya servido'),
@@ -344,7 +348,7 @@ export function renderClients(context) {
     if (!pending) { ensurePendingBills(); return null; }
     if (!pending.rows.length) return null;
 
-    return actionBanner({
+    return noticeCard({
       tone: 'brand', icon: 'receipt',
       title: `${plural(pending.rows.length, 'factura por emitir', 'facturas por emitir')}`,
       text: t('{periods} sin facturar · {amount} que todavía no se cobran.', {
@@ -363,7 +367,7 @@ export function renderClients(context) {
    * to pay looks paid already.
    */
   function advanceBanner(ahead) {
-    return actionBanner({
+    return noticeCard({
       tone: 'warn', icon: 'alert',
       title: plural(ahead.length, 'cliente con pago por adelantado', 'clientes con pago por adelantado'),
       text: t('Su pago quedó en una quincena antes de que se sirviera. Va a la quincena anterior, que es la que pagaron. Revisa y corrige.'),
@@ -384,7 +388,7 @@ export function renderClients(context) {
 
   function remindBanner(overdue) {
     const total = overdue.reduce((sum, row) => sum + row.owed, 0);
-    return actionBanner({
+    return noticeCard({
       tone: 'bad', icon: 'alert',
       title: `${plural(overdue.length, 'cliente con pago vencido', 'clientes con pago vencido')}`,
       text: t('{amount} vencidos. Puedes recordarles a todos de una vez.', { amount: money(total) }),
@@ -392,17 +396,6 @@ export function renderClients(context) {
       onClick: () => remindAll(overdue),
     });
   }
-
-  const actionBanner = ({ tone, icon: ico, title, text, cta, onClick }) =>
-    h('div.card.card--tight', {
-      style: { borderColor: `var(--${tone}-500)`, borderLeftWidth: '4px' },
-    },
-    h('div.row.row--top',
-      h('span', { style: { color: `var(--${tone}-500)`, marginTop: '2px' } }, icon(ico)),
-      h('div.grow',
-        h('div.w-600', title),
-        h('div.t-sm.c-soft', { style: { marginTop: '1px' } }, text)),
-      button(cta, { variant: 'soft', size: 'sm', onClick })));
 
   /** Shows the whole run before writing a single bill. */
   async function reviewPending() {

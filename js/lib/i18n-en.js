@@ -2024,6 +2024,21 @@ export const EN = {
   "Clientes activos y comidas al día: no hay empaque registrado en este periodo.": "Active clients and meals per day: no packing recorded in this period.",
   "En el orden en que se empaca, sólo los que comen este día. El número a la derecha es cuántas comidas lleva cada persona.": "In packing order, only the people who eat this day. The number on the right is how many meals each person gets.",
   "Imprimir una libreta; clientes y comidas del periodo": "Print a logbook; clients and meals for the period",
+  "Buscar cliente o rancho…": "Search client or farm…",
+  "Registra un cliente para poder escribirle.": "Register a client to be able to message them.",
+  "Sin correo": "No email",
+  "Tiene que ser de hoy en adelante.": "It has to be today or later.",
+  "Guardar esta fecha": "Save this date",
+  "El último día no puede ser antes del día en que empezó.": "The last day can't be before the day they started.",
+  "Marca por lo menos un día.": "Pick at least one day.",
+  "Clientes · {shown} de {count}": "Clients · {shown} of {count}",
+  "Escribe un poco más del nombre para encontrar a los demás.": "Type a bit more of the name to find the rest.",
+  "{amount} / semana": "{amount} / week",
+  "Los días y el periodo son los de su rancho. Se ajustan después si hace falta.": "The days and the pay period are their farm's. They can be adjusted later if needed.",
+  "Los días son los de su farma. Se cambian después con Calendario semanal si hace falta.": "The days are their farm's. They can be changed later with Weekly schedule if needed.",
+  "Días con pedido": "Meal days",
+  "Ahora está {status}. Toca lo que cambia; si sigue igual, no hay nada que guardar.": "Currently {status}. Tap what changes; if nothing changes, there is nothing to save.",
+  "Repaso de diseño y correcciones en todo el sistema": "Design pass and fixes across the whole system",
 };
 
 /** Sentences the panel wrote to the database earlier, with their variable parts. */

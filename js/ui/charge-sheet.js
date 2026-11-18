@@ -46,6 +46,13 @@ import { t, tx, inSpanish } from '../lib/i18n.js';
 let charging = false;
 
 /**
+ * The payment being written, while it is. The sheet cannot be dismissed over
+ * it, but the browser's back button still takes the sheet away — and the
+ * payment lands all the same.
+ */
+let inFlight = null;
+
+/**
  * @param {object} options
  * @param {object} options.client    who is paying
  * @param {object} options.pricing   the price list
@@ -59,9 +66,15 @@ export async function openChargeSheet(options) {
   if (charging) return null;
   charging = true;
   try {
-    return await chargeSheet(options);
+    const receipt = await chargeSheet(options);
+    // Left while it said «Cobrando…»: that payment is a real one. It is waited
+    // for here, so whoever asked gets its receipt — and so nobody is charged a
+    // second time while the first is still on its way.
+    if (!receipt && inFlight) return await inFlight.catch(() => null);
+    return receipt || null;
   } finally {
     charging = false;
+    inFlight = null;
   }
 }
 
@@ -256,20 +269,24 @@ async function chargeSheet({ client, pricing, author }) {
           if (!(value > 0)) { toastBad(t('El monto debe ser mayor a cero.')); return; }
 
           busy = true;
+          close.hold(true);
           submit.disabled = true;
           mount(submit, h('span.spinner.spinner--light'), t('Cobrando…'));
 
           try {
-            const receipt = await takePayment(
+            inFlight = takePayment(
               { client, pricing, amount: value, method, reference, note, date, setCycle },
               author);
+            const receipt = await inFlight;
             // Not awaited: offline, a chat message only settles once the internet
             // is back, and the payment is already in.
             announce(receipt, client).catch(() => {});
             toastOk(t('Cobrado {amount} · {folio}', { amount: money(value), folio: receipt.folio }));
             close(receipt);
           } catch (error) {
+            inFlight = null;
             busy = false;
+            close.hold(false);
             repaint();
             toastBad(errorText(error));
           }

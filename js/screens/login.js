@@ -30,15 +30,30 @@ export function renderAuth(host) {
    *  late redraw here would paint the form back over the app. */
   let handedOff = false;
 
+  /**
+   * What is in the boxes, kept across redraws. The form is rebuilt to show
+   * "Un momento…" and again to show why it was refused, and it used to come
+   * back empty both times: one wrong letter in the password meant typing the
+   * address again as well.
+   */
+  const typed = { email: '', password: '' };
+  const keep = () => {
+    for (const name of Object.keys(typed)) {
+      const box = host.querySelector(`input[name="${name}"]`);
+      if (box) typed[name] = box.value;
+    }
+  };
+
   const draw = () => { if (!handedOff) mount(host, view()); };
 
-  const set = (next) => { mode = next; error = ''; notice = ''; draw(); };
+  const set = (next) => { keep(); mode = next; error = ''; notice = ''; draw(); };
 
   async function submit(event) {
     event.preventDefault();
     if (busy) return;
 
     const values = Object.fromEntries(new FormData(event.target).entries());
+    keep();
     busy = true; error = ''; draw();
 
     try {
@@ -83,11 +98,11 @@ export function renderAuth(host) {
             label: t('Correo'),
             control: input({
               name: 'email', type: 'email', required: true, autocomplete: 'email',
-              inputmode: 'email', placeholder: t('tu@correo.com'),
+              inputmode: 'email', placeholder: t('tu@correo.com'), value: typed.email,
             }),
           }),
 
-          mode === 'signin' ? field({ label: t('Contraseña'), control: passwordInput() }) : null,
+          mode === 'signin' ? field({ label: t('Contraseña'), control: passwordInput(typed.password) }) : null,
 
           h('button.btn.btn--primary.btn--block.btn--lg', { type: 'submit', disabled: busy },
             busy ? h('span.spinner.spinner--light') : null,
@@ -119,10 +134,10 @@ const hero = (lede, sub) => h('div.auth__hero',
   h('p.auth__sub', sub));
 
 /** Password field with a show/hide toggle — typing blind on a phone is worse. */
-function passwordInput() {
+function passwordInput(value = '') {
   const box = input({
     name: 'password', type: 'password', required: true, minlength: 6,
-    autocomplete: 'current-password', placeholder: '••••••••',
+    autocomplete: 'current-password', placeholder: '••••••••', value,
   });
 
   const toggle = h('button.input-group__icon', {

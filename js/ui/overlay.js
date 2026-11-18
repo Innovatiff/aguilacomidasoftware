@@ -39,25 +39,61 @@ export const toastBad = (m) => toast(m, 'bad');
 /* --- Bottom sheet --------------------------------------------------------- */
 
 /**
+ * How long a closed sheet stays in the page, unseen, catching stray clicks:
+ * as long as Windows still counts two clicks as one double click.
+ */
+const CLOSING_MS = 500;
+
+/** True while a sheet is open — not one that is on its way out. */
+export const sheetOpen = () => !!document.querySelector('.scrim:not(.scrim--closing)');
+
+/** Closes whatever is open, at once: the session ended, the screens are gone. */
+export function closeSheets() {
+  for (const scrim of document.querySelectorAll('.scrim')) scrim.remove();
+}
+
+/**
  * Opens a bottom sheet. `build(close)` returns the body; the returned promise
  * resolves with whatever `close(value)` was called with (undefined if dismissed).
+ *
+ * `close.hold(true)` keeps the sheet from being dismissed — the X, Escape, a
+ * tap outside — while it is in the middle of writing something. A payment
+ * that says «Cobrando…» is already on its way: a sheet closed over it told
+ * its caller "nothing was taken", and the same person could be charged again
+ * before the first receipt landed. `close.hold(false)` lets go, for a write
+ * that failed and can be tried again.
  */
 export function sheet({ title, build, foot, dismissible = true, wide = false }) {
   return new Promise((resolve) => {
     let settled = false;
+    let held = false;
 
     const close = (value) => {
       if (settled) return;
       settled = true;
       document.removeEventListener('keydown', onKey);
       window.removeEventListener('hashchange', onLeave);
-      scrim.style.animation = 'fade 160ms var(--ease) reverse';
-      panel.style.animation = 'rise 180ms var(--ease) reverse';
-      setTimeout(() => scrim.remove(), 160);
+      scrim.classList.add('scrim--closing');
+      scrim.style.animation = 'fade 160ms var(--ease) reverse forwards';
+      panel.style.animation = 'rise 180ms var(--ease) reverse forwards';
+      // Gone from sight in 160ms, and from the page a little after: the second
+      // half of a double click on a button that closes the sheet used to land
+      // on whatever was underneath it — in the kitchen, on Siguiente.
+      setTimeout(() => scrim.remove(), CLOSING_MS);
       resolve(value);
     };
+    close.hold = (on = true) => { held = !!on; };
 
-    const onKey = (e) => { if (e.key === 'Escape' && dismissible) close(undefined); };
+    const dismiss = () => { if (dismissible && !held) close(undefined); };
+
+    // Only the sheet on top answers Escape. Every open sheet hears the key,
+    // and they all used to close: cancelling a confirmation took the form
+    // underneath with it, and what had been typed there.
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      const open = [...document.querySelectorAll('.scrim:not(.scrim--closing)')];
+      if (open[open.length - 1] === scrim) dismiss();
+    };
 
     /*
      * A sheet is appended to the document, not to the page, so it survives a
@@ -74,13 +110,13 @@ export function sheet({ title, build, foot, dismissible = true, wide = false }) 
       title ? h('div.sheet__head',
         h('h2.sheet__title', title),
         dismissible ? h('button.btn.btn--quiet.btn--icon',
-          { type: 'button', 'aria-label': t('Cerrar'), onclick: () => close(undefined) }, icon('x')) : null,
+          { type: 'button', 'aria-label': t('Cerrar'), onclick: dismiss }, icon('x')) : null,
       ) : null,
       h('div.sheet__body', build(close)),
       foot ? h('div.sheet__foot', foot(close)) : null);
 
     const scrim = h('div.scrim', {
-      onclick: (e) => { if (e.target === scrim && dismissible) close(undefined); },
+      onclick: (e) => { if (e.target === scrim) dismiss(); },
     }, panel);
 
     document.addEventListener('keydown', onKey);
@@ -128,12 +164,14 @@ export function formSheet({ title, fields, submitLabel = t('Guardar'), onSubmit 
           submit.disabled = true;
           const label = submit.textContent;
           mount(submit, h('span.spinner.spinner--light'), t('Guardando…'));
+          close.hold(true);
           try {
             const result = await onSubmit(values);
             if (result !== false) close(result ?? values);
           } catch (error) {
             toastBad(errorText(error));
           } finally {
+            close.hold(false);
             if (submit.isConnected) { submit.disabled = false; mount(submit, label); }
           }
         },

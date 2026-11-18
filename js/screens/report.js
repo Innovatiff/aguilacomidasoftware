@@ -30,7 +30,7 @@
 
 import { h, mount } from '../lib/dom.js';
 import { icon } from '../lib/icons.js';
-import { screen, topbarButton, lifetime } from '../ui/shell.js';
+import { screen, topbarButton, lifetime, noteHref } from '../ui/shell.js';
 import {
   card, button, avatar, itemRow, list, badge, searchInput,
   emptyState, skeletonRows, alert, dataErrorCard, field, switchRow,
@@ -50,7 +50,7 @@ import { loadPeriod, forgetPeriod, cachedPeriod } from '../data/reports.js';
 import { buildReport, freshen, debtWord, debtWhy } from '../lib/report.js';
 import {
   GRAINS, rangeFor, shiftRange, customRange, rangeTitle, rangeSpan,
-  bucketsOf, spanOf, rangeHolds, isFuture,
+  bucketsOf, spanOf, rangeHolds, isFuture, spanIsTitle,
 } from '../lib/periods.js';
 import {
   today, addDays, formatDayShort, formatDay, formatDayLong, formatTime, humanDelta, daysBetween, capitalize,
@@ -190,7 +190,14 @@ function periodView(context, paint, state = {}, { movements = false } = {}) {
 
   read();
   readMoves();
-  return life.ending(subscribe(() => paint(api)));
+  return life.ending(subscribe(() => {
+    // Somebody is typing in this screen's search box: a full repaint rebuilds
+    // the box and the caret is gone mid-word. The screen's own lighter redraw
+    // — the list alone — brings the new figures in just the same.
+    const typing = document.activeElement?.matches?.('.page input[type="search"]');
+    if (typing && state.soft) { state.soft(api); return; }
+    paint(api);
+  }));
 }
 
 /* --- The summary ------------------------------------------------------------ */
@@ -376,7 +383,12 @@ function picker(range, list = '', keep = () => ({}), aside = null) {
         onclick: () => open(nowLike(range)),
       },
         h('span.rper__t', rangeTitle(range)),
-        h('span.rper__s', rangeHolds(range) ? t('{span} · en curso', { span: rangeSpan(range) }) : rangeSpan(range))),
+        // The exact days under the name — unless the name is the days already,
+        // and then only what is left to say: that it is the one in progress,
+        // or how long it was.
+        h('span.rper__s', spanIsTitle(range)
+          ? (rangeHolds(range) ? t('En curso') : plural(spanOf(range), 'día', 'días'))
+          : (rangeHolds(range) ? t('{span} · en curso', { span: rangeSpan(range) }) : rangeSpan(range)))),
 
       h('button.rper__nav', {
         type: 'button', 'aria-label': t('El periodo siguiente'),
@@ -878,6 +890,11 @@ export const renderReportList = (context) =>
 function drawList(view) {
   const spec = LISTS[view.state.which];
   const report = view.report();
+  view.state.soft = (now) => {
+    const fresh = now.report();
+    if (spec && fresh && now.ready() && !now.failure()) refresh(now, spec, fresh);
+    else now.repaint();
+  };
 
   screen({
     title: spec ? spec.title : t('Lista'),
@@ -1045,7 +1062,7 @@ function movesSection(view) {
               KINDS.filter((kind) => counts[kind.key]).map((kind) => h('a.chip', { href: to(kind.key) },
                 t(kind.label), h('span.chip__count', number(counts[kind.key]))))),
             h('div.rmoves__list', all.slice(0, MOVES_ON_SUMMARY).map((one) => moveRow(one, { withDay: true }))),
-            h('a.btn.btn--primary.btn--lg.btn--block', { href: to('') },
+            h('a.btn.btn--soft.btn--lg.btn--block', { href: to('') },
               t('Ver todos los movimientos ({count})', { count: number(all.length) }), icon('chevronR'))));
 }
 
@@ -1116,6 +1133,7 @@ export const renderMovements = (context) => periodView(context, drawMovements, {
 
 function drawMovements(view) {
   const all = view.moves();
+  view.state.soft = refreshMoves;
 
   screen({
     title: t('Movimientos'),
@@ -1247,10 +1265,14 @@ function daysOf(rows, perDay) {
  * client comes back to the same filter rather than to everything.
  */
 function remember(view) {
+  const address = urlFor(view.range, 'movimientos', { k: view.state.kind, q: view.state.term });
   try {
-    history.replaceState(history.state, '',
-      `#${urlFor(view.range, 'movimientos', { k: view.state.kind, q: view.state.term })}`);
+    history.replaceState(history.state, '', `#${address}`);
   } catch { /* the address is a convenience */ }
+  // And the shell is told, because `replaceState` tells nobody: the chevron on
+  // the receipt opened from here goes back to this address, not to the one
+  // the screen was first opened with.
+  noteHref(address);
 }
 
 /** Redraws the list alone, keeping the caret in the search box. */
