@@ -238,7 +238,11 @@ export function chatView({ clientId, role, sender, client, quickReplies = [], em
    * had come in the meantime and that nobody had opened.
    */
   function looking() {
-    return document.visibilityState === 'visible' && document.hasFocus() && navigator.onLine !== false;
+    // "In front" is asked of a window on a computer, where another one can
+    // cover it. A phone shows one app at a time, and some report no focus
+    // until the first touch: there, being on screen is being in front.
+    const inFront = isTouch() || document.hasFocus();
+    return document.visibilityState === 'visible' && inFront && navigator.onLine !== false;
   }
 
   // Coming back to the window is when the reading happens — and, if the

@@ -1113,7 +1113,7 @@ mientras se empaca. Si el periodo no tiene días empacados todavía (por ejemplo
 de que se empacara con el sistema, sale «—». La hoja impresa lo dice abajo
 de los números.
 
-### Versión 83: repaso de diseño y correcciones
+### Versiones 83 y 84: repaso de diseño y correcciones
 
 Un repaso de todo el sistema, pantalla por pantalla, en computadora, tableta
 y teléfono. No cambia dónde está cada cosa: se ve más parejo y se corrigieron
@@ -1128,9 +1128,11 @@ cobro (qué se factura y cuándo).
 - En computadora el botón principal de cada pantalla está en la barra de
   arriba, y las filas y los botones se resaltan al pasar el cursor.
 - En teléfono y tableta la barra de arriba y la de abajo ya no se mueven: lo
-  que se desliza es la página. El buscador se queda en su lugar, una
-  conversación abre en el último mensaje con la caja para escribir a la vista,
-  y cada pantalla se acuerda de dónde se quedó.
+  que se desliza es la página. El buscador se queda en su lugar (el de
+  Clientes, que con sus filtros ocupa tres renglones, en el teléfono se va con
+  la página para dejarle la pantalla a la lista), una conversación abre en el
+  último mensaje con la caja para escribir a la vista, y cada pantalla se
+  acuerda de dónde se quedó.
 - En teléfono los textos largos bajan a un segundo renglón en vez de cortarse,
   los botones de la ficha ya no se salen de su tarjeta y la barra de abajo
   nombra sólo la pestaña en la que se está.
@@ -1218,6 +1220,13 @@ cobro (qué se factura y cuándo).
 - Los buscadores no pierden el cursor cuando llega un cambio; abrir una
   conversación desde Mensajes es inmediato.
 - Al entrar, un error ya no borra el correo ni la contraseña escritos.
+
+La **84** corrige cuatro cosas que una segunda revisión encontró en la 83, el
+mismo día: «Poner en pausa» y «Reactivar» dentro de *Editar cliente* no
+guardaban si antes se había movido la caja de Estado; a quien le daban permiso
+de empacar después de teclear su número no le abría ninguna libreta; Mensajes
+no se dibujaba al volver con la flecha del navegador desde un buscador; y una
+tecla del teclado de dinero tocada justo después de «Siguiente» se perdía.
 
 ### Español · English
 

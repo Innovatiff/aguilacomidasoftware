@@ -819,10 +819,20 @@ export async function renderClientForm(context) {
     }));
   }
 
+  /**
+   * The person as they are saved, not as this form has them.
+   *
+   * These two buttons act at once, on the record. Handed the form instead —
+   * with «Estado» already moved to "En pausa" in the box above and not yet
+   * saved — the pause was taken for something already done: nothing was
+   * written, and the screen said «Cliente en pausa» all the same.
+   */
+  const saved = () => store.clients.find((one) => one.id === clientId) || opened;
+
   function dangerZone() {
     return h('div.stack.stack-3', { style: { marginTop: '8px' } },
       sectionLabel(t('Zona delicada')),
-      model.status === 'active'
+      saved().status === 'active'
         ? button(t('Poner en pausa'), {
             variant: 'ghost', block: true, icon: 'pause',
             onClick: async () => {
@@ -832,7 +842,7 @@ export async function renderClientForm(context) {
                 confirmLabel: t('Poner en pausa'), icon: 'pause',
               })) return;
               try {
-                await setClientStatus(clientId, 'paused', model);
+                await setClientStatus(clientId, 'paused', saved());
                 toastOk(t('Cliente en pausa'));
                 go(`/clients/${clientId}`);
               } catch (error) { toastBad(errorText(error)); }
@@ -842,7 +852,7 @@ export async function renderClientForm(context) {
             variant: 'ok', block: true, icon: 'play',
             onClick: async () => {
               try {
-                await setClientStatus(clientId, 'active', model);
+                await setClientStatus(clientId, 'active', saved());
                 toastOk(t('Cliente reactivado'));
                 go(`/clients/${clientId}`);
               } catch (error) { toastBad(errorText(error)); }

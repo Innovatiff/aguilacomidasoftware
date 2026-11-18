@@ -76,6 +76,7 @@ export function runFlow({ title, steps, state = {}, subject, commit, done, onExi
   let finished = null;
   let shownAt = 0;         // when the step on screen was drawn
   let movedAt = Date.now(); // when the flow last went to another step (or opened)
+  let shieldAt = movedAt;   // when a click on a slide last brought another one in
   let doneAt = 0;          // when the "done" screen came up
 
   const stepsNow = () => steps(model);
@@ -113,14 +114,19 @@ export function runFlow({ title, steps, state = {}, subject, commit, done, onExi
     body,
     foot);
 
-  // Capture phase, so the click never reaches the tile it fell on.
+  // Capture phase, so the click never reaches the tile it fell on. Only after
+  // a slide that a click *on the slide* brought in — a tile that moves on by
+  // itself, or the tile on the menu that opened this action. One reached with
+  // Siguiente or Enter has no stray click coming: the second half of that
+  // double click lands on the button, which looks after itself, and a first
+  // key on the money keypad pressed a moment after must not be thrown away.
   body.addEventListener('click', (event) => {
-    if (Date.now() - movedAt >= SETTLE) return;
+    if (Date.now() - shieldAt >= SETTLE) return;
     event.stopPropagation();
     event.preventDefault();
   }, true);
 
-  const api = { refresh: draw, revalidate, next: goNext, set };
+  const api = { refresh: draw, revalidate, next: () => goNext(true), set };
 
   /** Merge into the model without redrawing — for a field that owns its own DOM. */
   function set(patch) {
@@ -208,7 +214,8 @@ export function runFlow({ title, steps, state = {}, subject, commit, done, onExi
     draw();
   }
 
-  async function goNext() {
+  /** @param {boolean} [fromSlide]  asked for by something on the slide itself */
+  async function goNext(fromSlide = false) {
     /*
      * `finished` is the guard that matters.
      *
@@ -236,6 +243,7 @@ export function runFlow({ title, steps, state = {}, subject, commit, done, onExi
       direction = 'next';
       index += 1;
       movedAt = Date.now();
+      if (fromSlide === true) shieldAt = movedAt;
       draw();
       return;
     }

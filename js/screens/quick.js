@@ -158,6 +158,12 @@ export function renderQuick() {
       }
       mine = found;
       allowed = abilitiesOf(found);
+      // And on the seat, which the libreta checks at its door: what they may
+      // do now, not what they could when they typed their number.
+      if (me && JSON.stringify(found.can || null) !== JSON.stringify(me.can || null)) {
+        me.can = found.can || null;
+        sitDown(me);
+      }
       paintTiles();
     }, () => {})
     : null;

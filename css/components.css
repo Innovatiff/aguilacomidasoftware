@@ -570,6 +570,14 @@
 }
 .searchbar--sunken { background: var(--bg-sunken); }
 
+/* Three rows of controls — search, farm, filters — are worth keeping in view
+   on a computer and not on a phone, where they would hold a quarter of the
+   screen for themselves while the list is being read. There they scroll away
+   with the page, as they always did. */
+@media (max-width: 699px) {
+  .searchbar--tall { position: static; }
+}
+
 
 /* ==========================================================================
    Desktop adjustments

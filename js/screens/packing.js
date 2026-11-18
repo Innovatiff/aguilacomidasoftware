@@ -206,6 +206,14 @@ export function renderPacking() {
       sitDown(null);
       return askPin();
     }
+    // The seat carries what they may do, and the libreta checks it at its
+    // door: kept as the live record has it. Somebody given Empacar after
+    // typing their number was offered the libretas here and then sent back
+    // from every one of them, with nothing said.
+    if (JSON.stringify(record.can || null) !== JSON.stringify(packer.can || null)) {
+      packer = { ...packer, can: record.can || null };
+      sitDown(packer);
+    }
     if (!canDo(record, 'pack')) return notAllowed();
 
     const roster = activeClients();

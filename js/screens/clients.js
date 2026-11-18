@@ -107,7 +107,7 @@ export function renderClients(context) {
         topbarButton('cash', { label: t('Cobrar en la tienda'), onClick: () => go('/cobrar') }),
         topbarButton('receipt', { label: t('Cobranza'), onClick: () => go('/billing') }),
       ],
-      sticky: h('div.searchbar',
+      sticky: h('div.searchbar.searchbar--tall',
         // Wraps rather than squeezing: on a phone the farm picker drops under
         // the search box instead of leaving it three words wide.
         h('div.row.row--wrap',
@@ -644,6 +644,13 @@ export function renderClients(context) {
   // Data arrives all day — a payment, a message. While somebody is typing in
   // the search box only the list follows it, or the box would be rebuilt
   // under their fingers and lose the cursor.
-  return life.ending(subscribe(() => (
-    document.activeElement?.closest?.('.searchbar') ? redraw() : draw())));
+  // (This screen's box: the first call always draws the whole screen, or
+  // arriving with the cursor in another screen's search box would leave that
+  // screen standing here.)
+  let drawn = false;
+  return life.ending(subscribe(() => {
+    if (drawn && document.activeElement?.closest?.('.searchbar')) { redraw(); return; }
+    drawn = true;
+    draw();
+  }));
 }

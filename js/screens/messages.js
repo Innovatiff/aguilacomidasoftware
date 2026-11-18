@@ -113,7 +113,17 @@ export function renderMessages() {
 
   // While somebody is typing in the search box only the list is redrawn: a
   // whole repaint rebuilds the box, and the rest of the word goes nowhere.
-  return subscribe(() => (document.activeElement?.closest?.('.searchbar') ? redraw() : draw()));
+  // In *this* screen's box, that is — so never before this screen has been
+  // drawn once. Reached with the cursor still in another screen's search box
+  // (Clientes, then the browser's Back), the first call found that box, drew
+  // only a list nobody could see, and left the other screen standing under
+  // this one's address.
+  let drawn = false;
+  return subscribe(() => {
+    if (drawn && document.activeElement?.closest?.('.searchbar')) { redraw(); return; }
+    drawn = true;
+    draw();
+  });
 }
 
 const unreadOf = (row) => Number(row.conversation?.unreadAdmin) || 0;
