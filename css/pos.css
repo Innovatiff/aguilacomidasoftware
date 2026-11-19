@@ -52,6 +52,8 @@
 
   position: fixed;
   inset: 0;
+  /* Down to the real edge of the screen — see `--vh-short` in base.css. */
+  bottom: calc(-1 * var(--vh-short, 0px));
   /*
    * Above the panel's own chrome (40–45), below the sheet scrim (60) and the
    * toasts (80). It used to sit exactly on the scrim and rely on which element

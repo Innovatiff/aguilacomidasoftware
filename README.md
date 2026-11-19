@@ -1113,7 +1113,7 @@ mientras se empaca. Si el periodo no tiene días empacados todavía (por ejemplo
 de que se empacara con el sistema, sale «—». La hoja impresa lo dice abajo
 de los números.
 
-### Versiones 83 y 84: repaso de diseño y correcciones
+### Versiones 83 a 85: repaso de diseño y correcciones
 
 Un repaso de todo el sistema, pantalla por pantalla, en computadora, tableta
 y teléfono. No cambia dónde está cada cosa: se ve más parejo y se corrigieron
@@ -1227,6 +1227,14 @@ guardaban si antes se había movido la caja de Estado; a quien le daban permiso
 de empacar después de teclear su número no le abría ninguna libreta; Mensajes
 no se dibujaba al volver con la flecha del navegador desde un buscador; y una
 tecla del teclado de dinero tocada justo después de «Siguiente» se perdía.
+
+La **85** es para el iPhone con el panel puesto en la pantalla de inicio:
+quedaba una franja vacía debajo de la barra de abajo. El teléfono le da a la
+página una altura a la que le falta lo que mide la barra de la hora; ahora se
+mide esa diferencia (`--vh-short`, ver `css/base.css` y el script al inicio de
+`index.html`) y el marco llega al borde. De paso, la barra de abajo dejó de ir
+«flotando» sobre la página: es el último renglón del marco, y el botón
+flotante ya no tapa la última fila de una lista.
 
 ### Español · English
 

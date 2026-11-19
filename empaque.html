@@ -49,6 +49,45 @@
   <link rel="stylesheet" href="./css/print.css">
 </head>
 <body data-mode="kitchen">
+  <script>
+    // En un iPhone, abierta desde la pantalla de inicio, la página se dibuja
+    // desde arriba del todo (debajo de la hora) pero recibe una altura a la que
+    // le falta justo esa franja: todo terminaba una barra de estado antes del
+    // borde y quedaba un hueco debajo de la barra de abajo. Aquí se mide cuánto
+    // falta y se le pasa a la hoja de estilos (--vh-short, ver css/base.css),
+    // que lo suma al alto del marco. En cualquier otro aparato es cero.
+    (function () {
+      var root = document.documentElement;
+      function measure() {
+        var short = 0;
+        try {
+          var alone = window.navigator.standalone === true
+            || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+          if (alone && /iPhone|iPod/.test(navigator.userAgent)) {
+            var probe = document.createElement('div');
+            probe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:100vh;height:100dvh;'
+              + 'padding-top:env(safe-area-inset-top);box-sizing:border-box;visibility:hidden;pointer-events:none';
+            document.body.appendChild(probe);
+            var given = probe.getBoundingClientRect().height;
+            var under = parseFloat(getComputedStyle(probe).paddingTop) || 0;
+            document.body.removeChild(probe);
+            var portrait = window.matchMedia('(orientation: portrait)').matches;
+            var whole = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
+            var gap = Math.round(whole - given);
+            // Sólo lo que mide una barra de estado, y sólo si la página va debajo de ella.
+            if (under > 0 && gap >= 16 && gap <= under + 4) short = gap;
+          }
+        } catch (e) { short = 0; }
+        root.style.setProperty('--vh-short', short + 'px');
+      }
+      measure();
+      window.addEventListener('resize', measure);
+      window.addEventListener('orientationchange', function () { setTimeout(measure, 300); });
+      window.addEventListener('pageshow', measure);
+      document.addEventListener('visibilitychange', measure);
+    })();
+  </script>
+
   <div id="app"></div>
 
   <noscript>

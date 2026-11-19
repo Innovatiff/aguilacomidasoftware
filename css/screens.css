@@ -5,7 +5,8 @@
 /* --- Auth ----------------------------------------------------------------- */
 
 .auth {
-  min-height: 100dvh;
+  min-height: 100vh;
+  min-height: calc(100dvh + var(--vh-short, 0px));
   display: flex; flex-direction: column;
   background: var(--bg);
 }
@@ -513,10 +514,11 @@
   padding-bottom: 0;
 }
 
-/* When chat is itself a tab, the composer has to clear the fixed tab bar —
-   otherwise it sits underneath it and the field cannot be reached. */
+/* When chat is itself a tab, the bottom bar comes right under the composer
+   and already keeps clear of the phone's home indicator: the composer does
+   not have to. */
 .page--chat.page--tabs .chat__composer {
-  padding-bottom: calc(var(--tabbar-h) + var(--safe-bottom) + var(--s2));
+  padding-bottom: var(--s2);
 }
 
 /* A cancelled payment stays on the record, struck through — removing it would

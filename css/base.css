@@ -44,7 +44,8 @@ img, svg { display: block; max-width: 100%; }
 #app {
   position: relative;
   max-width: var(--app-max);
-  min-height: 100dvh;
+  min-height: 100vh;
+  min-height: calc(100dvh + var(--vh-short, 0px));
   margin: 0 auto;
   background: var(--bg);
   display: flex;
@@ -54,7 +55,6 @@ img, svg { display: block; max-width: 100%; }
 
 @media (min-width: 560px) {
   body { background: var(--ink-100); }
-  #app { min-height: 100dvh; }
 }
 
 /* Once somebody is in, the frame is exactly one screen tall and the page
@@ -68,9 +68,18 @@ img, svg { display: block; max-width: 100%; }
    before it had been left. (`vh` first, for browsers that do not know `dvh`.) */
 #app.app--shell {
   height: 100vh;
-  height: 100dvh;
+  height: calc(100dvh + var(--vh-short, 0px));
   min-height: 0;
 }
+
+/* `--vh-short` is what the screen has and the page was not given.
+
+   An iPhone that opens this from its home screen draws the page from the very
+   top, under the clock — and then hands it a height that is short by exactly
+   that strip. Everything measured from the bottom of "the screen" stopped one
+   status bar above the real edge, with an empty band under the bottom bar.
+   A few lines in index.html measure the difference and write it here; on
+   every other device it is 0px and none of this changes anything. */
 
 /* A tablet in portrait is still a touch device — the bar belongs at the bottom,
    under a thumb — but a 520px column on a 800px screen is half a screen wasted.
@@ -145,9 +154,18 @@ img, svg { display: block; max-width: 100%; }
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   background: var(--bg-sunken);
-  padding-bottom: calc(var(--tabbar-h) + var(--safe-bottom) + var(--s6));
+  /* The bottom bar is the next thing in the frame, not something floating
+     over the page, so the page only needs air at its end — and, on a screen
+     with no bar, room for the phone's home indicator. */
+  padding-bottom: calc(var(--safe-bottom) + var(--s6));
 }
+.page--tabs { padding-bottom: var(--s6); }
 .page--flush { padding-bottom: 0; }
+/* With a floating button over it, the last row can be scrolled clear of the
+   button. (On a computer the button is in the top bar.) */
+@media (max-width: 899px) {
+  #app.app--fab .page:not(.page--flush) { padding-bottom: calc(52px + var(--s4) * 2); }
+}
 .page--sunken { background: var(--bg-sunken); }
 
 .page__inner { padding: var(--s4); }
@@ -155,14 +173,15 @@ img, svg { display: block; max-width: 100%; }
 
 /* --- Bottom tab bar ------------------------------------------------------- */
 
+/* The last row of the frame: top bar, page, this. It used to be pinned to the
+   bottom of the screen instead, over the page — which is the same place on
+   every device but one (see `--vh-short` above), and there the frame is the
+   only thing that knows where the bottom really is. */
 .tabbar {
-  position: fixed;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
+  position: relative;
+  flex: none;
   z-index: 45;
   width: 100%;
-  max-width: var(--app-max);
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: 1fr;

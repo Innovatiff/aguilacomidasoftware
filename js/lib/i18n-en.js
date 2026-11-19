@@ -2039,6 +2039,7 @@ export const EN = {
   "Días con pedido": "Meal days",
   "Ahora está {status}. Toca lo que cambia; si sigue igual, no hay nada que guardar.": "Currently {status}. Tap what changes; if nothing changes, there is nothing to save.",
   "Repaso de diseño y correcciones en todo el sistema": "Design pass and fixes across the whole system",
+  "En el iPhone, la barra de abajo llega al borde": "On iPhone, the bottom bar reaches the edge",
 };
 
 /** Sentences the panel wrote to the database earlier, with their variable parts. */
