@@ -24,12 +24,13 @@
 
 import { getDocs, query, where, collection, db, listData } from '../firebase.js';
 import { issueInvoice } from './invoices.js';
-import { servingSince, onPlanOn } from './clients.js';
+import { servingSince, onPlanOn, chargeOf, statusDoubt } from './clients.js';
 import {
-  periodOf, periodOfIndex, invoiceId, isCovered, isPayable, paidThroughOn,
+  periodOf, periodOfIndex, invoiceId, isCovered, isPayable, paidThroughOn, unbilledPart,
+  isCharge, paymentsOf, balanceOf,
 } from '../lib/billing.js';
 import { periodCharge } from '../lib/pricing.js';
-import { today } from '../lib/dates.js';
+import { today, addDays } from '../lib/dates.js';
 import { t } from '../lib/i18n.js';
 
 /** How many closed periods back to look. Beyond this it is history, not a task. */
@@ -57,9 +58,11 @@ const LOOK_BACK = 4;
  * for a few days of it would be wrong. If the kitchen is owed for those days,
  * that is a deuda a mano with the real number on it.
  *
- * Returns `{ rows, total, periods, unpriced, skipped }` where a row is one
- * invoice waiting to be issued and `skipped` counts what was left out and why
- * — a scan that silently drops half its work reads as if it found nothing.
+ * Returns `{ rows, total, periods, unpriced, skipped, doubts }` where a row is
+ * one invoice waiting to be issued and `skipped` counts what was left out and
+ * why — a scan that silently drops half its work reads as if it found
+ * nothing. `doubts` are the people for whom what is billed hangs on a guess
+ * about their past (`doubtOf`).
  */
 export async function pendingBilling(clients, pricing, day = today()) {
   /*
@@ -82,86 +85,49 @@ export async function pendingBilling(clients, pricing, day = today()) {
     || (Array.isArray(client.statusLog) && client.statusLog.length));
   if (!billable.length) return empty();
 
-  // Group by the period, not the client: everybody on the same anchor shares
-  // one date range, and a range costs one read however many people are in it.
-  const periods = new Map();
-  for (const client of billable) {
+  // Each of them, with the periods of theirs that have closed. A weekly payer
+  // and a fortnightly one can start on the same day and still end on
+  // different ones: each keeps the periods that are theirs.
+  const people = billable.map((client) => {
     const current = periodOf(client, day).index;
-    for (let back = 1; back <= LOOK_BACK; back += 1) {
-      const period = periodOfIndex(client, current - back);
-      // A weekly payer and a fortnightly one can start on the same day and
-      // still end on different ones: each keeps the period that is theirs.
-      const key = `${period.start}|${period.end}`;
-      if (!periods.has(key)) periods.set(key, { period, clients: [] });
-      periods.get(key).clients.push(client);
-    }
-  }
+    const closed = [];
+    for (let back = 1; back <= LOOK_BACK; back += 1) closed.push(periodOfIndex(client, current - back));
+    return { client, closed };
+  });
+
+  /*
+   * One read for all of it, rather than one for each period.
+   *
+   * Three hundred people spread over two collection days and two cadences make
+   * dozens of distinct period starts. Asking for each was a round trip apiece
+   * — and it could only answer "is there a bill that starts on this day?",
+   * which is the wrong question for somebody whose pay day has moved: their
+   * new periods lie across bills cut from the old dates, and were billed
+   * again. So every bill that touches the window is read once, and each
+   * period is checked against the days its owner has already been billed for
+   * (`unbilledPart`). A bill is at most a fortnight long, so one that starts
+   * up to thirteen days before the window still reaches into it.
+   */
+  const every = people.flatMap((one) => one.closed);
+  const from = every.reduce((min, period) => (period.start < min ? period.start : min), every[0].start);
+  const to = every.reduce((max, period) => (period.end > max ? period.end : max), every[0].end);
+  const billed = await billsBetween(addDays(from, -13), to);
 
   const rows = [];
   const unpriced = [];
   const skipped = { paid: 0, notYet: 0, ended: 0, off: 0 };
+  const doubts = [];
 
-  /*
-   * Every period's read at once, rather than one after another.
-   *
-   * Three hundred people spread over two collection days and two cadences make
-   * dozens of distinct period starts, and each one is a round trip. Waiting for
-   * each before asking the next turned an open of the roster into several
-   * seconds of scanning — long enough that the answer routinely arrived after
-   * the manager had already tapped somebody. Asked together, it is one wait.
-   */
-  const groups = [...periods.values()];
-  const reads = new Map();
-  const readOnce = (start) => {
-    if (!reads.has(start)) reads.set(start, issuedIn(start));
-    return reads.get(start);
-  };
-  const issuedBy = await Promise.all(groups.map(({ period }) => readOnce(period.start)));
-
-  for (let i = 0; i < groups.length; i += 1) {
-    const { period, clients: group } = groups[i];
-    const issued = issuedBy[i];
-
-    for (const client of group) {
-      if (issued.has(invoiceId(client.id, period.start))) continue;
-
-      // Paused, or not coming any more, when it began: a fortnight like that
-      // they did not eat — the same "on the first day" rule as when they
-      // started and when they stopped.
-      if (!onPlanOn(client, period.start)) {
-        skipped.off += 1;
-        continue;
-      }
-
-      // Covered by what they have paid: `paidThrough` is the last day paid
-      // for, so a fortnight is covered when it ends by then. The same test
-      // `owedSince` and the counter use, so the cuaderno, this scan and a
-      // payment can never disagree about which fortnight is paid.
-      if (isCovered(period, client.paidThrough)) {
-        skipped.paid += 1;
-        continue;
-      }
-
-      // Closed before they were a client, or already running when they
-      // started. Not theirs either way.
-      const since = servingSince(client);
-      if (since && period.start < since) {
-        skipped.notYet += 1;
-        continue;
-      }
-
-      // Begun after the day they stopped eating here. The kitchen wrote that
-      // date down precisely so nobody would be charged past it.
-      if (client.endsOn && period.start > client.endsOn) {
-        skipped.ended += 1;
-        continue;
-      }
-
-      const charge = periodCharge(client, pricing);
-      if (!charge.priced) { unpriced.push(client); continue; }
-
-      rows.push({ client, period, meals: charge.meals, charge, amount: charge.amount });
+  for (const { client, closed } of people) {
+    const mine = billed.get(client.id) || [];
+    for (const whole of closed) {
+      const got = billFor(client, whole, mine, pricing);
+      if (got?.row) rows.push(got.row);
+      else if (got?.unpriced) unpriced.push(client);
+      else if (got?.skip) skipped[got.skip] += 1;
     }
+    const doubt = doubtOf(client, closed, mine, pricing);
+    if (doubt) doubts.push(doubt);
   }
 
   rows.sort((a, b) => a.period.start.localeCompare(b.period.start)
@@ -174,7 +140,135 @@ export async function pendingBilling(clients, pricing, day = today()) {
     periods: new Set(rows.map((row) => row.period.start)).size,
     unpriced: dedupe(unpriced),
     skipped,
+    doubts,
   };
+}
+
+/**
+ * One closed period of one person: the bill it is waiting for, or why it gets
+ * none — `{ row }`, `{ skip: 'off' | 'paid' | 'notYet' | 'ended' }`,
+ * `{ unpriced: true }`, or null when it is billed already.
+ */
+function billFor(client, whole, mine, pricing) {
+  // What is left of it to bill: all of it, nearly always. One week of it
+  // after a change between weeks and fortnights; none when a pay day that
+  // moved laid it over a bill the old dates already wrote.
+  const period = isCovered(whole, client.paidThrough)
+    ? whole
+    : unbilledPart(whole, mine, client.paidThrough);
+  if (!period) return null;
+  if (mine.some((bill) => bill.id === invoiceId(client.id, period.start))) return null;
+
+  // Paused, or not coming any more, when it began: a fortnight like that
+  // they did not eat — the same "on the first day" rule as when they
+  // started and when they stopped.
+  if (!onPlanOn(client, period.start)) return { skip: 'off' };
+
+  // Covered by what they have paid: `paidThrough` is the last day paid
+  // for, so a fortnight is covered when it ends by then. The same test
+  // `owedSince` and the counter use, so the cuaderno, this scan and a
+  // payment can never disagree about which fortnight is paid.
+  if (isCovered(period, client.paidThrough)) return { skip: 'paid' };
+
+  // Closed before they were a client, or already running when they
+  // started. Not theirs either way.
+  const since = servingSince(client);
+  if (since && period.start < since) return { skip: 'notYet' };
+
+  // Begun after the day they stopped eating here. The kitchen wrote that
+  // date down precisely so nobody would be charged past it.
+  if (client.endsOn && period.start > client.endsOn) return { skip: 'ended' };
+
+  // With the plan they had while they ate it, not the one they have
+  // today: a fortnight of one meal a day is not billed at two because the
+  // plan changed the morning after it closed.
+  const { as, charge } = chargeOf(client, period, pricing);
+  if (!charge.priced) return { unpriced: true };
+
+  return { row: { client: as, period, meals: charge.meals, charge, amount: charge.amount } };
+}
+
+/**
+ * What a guess about somebody's past is doing to their bills — or null when
+ * there is no guess, or it changes nothing.
+ *
+ * For the first change of status on a record written before changes said what
+ * the person was until then, the system assumes the opposite (`statusDoubt`).
+ * Here that assumption is turned round and the two answers compared, with the
+ * bills in hand:
+ *
+ *   left     taken for a pause: fortnights that would be billed had they been
+ *            active
+ *   jumped   the same, but a later fortnight was paid since, so "paid up to"
+ *            went past them and they will never come up by themselves — a
+ *            fortnight eaten that nobody was asked for
+ *   offered  taken for active: fortnights being proposed that would not be
+ *            had they been in pause
+ *   unpaid   bills already written for fortnights from before that day, with
+ *            nothing paid on them
+ *
+ * Somebody taken for active who was plainly paying until then is no doubt.
+ */
+function doubtOf(client, closed, mine, pricing) {
+  const doubt = statusDoubt(client);
+  if (!doubt) return null;
+  const { entry, guess } = doubt;
+  const same = (one) => one?.on === entry.on && one?.status === entry.status
+    && (one?.at || 0) === (entry.at || 0) && (one?.tag || '') === (entry.tag || '');
+  const flipped = {
+    ...client,
+    statusLog: client.statusLog.map((one) => (same(one)
+      ? { ...one, was: guess === 'paused' ? 'active' : 'paused' } : one)),
+  };
+  // Oldest first, the way they are read out.
+  const before = closed.filter((whole) => whole.start < entry.on)
+    .sort((x, y) => x.start.localeCompare(y.start));
+  const rowOf = (who, whole) => billFor(who, whole, mine, pricing)?.row || null;
+  const periodBills = mine.filter((bill) => !isCharge(bill) && bill.periodStart && bill.periodEnd);
+  const out = { client, entry, guess, left: [], jumped: [], offered: [], unpaid: [] };
+
+  if (guess === 'paused') {
+    const since = servingSince(client);
+    for (const whole of before) {
+      const row = rowOf(flipped, whole);
+      if (row && !rowOf(client, whole)) { out.left.push(row); continue; }
+      // Never billed, counted as paid only because something later was: the
+      // one running on the day of the change, or a hole between two paid
+      // bills. (A fortnight from before that, with nothing after it paid, may
+      // be covered by what the notebook said, and is left alone.)
+      if (!isCovered(whole, client.paidThrough)) continue;
+      if (onPlanOn(client, whole.start) || !onPlanOn(flipped, whole.start)) continue;
+      if (since && whole.start < since) continue;
+      if (client.endsOn && whole.start > client.endsOn) continue;
+      if (periodBills.some((bill) => bill.periodStart <= whole.end && bill.periodEnd >= whole.start)) continue;
+      const paidAfter = periodBills.some((bill) => bill.periodStart > whole.end && Number(bill.paid) > 0.005);
+      const paidBefore = periodBills.some((bill) => bill.periodEnd < whole.start && Number(bill.paid) > 0.005);
+      if (!paidAfter || !(whole.end >= entry.on || paidBefore)) continue;
+      const priced = chargeOf(client, whole, pricing);
+      if (!priced.charge.priced || !(priced.charge.amount > 0)) continue;
+      out.jumped.push({
+        client: priced.as, period: whole, meals: priced.charge.meals, charge: priced.charge, amount: priced.charge.amount,
+      });
+    }
+    return out.left.length || out.jumped.length ? out : null;
+  }
+
+  // Taken for active. Paying in the weeks before it is as good as an answer.
+  const recent = addDays(entry.on, -45);
+  const paying = (client.paidThrough && client.paidThrough >= recent)
+    || periodBills.some((bill) => bill.periodEnd >= recent && paymentsOf(bill).some(
+      (payment) => String(payment.date || '') < entry.on && String(payment.date || '') >= recent));
+  if (paying) return null;
+  for (const whole of before) {
+    const row = rowOf(client, whole);
+    if (row && !rowOf(flipped, whole)) out.offered.push(row);
+  }
+  out.unpaid = periodBills
+    .filter((bill) => bill.periodStart < entry.on && !bill.notebookPaid
+      && balanceOf(bill) > 0.005 && !(Number(bill.paid) > 0.005))
+    .map((bill) => ({ start: bill.periodStart, end: bill.periodEnd, amount: balanceOf(bill) }))
+    .sort((x, y) => x.start.localeCompare(y.start));
+  return out.offered.length || out.unpaid.length ? out : null;
 }
 
 /** Issues every row, returning how many bills were written. */
@@ -236,13 +330,16 @@ export function owedSince(client, lastPaidOn, pricing, day = today()) {
     const period = periodOfIndex(client, index);
     // Still being served: not owed yet.
     if (!isPayable(period, client, day)) continue;
+    // Each with the plan they had in it, like every other bill (`chargeOf`).
+    const then = chargeOf(client, period, pricing);
     periods.push({
       ...period,
       id: invoiceId(client.id, period.start),
       closed: true,
       owed: true,
-      amount,
-      charge,
+      amount: then.charge.amount,
+      charge: then.charge,
+      as: then.as,
     });
   }
 
@@ -250,26 +347,57 @@ export function owedSince(client, lastPaidOn, pricing, day = today()) {
     periods,
     amount,
     charge,
-    total: round2(periods.filter((p) => p.owed).length * amount),
+    total: round2(periods.filter((p) => p.owed).reduce((sum, p) => sum + p.amount, 0)),
     paidThrough,
   };
 }
 
 /**
- * Writes the opening balance: one bill per fortnight the kitchen ticked.
+ * What ticking and unticking that list comes to.
+ *
+ * A fortnight left ticked is owed: it gets a bill. One unticked was paid in
+ * the notebook — "esa sí la pagó, en efectivo, y nunca se anotó" — and that
+ * has to be written down too, or nothing says so: the fortnight has no bill
+ * and is not covered by "paid up to", which is exactly what an unbilled
+ * fortnight looks like, and the next scan charged it.
+ *
+ * So the unticked ones at the front simply move "paid up to" forward — the
+ * last payment reached further than the date typed — and one unticked after a
+ * fortnight that is owed is kept as a mark of its own: a bill of $0, settled.
+ *
+ * @param {{ periods: object[], paidThrough: string|null }} found  as `owedSince` gives it
+ * @returns {{ owed: object[], settled: object[], paidThrough: string|null }}
+ */
+export function notebookOutcome(found) {
+  let paidThrough = found?.paidThrough || null;
+  const owed = [];
+  const settled = [];
+  for (const period of found?.periods || []) {
+    if (period.owed) owed.push(period);
+    else if (!owed.length) paidThrough = period.end;
+    else settled.push(period);
+  }
+  return { owed, settled, paidThrough };
+}
+
+/**
+ * Writes the opening balance: one bill per fortnight the kitchen ticked, and
+ * a mark for each one it unticked in between (see `notebookOutcome`).
  *
  * They are marked `fromNotebook` so a year from now it is obvious these were
  * carried over rather than produced by a delivery run — the meals behind them
  * were served before this software existed and were never recorded.
+ *
+ * @returns {Promise<number>} how many bills with money on them were written
  */
 export async function openBalance(client, periods, author) {
-  const chosen = periods.filter((period) => period.owed);
+  const { owed, settled } = notebookOutcome({ periods });
   let issued = 0;
 
-  for (const period of chosen) {
+  for (const period of owed) {
     const bill = await issueInvoice(
-      client,
-      { index: period.index, start: period.start, end: period.end },
+      period.as || client,
+      { index: period.index, start: period.start, end: period.end, every: period.every },
       period.charge || period.amount,
       0,
       author,
@@ -277,22 +405,42 @@ export async function openBalance(client, periods, author) {
     );
     if (!bill.existed) issued += 1;
   }
+  for (const period of settled) {
+    await issueInvoice(
+      period.as || client,
+      { index: period.index, start: period.start, end: period.end, every: period.every },
+      0,
+      0,
+      author,
+      { fromNotebook: true, notebookPaid: true },
+    );
+  }
   return issued;
 }
 
 /* --- Internals -------------------------------------------------------------- */
 
-/** The invoice ids that already exist for one period start. */
-async function issuedIn(periodStart) {
+/**
+ * Every bill whose period starts between two days, grouped by client.
+ *
+ * A range on one field, which Firestore indexes by itself.
+ */
+async function billsBetween(from, to) {
   const snap = await getDocs(query(
-    collection(db, 'invoices'), where('periodStart', '==', periodStart),
+    collection(db, 'invoices'), where('periodStart', '>=', from), where('periodStart', '<=', to),
   ));
-  return new Set(listData(snap).map((invoice) => invoice.id));
+  const byClient = new Map();
+  for (const bill of listData(snap)) {
+    if (!byClient.has(bill.clientId)) byClient.set(bill.clientId, []);
+    byClient.get(bill.clientId).push(bill);
+  }
+  return byClient;
 }
 
 const empty = () => ({
   rows: [], total: 0, periods: 0, unpriced: [],
   skipped: { paid: 0, notYet: 0, ended: 0, off: 0 },
+  doubts: [],
 });
 
 const dedupe = (clients) => [...new Map(clients.map((c) => [c.id, c])).values()];

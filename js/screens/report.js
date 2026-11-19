@@ -41,7 +41,9 @@ import { reportSheet, listSheet, commentsSheet, libretaSheet } from '../ui/repor
 import { printSheet } from '../ui/print.js';
 import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
-import { store, subscribe, activeClients, isReady, farmById } from '../data/store.js';
+import {
+  store, subscribe, activeClients, isReady, farmById, owedInvoices,
+} from '../data/store.js';
 import { servingStatus } from '../data/clients.js';
 import { findLocation } from '../data/farms.js';
 import { getPacking } from '../data/packing.js';
@@ -154,6 +156,7 @@ function periodView(context, paint, state = {}, { movements = false } = {}) {
       invoices: now.invoices,
       clients: store.clients,
       outstanding: store.outstanding,
+      owed: owedInvoices(),
       buckets: bucketsOf(range),
       serving: activeClients(),
       runs: docs.runs,

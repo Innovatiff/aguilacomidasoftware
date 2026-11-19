@@ -16,14 +16,15 @@
 import {
   db, doc, collection, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot,
   query, where, orderBy, limit as qLimit, serverTimestamp, runTransaction,
-  docData, listData,
+  docData, listData, toDate,
 } from '../firebase.js';
-import { logMovement } from './movements.js';
+import { logMovement, logClientChanges } from './movements.js';
 import { folioFor } from './receipts.js';
 import {
   invoiceId, draftInvoice, draftCharge, chargeIdFor, isCharge, invoiceTitle,
   balanceOf, invoiceStatus, round2, periodOf, periodOfIndex, cycleFromPayment,
-  isPayable, isCovered, payDayAfter, periodWord, paymentsOf,
+  isPayable, isOwed, isCovered, payDayAfter, periodWord, paymentsOf, unbilledPart, dueOf,
+  JOIN_GRACE, payingPeriod,
 } from '../lib/billing.js';
 import { periodCharge } from '../lib/pricing.js';
 import {
@@ -31,7 +32,7 @@ import {
 } from '../lib/dates.js';
 import { money } from '../lib/format.js';
 import { t, inSpanish } from '../lib/i18n.js';
-import { servingSince, onPlanOn } from './clients.js';
+import { servingSince, onPlanOn, chargeOf } from './clients.js';
 
 /**
  * How many periods back a payment looks for food served and never billed —
@@ -46,14 +47,6 @@ const LOOK_BACK = 4;
  * turned away.
  */
 const MAX_AHEAD = 26;
-
-/**
- * How many days into a fortnight somebody can have started and still pay it
- * whole with their first payment: Wednesday and Saturday are never more than
- * three days apart going back, so this is as far as the collection day before
- * their first day can be.
- */
-const JOIN_GRACE = 3;
 
 const invoicesRef = () => collection(db, 'invoices');
 
@@ -79,7 +72,9 @@ export function watchClientInvoices(clientId, onData, onError, count = 24) {
 export function watchOutstanding(onData, onError) {
   return onSnapshot(
     query(invoicesRef(), where('settled', '==', false)),
-    (snap) => onData(listData(snap).sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)))),
+    // One with no deadline of its own goes last.
+    (snap) => onData(listData(snap)
+      .sort((a, b) => String(dueOf(a) || '9999').localeCompare(String(dueOf(b) || '9999')))),
     onError,
   );
 }
@@ -95,7 +90,7 @@ export function watchOutstanding(onData, onError) {
 export function watchSettled(onData, onError, count = 40) {
   return onSnapshot(
     query(invoicesRef(), orderBy('paidAt', 'desc'), qLimit(count)),
-    (snap) => onData(listData(snap).filter((invoice) => invoice.settled)),
+    (snap) => onData(listData(snap).filter((invoice) => invoice.settled && !invoice.notebookPaid)),
     onError,
   );
 }
@@ -159,7 +154,11 @@ export async function issueInvoice(client, period, charge, meals, author, extra 
       issuedByName: author?.name || '',
       updatedAt: serverTimestamp(),
     };
-    if (record.settled) record.paidAt = serverTimestamp();
+    // Nothing to collect: it is not waiting for anybody.
+    if (record.settled) record.status = 'paid';
+    // A fortnight marked as paid in the notebook was not paid today, and does
+    // not belong at the top of "Pagadas" as if it had been.
+    if (record.settled && !draft.notebookPaid) record.paidAt = serverTimestamp();
 
     tx.set(ref, record);
     return { id, ...record };
@@ -296,6 +295,9 @@ function correction(data, next, note, author) {
 
   if (settled && !data.paidAt) record.paidAt = serverTimestamp();
   if (!settled) record.paidAt = null;
+  // A fortnight marked "ya pagada en el cuaderno" that is given an amount is
+  // a bill like any other from then on: it no longer says it was paid.
+  if (data.notebookPaid && next > 0.005) record.notebookPaid = false;
   return record;
 }
 
@@ -305,9 +307,7 @@ function correction(data, next, note, author) {
  * balance on screen uses, so a correction moves exactly the number shown.
  */
 export function owedBills(bills, client, day = today()) {
-  return (bills || []).filter((bill) => balanceOf(bill) > 0.005
-    && (isCharge(bill)
-      || isPayable({ start: bill.periodStart, end: bill.periodEnd }, client, day)));
+  return (bills || []).filter((bill) => balanceOf(bill) > 0.005 && isOwed(bill, client, day));
 }
 
 /**
@@ -521,8 +521,9 @@ export function payableRows(payer, bills, pricing, { day = today(), setCycle = f
   for (const bill of bills) {
     const owed = balanceOf(bill);
     if (owed <= 0.005) continue;
-    if (!isCharge(bill)
-      && !isPayable({ start: bill.periodStart, end: bill.periodEnd }, payer, day)) continue;
+    // Not one for a fortnight still running, and not one that began after
+    // their last day (`isOwed`): neither is a debt.
+    if (!isOwed(bill, payer, day)) continue;
     rows.push({
       id: bill.id,
       title: invoiceTitle(bill),
@@ -539,37 +540,50 @@ export function payableRows(payer, bills, pricing, { day = today(), setCycle = f
   // with them paused they did not eat: what they pay goes to the bills they do
   // have, and the rest waits on the receipt.
   const charge = periodCharge(payer, pricing);
-  if (charge.priced && charge.amount > 0) {
-    const known = new Set(bills.map((bill) => bill.id));
-    const since = servingSince(payer);
-    const current = periodOf(payer, day);
-    let latest = true;
-    for (let back = 0; back <= LOOK_BACK; back += 1) {
-      const period = periodOfIndex(payer, current.index - back);
-      if (!isPayable(period, payer, day)) continue;
-      // The exception below is for the fortnight that just ended, and only
-      // that one: an older one they joined two days before its end is not
-      // theirs, whichever payment it is.
-      const justEnded = latest;
-      latest = false;
-      const id = invoiceId(payer.id, period.start);
-      if (known.has(id)) continue;
-      if (!onPlanOn(payer, period.start)) continue;
-      if (isCovered(period, payer.paidThrough)) continue;
-      if (payer.endsOn && period.start > payer.endsOn) continue;
-      if (since && period.start < since
-        && !(setCycle && justEnded && daysBetween(period.start, since) <= JOIN_GRACE)) continue;
-      rows.push({
-        id,
-        title: formatRange(period.start, period.end),
-        periodStart: period.start,
-        periodEnd: period.end,
-        owed: round2(charge.amount),
-        existing: false,
-        kind: 'period',
-        period,
-      });
-    }
+  const known = new Set(bills.map((bill) => bill.id));
+  const since = servingSince(payer);
+  const current = periodOf(payer, day);
+  let latest = true;
+  for (let back = 0; back <= LOOK_BACK; back += 1) {
+    const whole = periodOfIndex(payer, current.index - back);
+    if (!isPayable(whole, payer, day)) continue;
+    // The exception below is for the fortnight that just ended, and only
+    // that one: an older one they joined two days before its end is not
+    // theirs, whichever payment it is.
+    const justEnded = latest;
+    latest = false;
+    // What of it is left to bill. All of it, nearly always; one week of it
+    // after a change between weeks and fortnights; nothing when a pay day
+    // that moved laid it over a bill the old dates already wrote. Asking
+    // only "is there a bill with this start?" charged those days twice — and
+    // took a fortnight for billed when it began on the same day as a week
+    // already paid, so its second week was never charged.
+    const period = isCovered(whole, payer.paidThrough)
+      ? null
+      : unbilledPart(whole, bills, payer.paidThrough);
+    if (!period) continue;
+    const id = invoiceId(payer.id, period.start);
+    if (known.has(id)) continue;
+    if (!onPlanOn(payer, period.start)) continue;
+    if (payer.endsOn && period.start > payer.endsOn) continue;
+    if (since && period.start < since
+      && !(setCycle && justEnded && daysBetween(period.start, since) <= JOIN_GRACE)) continue;
+    // Priced with the plan they had while they ate it (`chargeOf`), which is
+    // not always the one they have the day they come to pay it.
+    const priced = chargeOf(payer, period, pricing);
+    if (!priced.charge.priced || !(priced.charge.amount > 0)) continue;
+    rows.push({
+      id,
+      title: formatRange(period.start, period.end),
+      periodStart: period.start,
+      periodEnd: period.end,
+      owed: round2(priced.charge.amount),
+      existing: false,
+      kind: 'period',
+      period,
+      charge: priced.charge,
+      as: priced.as,
+    });
   }
 
   // Oldest first: the id of a bill ends in its date, so it breaks a tie the
@@ -603,19 +617,35 @@ export function aheadRows(payer, bills, pricing, { day = today(), amount = 0 } =
   const rows = [];
   let left = round2(amount);
 
+  // Bills already written for food not served yet, with something still to
+  // pay on them — whatever dates they were cut with. They are found by the
+  // days they cover, not by their id: a week billed while somebody paid by the
+  // week has the id of the fortnight that starts the same day and is not that
+  // fortnight. Asked for by id, it was either paid twice in one go, or passed
+  // over while new money went to the fortnights after it.
+  const waiting = (bills || [])
+    .filter((bill) => !isCharge(bill) && bill.periodStart && bill.periodEnd
+      && balanceOf(bill) > 0.005
+      && !isPayable({ start: bill.periodStart, end: bill.periodEnd }, payer, day)
+      && !(payer.endsOn && bill.periodStart > payer.endsOn))
+    .sort((a, b) => String(a.periodStart).localeCompare(String(b.periodStart)));
+  const taken = new Set();
+
+  const since = servingSince(payer);
   for (let i = 0; i < MAX_AHEAD && left > 0.005; i += 1) {
     const period = periodOfIndex(payer, first.index + i);
     // Already among what is owed: their service ended inside it.
     if (isPayable(period, payer, day)) continue;
     if (payer.endsOn && period.start > payer.endsOn) break;
 
-    const id = invoiceId(payer.id, period.start);
-    const bill = byId.get(id);
-    if (bill) {
+    // What is already billed over these days comes first.
+    for (const bill of waiting) {
+      if (left <= 0.005) break;
+      if (taken.has(bill.id) || bill.periodStart > period.end || bill.periodEnd < period.start) continue;
+      taken.add(bill.id);
       const owed = balanceOf(bill);
-      if (owed <= 0.005) continue;
       rows.push({
-        id,
+        id: bill.id,
         title: invoiceTitle(bill),
         periodStart: bill.periodStart,
         periodEnd: bill.periodEnd,
@@ -625,21 +655,39 @@ export function aheadRows(payer, bills, pricing, { day = today(), amount = 0 } =
         ahead: true,
       });
       left = round2(left - owed);
-    } else {
-      if (!beingServed(payer) || !(charge.priced && charge.amount > 0)) break;
-      rows.push({
-        id,
-        title: formatRange(period.start, period.end),
-        periodStart: period.start,
-        periodEnd: period.end,
-        owed: round2(charge.amount),
-        existing: false,
-        kind: 'period',
-        period,
-        ahead: true,
-      });
-      left = round2(left - charge.amount);
     }
+    if (left <= 0.005) break;
+
+    // Then what of the period nobody has billed: all of it, one week of it
+    // after a change between weeks and fortnights, or nothing when it lies
+    // across a bill cut from other dates.
+    const part = unbilledPart(period, bills, payer.paidThrough);
+    if (!part) continue;
+    // Already running when they started: not charged to them (`paysPeriod`),
+    // so their money does not wait on it either — it goes to the first
+    // fortnight that is theirs, which is the one every screen tells them.
+    if (since && part.start < since) continue;
+    if (!beingServed(payer) || !(charge.priced && charge.amount > 0)) break;
+    const partId = invoiceId(payer.id, part.start);
+    if (byId.has(partId)) continue;
+    const priced = part === period
+      ? { as: payer, charge }
+      : { as: { ...payer, payEvery: part.every }, charge: periodCharge({ ...payer, payEvery: part.every }, pricing) };
+    if (!(priced.charge.amount > 0)) continue;
+    rows.push({
+      id: partId,
+      title: formatRange(part.start, part.end),
+      periodStart: part.start,
+      periodEnd: part.end,
+      owed: round2(priced.charge.amount),
+      existing: false,
+      kind: 'period',
+      period: part,
+      charge: priced.charge,
+      as: priced.as,
+      ahead: true,
+    });
+    left = round2(left - priced.charge.amount);
   }
   return rows;
 }
@@ -655,13 +703,19 @@ export function aheadRows(payer, bills, pricing, { day = today(), amount = 0 } =
  */
 export function nothingOwedYet(client, day = today()) {
   const running = periodOf(client, day);
-  const payDay = payDayAfter(running);
-  return t('Está al corriente con lo ya servido. Lo que pague hoy queda para su {period} en curso ({range}), la que se paga el {weekday} {day}.', {
+  // The one their money waits on (`aheadRows`): the one being served, unless
+  // they started with it already under way — that one is not charged to them.
+  const paying = payingPeriod(client, servingSince(client), day);
+  const payDay = payDayAfter(paying);
+  const said = {
     period: t(periodWord(client)),
-    range: formatRange(running.start, running.end),
+    range: formatRange(paying.start, paying.end),
     weekday: weekdayName(payDay),
     day: formatDay(payDay),
-  });
+  };
+  return paying.start === running.start
+    ? t('Está al corriente con lo ya servido. Lo que pague hoy queda para su {period} en curso ({range}), la que se paga el {weekday} {day}.', said)
+    : t('No debe nada: empezó con la {period} ya corriendo, y esa no se le cobra. Lo que pague hoy queda para su primera {period} completa ({range}), la que se paga el {weekday} {day}.', said);
 }
 
 /**
@@ -722,10 +776,13 @@ async function applyPayment({
     payer, anchor, bills, rows, total: owedNow, charge,
   } = await payableFor(client, pricing, { day, setCycle });
   const extra = round2(total - owedNow);
+  // Each bill once. Two rows for one bill would both be worked out from what
+  // it held before the payment, and the second would overwrite the first.
+  const listed = new Set();
   const targets = [
     ...rows,
     ...(extra > 0.005 ? aheadRows(payer, bills, pricing, { day, amount: extra }) : []),
-  ];
+  ].filter((row) => !listed.has(row.id) && listed.add(row.id));
 
   const clientRef = doc(db, 'clients', client.id);
 
@@ -741,19 +798,32 @@ async function applyPayment({
 
     let left = total;
     const applied = [];
+    // The bills that exist because of this payment. Written on the receipt so
+    // cancelling it can take back all it did, not only the money (see
+    // `voidReceipt`).
+    const created = [];
     let balanceAfter = 0;
     // The last day of food this payment leaves paid for. Stamped on the client
     // so the roster can answer "is this one up to date?" by reading one field,
     // instead of every screen re-deriving it from the invoice history.
     let paidThrough = client.paidThrough || null;
+    // The end of a fortnight settled while its dates were still running —
+    // their last one, paid on or after their last day. See `final` below.
+    let finalPaid = null;
 
     for (const row of read) {
+      // Each fortnight with its own price and its own plan — the one they
+      // were on while they ate it (see `chargeOf`).
+      const rowCharge = row.charge || charge;
       const draft = row.data
         || (row.period
           // With the meals the plan gives that period, as the billing scan
           // writes them. A bill written here said 0 — «Comidas de la quincena
           // 0» on the invoice, and that many fewer in the reports.
-          ? { ...draftInvoice(payer, row.period, charge, Number(charge?.meals) || 0), issuedByName: author?.name || '' }
+          ? {
+            ...draftInvoice(row.as || payer, row.period, rowCharge, Number(rowCharge?.meals) || 0),
+            issuedByName: author?.name || '',
+          }
           : null);
       if (!draft) continue;
 
@@ -768,6 +838,14 @@ async function applyPayment({
         left = round2(left - take);
         const paid = round2((Number(draft.paid) || 0) + take);
         const settled = paid >= (Number(draft.amount) || 0) - 0.005;
+        // Owed today although its dates have not run out: the last fortnight
+        // of somebody who is leaving, paid from their last day on. Said on
+        // the payment, because the last day can be taken off afterwards —
+        // they stayed — and the payment then reads exactly like the old
+        // mistake of paying a fortnight before it was served. It was not:
+        // js/lib/advance.js leaves a payment marked like this where it is.
+        const final = !row.ahead && !isCharge(draft) && !!draft.periodEnd
+          && String(draft.periodEnd) > day;
         const entry = {
           amount: take,
           method: method || 'cash',
@@ -781,6 +859,7 @@ async function applyPayment({
           // Kept on a fortnight not served yet because nothing else was owed —
           // on purpose, not the old misplacement js/lib/advance.js looks for.
           ...(row.ahead ? { ahead: true } : {}),
+          ...(final ? { final: true } : {}),
         };
 
         const record = {
@@ -794,6 +873,7 @@ async function applyPayment({
           ...(row.data ? {} : { issuedAt: serverTimestamp() }),
         };
         tx.set(row.ref, record, { merge: true });
+        if (!row.data) created.push(row.id);
 
         applied.push({
           invoiceId: row.id,
@@ -807,7 +887,9 @@ async function applyPayment({
           kind: record.kind || 'period',
           amount: take,
           ...(row.ahead ? { ahead: true } : {}),
+          ...(final ? { final: true } : {}),
         });
+        if (final && settled) finalPaid = record.periodEnd;
         // Only a fortnight of food already served moves "paid up to". Settling
         // a hand-written debt says nothing about which fortnights are covered,
         // and money waiting on a fortnight still running is not one paid for.
@@ -832,6 +914,7 @@ async function applyPayment({
             issuedAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           });
+          created.push(row.id);
         }
         balanceAfter = round2(balanceAfter + Math.max(0, owed));
       }
@@ -854,7 +937,14 @@ async function applyPayment({
       applied,
       ...(unapplied > 0.005 ? { unapplied } : {}),
       balanceAfter,
-      ...(setCycle ? { setCycleTo: anchor } : {}),
+      // How things stood before this payment, for the day it is cancelled: a
+      // receipt cannot be rewritten later, so it carries this from the start.
+      ...(created.length ? { created } : {}),
+      paidThroughWas: client.paidThrough || '',
+      ...(finalPaid ? { finalPaidWas: client.finalPaid || '' } : {}),
+      ...(setCycle
+        ? { setCycleTo: anchor, cycleWas: { anchor: client.cycleAnchor || '', setOn: client.cycleSetOn || '' } }
+        : {}),
       takenByName: author?.name || '',
       takenByUid: author?.uid || null,
       folio: folioFor(receiptRef.id, day),
@@ -865,6 +955,7 @@ async function applyPayment({
     // One write for whatever actually changed about this person.
     const patch = {};
     if (paidThrough && paidThrough !== (client.paidThrough || null)) patch.paidThrough = paidThrough;
+    if (finalPaid && finalPaid !== (client.finalPaid || null)) patch.finalPaid = finalPaid;
     if (setCycle) {
       patch.cycleAnchor = anchor;
       // The day the cycle was fixed, and from which payment. Its absence is
@@ -958,6 +1049,23 @@ async function landed(write, ms = 4000) {
  * has to keep saying what happened, and it is the only copy the client holds.
  * Instead a second, negative receipt is written against it, the way a cash book
  * is corrected. Both stay visible to both sides, and the two cancel out.
+ *
+ * **Cancelling takes back everything the payment did, not only the money.**
+ * Two things used to stay behind:
+ *
+ *   - the bills it wrote. $1,400 typed for $140 goes to the fortnights ahead,
+ *     a bill for each; cancelled, those nine bills stayed, unpaid, and each
+ *     became a debt the day its dates went by. A bill for food not served yet
+ *     with nothing left on it is nobody's debt, so it goes with the payment;
+ *   - the pay day it set. A payment taken with «fijar su quincena» moves the
+ *     person's cycle; cancelled, the cycle stayed moved. The receipt now
+ *     carries where the cycle was (`cycleWas`), and it goes back there —
+ *     unless somebody has moved it again, or has paid or been billed on it
+ *     since, in which case it is left alone and the screen says so
+ *     (`cycleKept`).
+ *
+ * And "paid up to" never falls below where it stood before this payment
+ * (`paidThroughWas`): what was paid before it still is.
  */
 export async function voidReceipt(receipt, author, { date = '', note = '' } = {}) {
   if (!receipt?.id) throw new Error(t('Ese recibo ya no existe.'));
@@ -974,14 +1082,46 @@ export async function voidReceipt(receipt, author, { date = '', note = '' } = {}
   // a part of it now. Money that was paid onto a fortnight before it had been
   // served is moved to the fortnight it was really for (js/data/advance.js),
   // and the receipt, which nobody may rewrite, still names the first one.
-  const holding = receipt.clientId
-    ? (await billsOf(receipt.clientId))
-      .filter((bill) => paymentsOf(bill).some((payment) => payment.receiptId === receipt.id))
-      .map((bill) => bill.id)
-    : [];
-  const targets = [...new Set([...(receipt.applied || []).map((row) => row.invoiceId), ...holding])];
+  const all = receipt.clientId ? await billsOf(receipt.clientId) : [];
+  const holding = all
+    .filter((bill) => paymentsOf(bill).some((payment) => payment.receiptId === receipt.id))
+    .map((bill) => bill.id);
+  const paidOn = [...new Set([...(receipt.applied || []).map((row) => row.invoiceId), ...holding])];
+  // And the ones it wrote without paying anything on them: fortnights already
+  // served that it billed as it went.
+  const created = Array.isArray(receipt.created) ? receipt.created : [];
+  const targets = [...new Set([...paidOn, ...created])];
+  // Somebody has paid since: the cycle this payment set is the one those
+  // payments were taken on, and it is not this cancellation's to move. Later
+  // by its day — or on the same day, by its moment; with no moment to compare,
+  // a payment of the same day counts as later, which only means the pay day
+  // is left for a person to look at.
+  const moment = (value) => toDate(value)?.getTime?.() || 0;
+  const mine = all.flatMap((bill) => paymentsOf(bill).filter((payment) => payment.receiptId === receipt.id));
+  // When this payment was taken: as its entries on the bills say, or — kept
+  // whole "a cuenta", with no bill holding any of it — as the receipt does.
+  const stamps = mine.map((payment) => moment(payment.at)).filter(Boolean);
+  const takenAt = stamps.length ? Math.min(...stamps) : (moment(receipt.at) || Infinity);
+  const paidSince = all.some((bill) => paymentsOf(bill).some((payment) => {
+    if (payment.receiptId === receipt.id) return false;
+    const day = String(payment.date || '');
+    if (day !== String(receipt.date || '')) return day > String(receipt.date || '');
+    const at = moment(payment.at);
+    return !at || !Number.isFinite(takenAt) || at >= takenAt;
+  }));
+  // …or billed since: a fortnight's bill written after this payment, and not
+  // by it, was cut on the dates it set. Those dates are in use — taking them
+  // back would leave that bill lying across two fortnights of the old ones.
+  // Both moments are the server's — the receipt's and the bill's — so a
+  // computer with its clock wrong does not change the answer; a receipt that
+  // has not reached the server yet has none, and then nothing counts as later.
+  const writtenAt = moment(receipt.at);
+  const billedSince = !!writtenAt && all.some((bill) => !isCharge(bill)
+    && !created.includes(bill.id) && !paidOn.includes(bill.id)
+    && moment(bill.issuedAt) > writtenAt);
+  const told = {};
 
-  return runTransaction(db, async (tx) => {
+  const result = await runTransaction(db, async (tx) => {
     // Every read before any write — Firestore refuses the other order.
     if ((await tx.get(counterRef)).exists()) throw new Error(t('Este pago ya estaba cancelado.'));
     const clientSnap = clientRef ? await tx.get(clientRef) : null;
@@ -991,8 +1131,26 @@ export async function voidReceipt(receipt, author, { date = '', note = '' } = {}
       rows.push({ ref, snap: await tx.get(ref) });
     }
 
+    const person = clientSnap?.exists() ? { ...clientSnap.data(), id: receipt.clientId } : null;
+    const day = date || today();
+    // Whether the cycle this payment set goes back with it: only while their
+    // file still carries it exactly as this payment left it — the same day,
+    // stamped on the day of this payment — and nobody has paid on it, or
+    // been billed on it, since.
+    const was = receipt.cycleWas;
+    const setHere = !!receipt.setCycleTo && !!person && person.cycleAnchor === receipt.setCycleTo
+      && (person.cycleSetOn || '') === (receipt.date || '');
+    const undo = setHere && !!was && !paidSince && !billedSince;
+    // Whether the receipt carries how things stood before it.
+    const stamped = receipt.paidThroughWas !== undefined;
+    // …and whether that moves any date: a payment can "set" the cycle to the
+    // day it already had, and then only the mark that it was confirmed goes.
+    const uncycle = undo && !!was.anchor && was.anchor !== receipt.setCycleTo;
+
     let removed = 0;
+    let unfinal = false;
     const undone = [];
+    const gone = [];
     // The earliest fortnight that stops being settled: everything from there
     // on is open again, so that is where "paid up to" has to fall back to.
     let reopened = null;
@@ -1003,7 +1161,8 @@ export async function voidReceipt(receipt, author, { date = '', note = '' } = {}
 
       const kept = paymentsOf(data).filter((payment) => payment.receiptId !== receipt.id);
       const dropped = paymentsOf(data).filter((payment) => payment.receiptId === receipt.id);
-      if (!dropped.length) continue;
+      const wrote = created.includes(snap.id);
+      if (!dropped.length && !wrote) continue;
 
       const back = round2(dropped.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0));
       removed = round2(removed + back);
@@ -1011,14 +1170,38 @@ export async function voidReceipt(receipt, author, { date = '', note = '' } = {}
       const paid = round2(kept.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0));
       const settled = paid >= (Number(data.amount) || 0) - 0.005;
 
-      tx.update(ref, {
-        paid,
-        payments: kept,
-        settled,
-        status: settled ? 'paid' : 'due',
-        paidAt: settled ? data.paidAt || serverTimestamp() : null,
-        updatedAt: serverTimestamp(),
-      });
+      // Nothing left on it and nobody has touched it: a bill like that goes
+      // with the payment when it is for food not served yet — it is nobody's
+      // debt — or when this payment wrote it on a cycle that is being undone,
+      // and it sits on dates no fortnight of theirs will land on again.
+      const bare = !isCharge(data) && !kept.length && !data.fromNotebook
+        && !(Array.isArray(data.corrections) && data.corrections.length);
+      // A bill from before dates were kept on every one has no end to judge
+      // by: it is taken as served, and stays.
+      const served = !data.periodEnd
+        || isPayable({ start: data.periodStart, end: data.periodEnd }, person, today());
+      // A receipt that says what it wrote (from version 86 on) takes only
+      // those; an older one cannot say, so of the bills it paid, the ones for
+      // food not served yet go — nothing else here writes such a bill.
+      const leaves = bare && (stamped ? wrote && (!served || uncycle) : !served);
+      // Their last fortnight, settled as they left: the mark on their file
+      // goes with the payment that put it there.
+      if (dropped.some((payment) => payment.final) && person?.finalPaid === data.periodEnd) unfinal = true;
+
+      if (leaves) {
+        tx.delete(ref);
+        gone.push(snap.id);
+      } else if (dropped.length) {
+        tx.update(ref, {
+          paid,
+          payments: kept,
+          settled,
+          status: settled ? 'paid' : 'due',
+          paidAt: settled ? data.paidAt || serverTimestamp() : null,
+          updatedAt: serverTimestamp(),
+        });
+      }
+      if (!dropped.length) continue;
 
       undone.push({
         invoiceId: snap.id,
@@ -1031,7 +1214,7 @@ export async function voidReceipt(receipt, author, { date = '', note = '' } = {}
 
       // Same reasoning in reverse: reopening a hand-written debt does not
       // un-pay any fortnight, so it must not walk "paid up to" backwards.
-      if (!isCharge(data) && !settled && (!reopened || data.periodStart < reopened)) {
+      if (!isCharge(data) && (leaves || !settled) && (!reopened || data.periodStart < reopened)) {
         reopened = data.periodStart;
       }
     }
@@ -1039,18 +1222,41 @@ export async function voidReceipt(receipt, author, { date = '', note = '' } = {}
     // A receipt from the notebook settled no invoice, so there is nothing to
     // give back — but it still has to be cancellable, or a wrong figure typed
     // in during the migration is stuck on the record forever.
-    const historic = !targets.length;
+    const historic = !paidOn.length;
     if (!removed && !historic) throw new Error(t('Este pago ya estaba cancelado.'));
 
-    if (reopened && clientSnap?.exists()) {
-      const was = clientSnap.data().paidThrough || null;
-      const target = addDays(reopened, -1);
-      if (was && was > target) {
-        tx.update(clientRef, { paidThrough: target, updatedAt: serverTimestamp() });
+    const patch = {};
+    if (person) {
+      const stood = person.paidThrough || '';
+      let target = null;
+      if (uncycle || (stamped && !paidSince)) {
+        // Nobody has paid since, and the receipt says where "paid up to"
+        // stood before it: exactly there. Working it out from the first bill
+        // that reopens is a guess, and a wrong one when the cycle goes back
+        // with the payment — that bill was cut from the cycle being undone,
+        // the day before it is no boundary of the one they return to, and the
+        // returning fortnights then read as half paid: a week of food that
+        // was never asked for.
+        target = receipt.paidThroughWas || '';
+      } else if (reopened) {
+        const before = addDays(reopened, -1);
+        // Not below where it was before this payment: that much was paid already.
+        const floor = receipt.paidThroughWas || '';
+        target = floor && floor > before ? floor : before;
       }
+      // Only ever back, never forward.
+      if (target !== null && stood && stood > target) patch.paidThrough = target;
+      if (unfinal) patch.finalPaid = receipt.finalPaidWas || '';
     }
+    if (undo) {
+      if (uncycle) patch.cycleAnchor = was.anchor;
+      if ((person.cycleSetOn || '') !== (was.setOn || '')) patch.cycleSetOn = was.setOn || '';
+    }
+    if (clientRef && Object.keys(patch).length) {
+      tx.update(clientRef, { ...patch, updatedAt: serverTimestamp() });
+    }
+    Object.assign(told, { person, uncycle });
 
-    const day = date || today();
     const counter = {
       clientId: receipt.clientId,
       clientName: receipt.clientName || '',
@@ -1075,8 +1281,30 @@ export async function voidReceipt(receipt, author, { date = '', note = '' } = {}
     };
     tx.set(counterRef, counter);
 
-    return { id: counterRef.id, ...counter, undone };
+    return {
+      id: counterRef.id,
+      ...counter,
+      undone,
+      // For the screen: the bills that went with the payment, and what became
+      // of the pay day it had set.
+      removedBills: gone,
+      cycleRestored: uncycle,
+      // Set by this payment and still theirs, and not this cancellation's to
+      // move: somebody has paid or been billed on it since, or the receipt is
+      // from before receipts carried where the cycle was.
+      cycleKept: setHere && !undo,
+    };
   });
+
+  // The pay day going back is a change to the person, and is said as one.
+  if (told.uncycle && told.person) {
+    logClientChanges(receipt.clientId, { cycleAnchor: receipt.cycleWas.anchor }, {
+      prefix: `Al cancelar el recibo ${receipt.folio || receipt.id} · `,
+      before: told.person,
+      by: author?.name,
+    });
+  }
+  return result;
 }
 
 /**

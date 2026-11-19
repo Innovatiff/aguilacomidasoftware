@@ -27,17 +27,17 @@
 import {
   db, doc, collection, getDoc, getDocs, updateDoc,
   onSnapshot, query, where, orderBy, limit, serverTimestamp,
-  writeBatch, arrayUnion, docData, listData, toDate, saved,
+  writeBatch, arrayUnion, docData, listData, toDate, saved, runTransaction,
 } from '../firebase.js';
 import { logClientChanges, logMovement, clientBefore, actorName } from './movements.js';
-import { today, dayKey, daysBetween, addDays } from '../lib/dates.js';
+import { today, dayKey, daysBetween, addDays, formatDay } from '../lib/dates.js';
 import {
   DEFAULT_DELIVERY_DAYS, DEFAULT_GRACE_DAYS, DEFAULT_PAY_EVERY, payDayOnOrAfter,
 } from '../lib/billing.js';
 import { matches, fold } from '../lib/format.js';
-import { normalizeExtras } from '../lib/pricing.js';
+import { normalizeExtras, periodCharge } from '../lib/pricing.js';
 import { findLocation, TERM_FIELDS } from './farms.js';
-import { t } from '../lib/i18n.js';
+import { t, inSpanish } from '../lib/i18n.js';
 
 const clientsRef = () => collection(db, 'clients');
 
@@ -102,10 +102,11 @@ export const emptyClient = (farm) => ({
  * `cycleSetOn` records the day it came from, and that is what tells every
  * screen the difference between a real cycle and a placeholder.
  *
- * It is also what keeps the two rules from fighting. Paying late must never
- * push somebody's day forward; but the first payment the system ever sees from
- * somebody has no day to push. So the offer to set the cycle is on by default
- * exactly while this is empty, and off after.
+ * It is also what words the offer at the counter. Paying late must never push
+ * somebody's day forward, so the switch that lets a payment set the cycle is
+ * always off until somebody turns it on; what changes with this is what it is
+ * called — «Fijar su quincena» while nobody has confirmed one, «Reajustar»
+ * after.
  */
 export const cycleIsSet = (client) => !!client?.cycleSetOn;
 
@@ -147,24 +148,203 @@ export const startsLater = (client, day = today()) =>
  * change of status is also written down, with its day (`statusLog`), and this
  * reads it: the last change on or before `day` decides.
  *
- * Before the first change written down, they were the opposite of what that
- * change made them. Somebody off today with nothing written down — set before
- * the record existed — counts as off on every day, which is how they were
- * treated until now.
+ * Before the first change written down, they were what that change says they
+ * were (`was`) — every change records it now. The ones written before it did
+ * carry only what they became, and for those the answer is a guess: the
+ * opposite. Mostly right, and wrong in two ways that cost money: confirming
+ * the status somebody already had («Sigue» on somebody active) was written
+ * down as a change, and from then on every fortnight before that day read as
+ * a pause and was never charged; and somebody long in pause marked «Ya no»
+ * read as active until that day, and was offered four fortnights to pay.
+ * `statusDoubt` finds those, and the panel asks (js/ui/status-review.js).
+ *
+ * Somebody off today with nothing written down — set before the record
+ * existed — counts as off on every day, which is how they were treated until
+ * now.
  */
 export function onPlanOn(client, day) {
-  const log = (Array.isArray(client?.statusLog) ? client.statusLog : [])
-    .filter((entry) => entry?.on && entry?.status)
-    // Two changes on one day — paused by mistake and put back — in the order
-    // they were made.
-    .sort((a, b) => String(a.on).localeCompare(String(b.on)) || (Number(a.at) || 0) - (Number(b.at) || 0));
+  const log = statusLogOf(client);
   if (!log.length) return !client?.status || client.status === 'active';
-  let status = log[0].status === 'active' ? 'paused' : 'active';
+  let status = log[0].was || (log[0].status === 'active' ? 'paused' : 'active');
   for (const entry of log) {
     if (String(entry.on) > String(day)) break;
     status = entry.status;
   }
   return status === 'active';
+}
+
+/** The record of changes of status, oldest first. */
+function statusLogOf(client) {
+  return (Array.isArray(client?.statusLog) ? client.statusLog : [])
+    .filter((entry) => entry?.on && entry?.status)
+    // Two changes on one day — paused by mistake and put back — in the order
+    // they were made.
+    .sort((a, b) => String(a.on).localeCompare(String(b.on)) || (Number(a.at) || 0) - (Number(b.at) || 0));
+}
+
+/**
+ * The first change of status on somebody's record, when what they were before
+ * it is only a guess: written by hand, before changes recorded it (`was`).
+ *
+ * Not one the system made itself — a last day going by, the Programador:
+ * those only ever happen to somebody who was the opposite. And not one made
+ * on or before the day they started: there is nothing before it to be wrong
+ * about.
+ *
+ * @returns {null | { entry: object, guess: 'active'|'paused' }}  `guess` is
+ *   what `onPlanOn` takes them to have been before it
+ */
+export function statusDoubt(client) {
+  const [first] = statusLogOf(client);
+  if (!first || first.was || first.auto || first.prog) return null;
+  const since = servingSince(client);
+  if (since && String(first.on) <= since) return null;
+  return { entry: first, guess: first.status === 'active' ? 'paused' : 'active' };
+}
+
+/**
+ * Writes down what somebody was before the first change on their record —
+ * the answer to `statusDoubt`, given by a person who knows.
+ *
+ * Nothing else about them changes: not their status, not a bill. Only which
+ * fortnights before that day count as theirs.
+ *
+ * An entry that already says so is left as it is, and the caller is told:
+ * somebody else — another computer, a second press — answered first, and one
+ * answer must not be written over another in silence.
+ */
+export async function setStatusBefore(client, entry, was) {
+  await rewriteStatusEntry(client, entry, (found) => {
+    if (found.was) throw new Error(t('Ese cambio ya estaba contestado. Vuelve a abrir la revisión.'));
+    return { ...found, was };
+  });
+  logMovement({
+    kind: 'estado',
+    text: inSpanish(() => `Revisión de estado: antes del ${formatDay(entry.on)} estaba ${was === 'active' ? 'activo' : 'en pausa'}`),
+    clientId: client.id,
+    clientName: client.name,
+  });
+}
+
+/**
+ * Takes that answer back, while it is still the one that was given: the
+ * person is asked about again.
+ */
+export async function clearStatusBefore(client, entry, was) {
+  await rewriteStatusEntry(client, entry, (found) => {
+    if (found.was !== was) throw new Error(t('Esa respuesta ya cambió. Vuelve a abrir la revisión.'));
+    const rest = { ...found };
+    delete rest.was;
+    return rest;
+  });
+  logMovement({
+    kind: 'estado',
+    text: inSpanish(() => `Revisión de estado: se deshizo lo anotado sobre antes del ${formatDay(entry.on)}`),
+    clientId: client.id,
+    clientName: client.name,
+  });
+}
+
+/** One entry of the record of pauses, read and written back in one go. */
+async function rewriteStatusEntry(client, entry, change) {
+  const ref = doc(db, 'clients', client.id);
+  const same = (one) => one?.on === entry.on && one?.status === entry.status
+    && (one?.at || 0) === (entry.at || 0) && (one?.tag || '') === (entry.tag || '');
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists()) throw new Error(t('Ese cliente ya no existe.'));
+    const log = Array.isArray(snap.data().statusLog) ? snap.data().statusLog : [];
+    const at = log.findIndex(same);
+    if (at < 0) throw new Error(t('Ese cambio ya no está en su registro. Vuelve a abrir la revisión.'));
+    const next = [...log];
+    next[at] = change(log[at]);
+    tx.update(ref, { statusLog: next, updatedAt: serverTimestamp() });
+  });
+}
+
+/* --- The plan they were on ---------------------------------------------------
+   What a period costs comes from the plan: meals a day, the days of the week,
+   the extra plates. The client's record only says what the plan is *now* —
+   and a period is billed after it ends, sometimes days after. Change the plan
+   in between and the period that had already closed was billed with the new
+   one: somebody who ate one meal a day for a fortnight and moved to two the
+   morning after was charged a fortnight of two. And a change programmed for
+   exactly one fortnight — two meals from the 11th to the 24th — was billed
+   after it had gone back, at the price of one.
+
+   So the plan being replaced is written down with the last day it applied
+   (`planLog`), the way a change of status is, and a period is priced with
+   the plan of its own last day (`planOn`). Appended, never read first, so it
+   works with no internet. */
+
+/** What a plan is made of — everything `periodCharge` reads but the cadence. */
+const PLAN_FIELDS = ['mealsPerDay', 'deliveryDays', 'extras'];
+
+const planValue = (record, key) => {
+  if (key === 'mealsPerDay') return Number(record?.mealsPerDay) || 0;
+  if (key === 'deliveryDays') return [...(record?.deliveryDays || [])].map(Number).sort((a, b) => a - b);
+  return Object.fromEntries(Object.entries(record?.extras || {})
+    .filter(([, count]) => Number(count) > 0)
+    .sort(([a], [b]) => String(a).localeCompare(String(b))));
+};
+
+/** Whether a patch changes the plan of the record it is applied to. */
+export function planChanges(before, patch) {
+  if (!before || !patch) return false;
+  return PLAN_FIELDS.some((key) => patch[key] !== undefined
+    && JSON.stringify(planValue(patch, key)) !== JSON.stringify(planValue(before, key)));
+}
+
+/**
+ * The plan in `record`, as an entry of the log: it applied up to and
+ * including `until`. The moment keeps two changes on one day apart, and in
+ * the order they were made.
+ */
+export const planEntry = (record, until) => ({
+  until,
+  mealsPerDay: planValue(record, 'mealsPerDay'),
+  deliveryDays: planValue(record, 'deliveryDays'),
+  extras: planValue(record, 'extras'),
+  at: Date.now(),
+});
+
+/**
+ * The client as they were on `day`: with the plan they had then.
+ *
+ * The entry that stopped applying soonest after that day is the plan that was
+ * running on it; with none, the plan has not changed since and it is the one
+ * on the record. Two changes on the same day: the first one made holds the
+ * plan from the day before.
+ */
+export function planOn(client, day) {
+  const log = (Array.isArray(client?.planLog) ? client.planLog : [])
+    .filter((entry) => entry?.until && String(entry.until) >= String(day))
+    .sort((a, b) => String(a.until).localeCompare(String(b.until))
+      || (Number(a.at) || 0) - (Number(b.at) || 0));
+  if (!log.length) return client;
+  const [{ mealsPerDay, deliveryDays, extras }] = log;
+  return {
+    ...client,
+    mealsPerDay: Number(mealsPerDay) || 0,
+    deliveryDays: [...(deliveryDays || [])],
+    extras: { ...(extras || {}) },
+  };
+}
+
+/**
+ * What one of somebody's periods costs, and who they were in it.
+ *
+ * Priced with the plan they had on its last day, over its own length: a week
+ * left over between two cycles (`unbilledPart`) is a week, whatever cadence
+ * they are on now. `as` is the client with that plan and that cadence — what
+ * the bill is written from, so it says the meals a day that were eaten.
+ *
+ * @returns {{ as: object, charge: object }}  `charge` as `periodCharge` gives it
+ */
+export function chargeOf(client, period, pricing) {
+  const as = { ...planOn(client, period?.end || today()) };
+  if (period?.every) as.payEvery = period.every;
+  return { as, charge: periodCharge(as, pricing) };
 }
 
 /**
@@ -173,8 +353,11 @@ export function onPlanOn(client, day) {
  * identical changes on one day from being taken for one: Firestore adds a
  * value to a list only if the same value is not there already.
  */
-const statusEntry = (status, day = today()) => ({
+const statusEntry = (status, was = '', day = today()) => ({
   on: day, status, at: Date.now(), tag: Math.random().toString(36).slice(2, 8),
+  // What they were until now, when this computer knows: it is what every day
+  // before this change counts as (`onPlanOn`).
+  ...(was ? { was } : {}),
   // Who did it, for Movimientos.
   by: actorName(),
 });
@@ -345,10 +528,13 @@ export async function updateClient(clientId, patch, previousEmail, farm) {
   const early = patch.status === 'active' ? startingEarly(before) : {};
   if (early.startedOn && patch.startedOn && patch.startedOn <= early.startedOn) delete early.startedOn;
 
+  const clean = sanitize(patch);
   const batch = writeBatch(db);
   batch.update(doc(db, 'clients', clientId), {
-    ...sanitize(patch),
-    ...(patch.status !== undefined ? { statusLog: arrayUnion(statusEntry(patch.status)) } : {}),
+    ...clean,
+    ...(patch.status !== undefined ? { statusLog: arrayUnion(statusEntry(patch.status, before?.status)) } : {}),
+    // The plan they had until yesterday, written down as it is replaced.
+    ...(planChanges(before, clean) ? { planLog: arrayUnion(planEntry(before, addDays(today(), -1))) } : {}),
     ...early,
     ...placed,
     ...(patchEmail ? { email } : {}),
@@ -418,7 +604,7 @@ export async function setClientStatus(clientId, status, client = null) {
   await saved(updateDoc(doc(db, 'clients', clientId), {
     status,
     // Appended without reading the client first, so it works with no internet.
-    statusLog: arrayUnion(statusEntry(status)),
+    statusLog: arrayUnion(statusEntry(status, client?.status)),
     // Brought back after their last day went by: that day is over, and left
     // in place it would keep them out of the libreta however active they are.
     ...(status === 'active' && lastDayGone(client) ? { endsOn: '' } : {}),
@@ -459,7 +645,7 @@ export async function pauseAfterLastDay(client) {
   if (!client?.id || client.status !== 'active' || !lastDayGone(client)) return;
   await saved(updateDoc(doc(db, 'clients', client.id), {
     status: 'paused',
-    statusLog: arrayUnion({ on: addDays(client.endsOn, 1), status: 'paused', auto: true }),
+    statusLog: arrayUnion({ on: addDays(client.endsOn, 1), status: 'paused', auto: true, was: 'active' }),
     updatedAt: serverTimestamp(),
   }));
 }
@@ -624,7 +810,7 @@ export function tagsInUse(clients, field = 'tags') {
 const NUMERIC = new Set(['mealsPerDay', 'graceDays', 'payEvery']);
 
 /** Fields a worker never sets for themselves — they belong to the farm. */
-const NOT_WRITABLE = new Set(['id', 'farmId', 'farmName', 'locationId', 'locationName', 'email', 'statusLog']);
+const NOT_WRITABLE = new Set(['id', 'farmId', 'farmName', 'locationId', 'locationName', 'email', 'statusLog', 'planLog']);
 
 /** Coerces form strings into the types Firestore should hold. */
 function sanitize(data) {

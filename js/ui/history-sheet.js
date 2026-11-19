@@ -29,7 +29,7 @@ import {
 } from '../lib/billing.js';
 import { payDaysWords } from '../lib/billing-words.js';
 import { money } from '../lib/format.js';
-import { formatDay, formatDayLong, weekdayName, today } from '../lib/dates.js';
+import { formatDay, formatDayLong, weekdayName, today, isWholeDay } from '../lib/dates.js';
 import { PAYMENT_METHODS } from '../lib/model.js';
 import { errorText } from '../firebase.js';
 import { t } from '../lib/i18n.js';
@@ -131,11 +131,17 @@ export function openHistorySheet({ client, author }) {
 
       field({
         label: t('¿Qué día pagó?'),
-        hint: t('Si fijas su {period} con esta fecha: se cobra en {paydays}, y si eliges otro día, la {period} empieza el siguiente día de cobro.',
+        hint: t('Si fijas su {period} con esta fecha: se cobra en {paydays}, y si eliges otro día, la {period} se cuenta desde el día de cobro anterior a esa fecha.',
           { period: t(word), paydays: payDaysWords() }),
         control: input({
-          type: 'date', value: date, max: today(),
-          onchange: (event) => { date = event.target.value || today(); repaint(); },
+          type: 'date', value: date, min: '2000-01-01', max: today(),
+          // Not while the year is still being typed ("2" is the year 0002).
+          onchange: (event) => {
+            const value = event.target.value;
+            if (value && !isWholeDay(value)) return;
+            date = value || today();
+            repaint();
+          },
         }),
       }),
 

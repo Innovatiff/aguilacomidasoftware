@@ -144,6 +144,23 @@ export function isPayable(period, client, day = todayKey()) {
 }
 
 /**
+ * Whether a bill is money somebody owes on `day`.
+ *
+ * A debt written by hand, always. A period's bill once that period can be
+ * paid — and never one for a period that began after the person's last day:
+ * they were not here to eat it. There are such bills: money handed over
+ * beyond what was owed waits on the fortnights ahead (`aheadRows`), and when
+ * the person then leaves, what was left unpaid on those used to turn into a
+ * debt the day each one's dates went by.
+ */
+export function isOwed(invoice, client, day = todayKey()) {
+  if (!invoice) return false;
+  if (isCharge(invoice)) return true;
+  if (client?.endsOn && String(invoice.periodStart || '') > client.endsOn) return false;
+  return isPayable({ start: invoice.periodStart, end: invoice.periodEnd }, client, day);
+}
+
+/**
  * Whether what is written on a client as paid covers a period.
  *
  * `paidThrough` is the last day they have paid for, so a period is covered
@@ -193,6 +210,71 @@ export const nextPeriod = (anchor, period) =>
 export const prevPeriod = (anchor, period) =>
   periodByIndex(anchor, period.index - 1, period.every || DEFAULT_PAY_EVERY);
 
+/**
+ * What is left to bill of a period, given what somebody has already been
+ * billed and has already paid.
+ *
+ * A period's days are normally either all billed or not billed at all. They
+ * stop being so the day somebody's cycle moves — another pay day, or from
+ * weeks to fortnights and back: the periods are then cut from the new dates,
+ * and the bills already written keep the old ones. Asked only "is there a
+ * bill with this exact start?", a new period lying across an old bill was
+ * billed whole, and its days charged twice; and a fortnight that happened to
+ * start on the same day as a week already paid was taken for billed, its
+ * second week never charged.
+ *
+ * So the days are looked at. A day is spoken for when a bill covers it, or
+ * when it is no later than `paidThrough` — the last day paid for, which is
+ * all there is to go by for somebody whose payments were only ever in the
+ * notebook. Then:
+ *
+ *   - none of them spoken for: the whole period (the normal case);
+ *   - all of them: nothing;
+ *   - a fortnight with one of its two weeks spoken for: **the other week**,
+ *     to be billed as a week — which is what a change between weekly and
+ *     fortnightly leaves behind;
+ *   - anything else — a pay day moved by a few days — goes to the nearest
+ *     whole period: billed when most of it is free, left alone when most of
+ *     it is not. The plan is sold whole and there is no price for four days;
+ *     what a move like that leaves uncharged, or charges over, is under half
+ *     a period, and a debt by hand settles it either way.
+ *
+ * Debts written by hand are not periods and do not count.
+ *
+ * @param {{ start: string, end: string, every?: number }} period
+ * @param {object[]} bills  every bill the client has
+ * @param {string} [paidThrough]  the last day they have paid for, if known
+ * @returns {null | object}  the period, or one week of it (`every: 7`,
+ *   `part: 'week'`), or null when there is nothing to bill
+ */
+export function unbilledPart(period, bills = [], paidThrough = '') {
+  if (!period?.start || !period?.end) return null;
+  const overlapping = (bills || []).filter((bill) => !isCharge(bill)
+    && bill?.periodStart && bill?.periodEnd
+    && bill.periodStart <= period.end && bill.periodEnd >= period.start);
+  const paid = paidThrough && String(paidThrough) >= period.start ? String(paidThrough) : '';
+  if (!overlapping.length && !paid) return period;
+
+  const days = dayRange(period.start, period.end);
+  const free = days.filter((day) => !(paid && day <= paid) && !overlapping.some(
+    (bill) => day >= bill.periodStart && day <= bill.periodEnd));
+  if (!free.length) return null;
+  if (free.length === days.length) return period;
+
+  if (days.length === 14 && free.length === 7) {
+    for (const week of [days.slice(0, 7), days.slice(7)]) {
+      if (week.every((day, i) => day === free[i])) {
+        return { start: week[0], end: week[6], every: 7, part: 'week' };
+      }
+    }
+  }
+
+  // The nearest whole period. A bill with this very start already exists when
+  // the dates only differ at the far end; a second one cannot be written.
+  const sameStart = overlapping.some((bill) => bill.periodStart === period.start);
+  return free.length * 2 > days.length && !sameStart ? period : null;
+}
+
 /* --- The same, from a person ------------------------------------------------
    Almost every caller has a client rather than a bare anchor, and every one of
    them was writing `periodFor(client.cycleAnchor || today(), today())` by hand.
@@ -210,6 +292,56 @@ export const periodOfIndex = (client, index) =>
   periodByIndex(anchorOf(client), index, payEveryOf(client));
 
 /**
+ * How many days into a period somebody can have started and still pay it
+ * whole with their first payment: Wednesday and Saturday are never more than
+ * three days apart going back, so this is as far as the collection day before
+ * their first day can be.
+ */
+export const JOIN_GRACE = 3;
+
+/**
+ * Whether a period is one this person pays, given the day they started.
+ *
+ * Not one already running when they started: the plan is sold whole and there
+ * is no half price, so a fortnight they joined halfway is not charged as one
+ * (if the kitchen is owed for those days, that is a debt written by hand).
+ * It is what the scan for unbilled fortnights and the counter both do.
+ *
+ * The counter has one way round it, and it is a decision somebody makes, not
+ * a default: taking a payment with «Fijar su quincena con este pago» charges
+ * the fortnight that just ended to somebody who joined in its first days
+ * (`JOIN_GRACE`). Nothing here assumes it will be used — both apps once told
+ * every newcomer they would pay the fortnight in progress, with its full
+ * price and its pay day, and on that day the counter asked many of them for
+ * nothing.
+ */
+export function paysPeriod(period, since) {
+  if (!period) return false;
+  return !since || period.start >= since;
+}
+
+/** The first period they pay: the one they started in, or the one after it. */
+export function firstPaidPeriod(client, since, day = todayKey()) {
+  const running = periodOf(client, since || day);
+  return paysPeriod(running, since) ? running : periodOfIndex(client, running.index + 1);
+}
+
+/**
+ * The period this person pays next: the one being served — or, for somebody
+ * who started with it already under way (or has not started yet), the first
+ * one that is theirs.
+ *
+ * Every screen that names "the day they pay" reads it off this one. They
+ * each worked it out from the period in progress, and so somebody's file
+ * could say the 16th while the roster, the counter and the edit form still
+ * said the 2nd.
+ */
+export function payingPeriod(client, since, day = todayKey()) {
+  const running = periodOf(client, day);
+  return paysPeriod(running, since) ? running : firstPaidPeriod(client, since, day);
+}
+
+/**
  * The day the next payment is due: the first day of their next period.
  *
  * Not the same as the invoice's `dueDate`, which adds the grace days before a
@@ -218,9 +350,40 @@ export const periodOfIndex = (client, index) =>
  */
 export const payDayAfter = (period) => addDays(period.end, 1);
 
-/** Payment deadline for a period. */
+/**
+ * Payment deadline for a period.
+ *
+ * `graceDays` after the period closes — and never before its collection day,
+ * the day after it closes, which is the first day anybody can come and pay it.
+ * A farm on "Mismo día" (0) used to get the period's own last day as its
+ * deadline, and so read «Vencido · venció ayer» on the very morning its people
+ * came to pay.
+ */
 export function dueDateFor(period, graceDays = DEFAULT_GRACE_DAYS) {
-  return addDays(period.end, Math.max(0, graceDays ?? DEFAULT_GRACE_DAYS));
+  const due = addDays(period.end, Math.max(0, graceDays ?? DEFAULT_GRACE_DAYS));
+  const collection = payDayAfter(period);
+  return due < collection ? collection : due;
+}
+
+/**
+ * The deadline of a bill already written — or '' when it carries none.
+ *
+ * What it says, unless it says a day before the bill's own collection day —
+ * the bills cut for a "Mismo día" farm before the rule above. Read through
+ * here, those stop being overdue on the day they are paid without anybody
+ * having to rewrite them. A debt by hand has no collection day: its date is
+ * its date.
+ *
+ * A bill saved long ago with no deadline has none, and nothing here invents
+ * one: it is owed, never overdue, and its date is shown as a dash. Every
+ * reader has to allow for the empty answer — taken for a date, '' is the year
+ * 1900, and such a bill read «venció hace 46 mil días».
+ */
+export function dueOf(invoice) {
+  const stored = invoice?.dueDate || '';
+  if (!stored || isCharge(invoice) || !invoice.periodEnd) return stored;
+  const collection = addDays(invoice.periodEnd, 1);
+  return stored < collection ? collection : stored;
 }
 
 /** Deterministic invoice id, so re-issuing a cycle can never duplicate it. */
@@ -332,7 +495,9 @@ export function paidFor(receipt, bills = []) {
       kind: bill.kind || 'period',
       amount: round2(mine.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0)),
       moved: mine.some((payment) => !!payment.movedFrom),
-      early: !isCharge(bill) && mine.every((payment) => !!payment.date
+      // Not the last fortnight of somebody who was leaving (`final`): that
+      // one was paid when it was due, whatever its dates say.
+      early: !isCharge(bill) && mine.every((payment) => !!payment.date && !payment.final
         && String(payment.date) < String(bill.periodEnd || '')),
     }];
   });
@@ -382,7 +547,9 @@ export function projectPeriod(client, period, pricing) {
 export function invoiceStatus(invoice, day = todayKey()) {
   if (!invoice) return 'open';
   if (balanceOf(invoice) <= 0.005) return 'paid';
-  if (daysBetween(invoice.dueDate, day) > 0) return 'overdue';
+  // With no deadline there is nothing to be late for.
+  const due = dueOf(invoice);
+  if (due && daysBetween(due, day) > 0) return 'overdue';
   if (daysBetween(invoice.periodEnd, day) >= 0) return 'due';
   return 'open';
 }
@@ -390,9 +557,11 @@ export function invoiceStatus(invoice, day = todayKey()) {
 export const balanceOf = (invoice) =>
   round2((Number(invoice?.amount) || 0) - (Number(invoice?.paid) || 0));
 
-/** Days until the deadline: positive = still time, negative = late. */
-export const daysUntilDue = (invoice, day = todayKey()) =>
-  invoice ? daysBetween(day, invoice.dueDate) : 0;
+/** Days until the deadline: positive = still time, negative = late; 0 with no deadline. */
+export const daysUntilDue = (invoice, day = todayKey()) => {
+  const due = invoice ? dueOf(invoice) : '';
+  return due ? daysBetween(day, due) : 0;
+};
 
 export const STATUS_LABEL = {
   open: 'En curso',
@@ -415,11 +584,11 @@ export function summarize(client, invoices = [], day = todayKey()) {
   // paying ahead was allowed — is not owed yet, so it is not in the balance.
   const outstanding = invoices
     .filter((inv) => balanceOf(inv) > 0.005)
-    .filter((inv) => isCharge(inv)
-      || isPayable({ start: inv.periodStart, end: inv.periodEnd }, client, day))
+    .filter((inv) => isOwed(inv, client, day))
     // As text, whatever is there: a bill saved long ago without a due date
-    // must sort first, not stop the screen that is adding the balance up.
-    .sort((a, b) => String(a.dueDate || '').localeCompare(String(b.dueDate || '')));
+    // must not stop the screen that is adding the balance up. It goes last:
+    // with no deadline of its own, it is not the one to act on first.
+    .sort((a, b) => String(dueOf(a) || '9999').localeCompare(String(dueOf(b) || '9999')));
 
   const overdue = outstanding.filter((inv) => invoiceStatus(inv, day) === 'overdue');
   const balance = round2(outstanding.reduce((sum, inv) => sum + balanceOf(inv), 0));
@@ -428,6 +597,7 @@ export function summarize(client, invoices = [], day = todayKey()) {
   let status = 'paid';
   if (overdue.length) status = 'overdue';
   else if (focus) status = invoiceStatus(focus, day);
+  const deadline = (focus && dueOf(focus)) || dueDateFor(current, client?.graceDays);
 
   return {
     currentPeriod: current,
@@ -438,8 +608,12 @@ export function summarize(client, invoices = [], day = todayKey()) {
     overdueCount: overdue.length,
     balance,
     status,
-    dueDate: focus ? focus.dueDate : dueDateFor(current, client?.graceDays),
-    daysToDue: focus ? daysUntilDue(focus, day) : daysBetween(day, dueDateFor(current, client?.graceDays)),
+    // The deadline of what is owed — or, with nothing owed (or only a bill
+    // that never had one), the one of the period being served.
+    dueDate: deadline,
+    daysToDue: daysBetween(day, deadline),
+    /** False when what is owed is a bill saved with no deadline: then the date above is not its own, and is not quoted. */
+    hasDeadline: !focus || !!dueOf(focus),
   };
 }
 
@@ -521,7 +695,9 @@ export function draftCharge(client, { amount, reason, date } = {}) {
     reason: String(reason || '').trim(),
     periodStart: day,
     periodEnd: day,
-    dueDate: dueDateFor({ start: day, end: day }, client.graceDays),
+    // The day it was written, plus the days of grace. Not `dueDateFor`: a debt
+    // has no collection day to wait for.
+    dueDate: addDays(day, Math.max(0, client.graceDays ?? DEFAULT_GRACE_DAYS)),
     mealsPerDay: 0,
     meals: 0,
     amount: round2(amount),

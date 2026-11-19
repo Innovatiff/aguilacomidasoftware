@@ -30,12 +30,14 @@ import {
 } from '../data/clients.js';
 import { findLocation, TERM_FIELDS } from '../data/farms.js';
 import { ensureConversation } from '../data/chat.js';
-import { store, farmById, clientsOfFarm, whenReady, isReady } from '../data/store.js';
+import {
+  store, farmById, clientsOfFarm, whenReady, isReady, forgetPendingBills,
+} from '../data/store.js';
 import { openChargeSheet } from '../ui/charge-sheet.js';
 import { openOpeningSheet } from '../ui/opening-sheet.js';
 import {
   periodOf, payDayAfter, isPayDay, payDayOnOrAfter,
-  PAY_EVERY, payEveryOf, periodWord, cadenceWord,
+  PAY_EVERY, payEveryOf, periodWord, cadenceWord, firstPaidPeriod, payingPeriod,
 } from '../lib/billing.js';
 import { payDaysWords } from '../lib/billing-words.js';
 import { chargeFor, tierFor, periodCharge, mealsOn } from '../lib/pricing.js';
@@ -156,8 +158,32 @@ export async function renderClientForm(context) {
   /** Says, in words, what the date they picked means for this person. */
   function cycleHint() {
     const day = model.cycleAnchor || payDayOnOrAfter(today());
-    const period = periodOf({ ...model, cycleAnchor: day });
-    return t('Se cobra en {days}. Su {period} corre ahora del {start} al {end}, y se paga el {weekday} {day}, cuando termine.', {
+    const as = { ...model, cycleAnchor: day };
+    const period = periodOf(as);
+
+    // Somebody who starts with a period already under way does not pay it
+    // (`paysPeriod`): said here, where the day is being chosen, so the day
+    // quoted to them is the day they will really be asked for money. For
+    // somebody new that is nearly everybody; for somebody already eating,
+    // only while they are still in the period they started in.
+    const since = as.startedOn || (isNew ? today() : servingSince(model));
+    const joined = since ? periodOf(as, since) : period;
+    const first = firstPaidPeriod(as, since);
+    if (since && first.start !== joined.start && first.start > period.start) {
+      const said = {
+        days: payDaysWords(),
+        period: t(periodWord(model)),
+        joined: formatRange(joined.start, joined.end),
+        range: formatRange(first.start, first.end),
+        weekday: WEEKDAYS[weekdayOf(payDayAfter(first))],
+        day: formatDay(payDayAfter(first)),
+      };
+      return since < today()
+        ? t('Se cobra en {days}. Empezó con la {period} del {joined} ya corriendo, y esa no se le cobra sola: la primera que paga es la del {range}, el {weekday} {day}.', said)
+        : t('Se cobra en {days}. Empieza con la {period} del {joined} ya corriendo, y esa no se le cobra sola: la primera que paga es la del {range}, el {weekday} {day}.', said);
+    }
+
+    const said = t('Se cobra en {days}. Su {period} corre ahora del {start} al {end}, y se paga el {weekday} {day}, cuando termine.', {
       days: payDaysWords(),
       period: t(periodWord(model)),
       start: formatDay(period.start),
@@ -165,6 +191,28 @@ export async function renderClientForm(context) {
       weekday: capitalize(WEEKDAYS[weekdayOf(payDayAfter(period))]),
       day: formatDay(payDayAfter(period)),
     });
+    if (isNew) return said;
+
+    // Moving the day of somebody who already has bills: what was billed stays
+    // on its old dates, and the new periods are cut from the new ones. No
+    // period is charged twice (`unbilledPart`), but the plan has no price for
+    // three days — so the few days between the two are said here, to whoever
+    // is moving them, rather than found at the counter. Only when the periods
+    // really move: another date on the same cycle cuts the same fortnights.
+    const was = periodOf(opened);
+    if (payEveryOf(model) !== payEveryOf(opened)) {
+      return `${said} ${t('Lo ya facturado no se mueve. Si queda una semana suelta entre lo de antes y lo nuevo, se cobra como semana.')}`;
+    }
+    if (opened.cycleAnchor && period.start !== was.start) {
+      return `${said} ${t('Lo ya facturado no se mueve. Entre lo último facturado y la fecha nueva pueden quedar unos días sin cobrar, o cobrados en las dos: si importa, ajústalo con una deuda a mano o con «Corregir saldo».')}`;
+    }
+    return said;
+  }
+
+  /** What the pay day means for them, said again under its box. */
+  function refreshCycleHint() {
+    const hint = document.getElementById('client-payday')?.closest('.field')?.querySelector('.field__hint');
+    if (hint) hint.textContent = cycleHint();
   }
 
   function validate() {
@@ -223,7 +271,11 @@ export async function renderClientForm(context) {
         // while their file is open and the notebook is in hand — is the only
         // moment the balance realistically gets carried over.
         if (chargeFor(fresh, store.pricing)) {
-          const carried = await offerOpeningBalance(fresh, author);
+          const brought = await offerOpeningBalance(fresh, author);
+          const carried = brought.issued;
+          // Brought over from the notebook: they were eating here before
+          // today, and the sheet has moved their first day back to say so.
+          if (brought.startedOn) fresh.startedOn = brought.startedOn;
 
           // Somebody brought over with fortnights still owed may be paying
           // them right now, at the counter. Somebody who starts today owes
@@ -236,8 +288,15 @@ export async function renderClientForm(context) {
               return;
             }
           } else {
-            const first = payDayAfter(periodOf(fresh));
-            toastOk(t('Paga su primera {period} el {day}, cuando termine.', { period: t(periodWord(fresh)), day: formatDay(first) }));
+            // The first one they really pay through the system: the one
+            // running, when it is theirs — it is for somebody who starts on
+            // its first day, and for somebody brought over from the notebook,
+            // whose earlier ones are settled — and the next one for whoever
+            // starts with it already under way.
+            const first = payingPeriod(fresh, fresh.startedOn || today(), today());
+            toastOk(t('Paga su primera {period} el {day}, cuando termine.', {
+              period: t(periodWord(fresh)), day: formatDay(payDayAfter(first)),
+            }));
           }
         }
 
@@ -263,6 +322,8 @@ export async function renderClientForm(context) {
         if (changed.size) {
           await updateClient(clientId, Object.fromEntries([...changed].map((key) => [key, model[key]])),
             original.email, farm());
+          // Which fortnights are theirs, and at what price, comes from these.
+          if (BILLING_FIELDS.some((key) => changed.has(key))) forgetPendingBills();
         }
         toastOk(t('Cambios guardados'));
         go(`/clients/${clientId}`, { replace: true });
@@ -288,7 +349,7 @@ export async function renderClientForm(context) {
       cancelLabel: t('Empieza hoy'),
       icon: 'clipboard',
     });
-    if (!wants) return 0;
+    if (!wants) return { issued: 0, startedOn: '' };
 
     return openOpeningSheet({ client, pricing: store.pricing, author });
   }
@@ -415,7 +476,9 @@ export async function renderClientForm(context) {
             max: today(),
             ...dateBox({
               read: () => model.startedOn || today(),
-              write: (day) => update({ startedOn: day }),
+              // Which fortnight is their first hangs on this day: the pay
+              // day's hint, just below, is said again with it.
+              write: (day) => { update({ startedOn: day }); refreshCycleHint(); },
             }),
           }),
         }),
@@ -437,6 +500,7 @@ export async function renderClientForm(context) {
           hint: cycleHint(),
           control: input({
             type: 'date',
+            id: 'client-payday',
             value: model.cycleAnchor || payDayOnOrAfter(today()),
             // Snapped rather than refused: somebody typing "pagó el 28" means
             // the fortnight that starts on the next collection day, and making
@@ -446,11 +510,10 @@ export async function renderClientForm(context) {
             // so the counter stops offering to move it.
             ...dateBox({
               read: () => model.cycleAnchor || payDayOnOrAfter(today()),
-              write: (day, box) => {
+              write: (day) => {
                 update({ cycleAnchor: payDayOnOrAfter(day), cycleSetOn: today() });
                 // What that day means, said again under the box.
-                const hint = box.closest('.field')?.querySelector('.field__hint');
-                if (hint) hint.textContent = cycleHint();
+                refreshCycleHint();
               },
             }),
           }),
@@ -886,6 +949,11 @@ export async function renderClientForm(context) {
 const LEFT_ALONE = new Set(['id', 'createdAt', 'updatedAt']);
 
 /** What a farm proposes for somebody new there — see `changeFarm`. */
+/** What the scan for unbilled fortnights reads off a client. */
+const BILLING_FIELDS = [
+  'cycleAnchor', 'payEvery', 'mealsPerDay', 'deliveryDays', 'extras', 'startedOn', 'endsOn', 'status',
+];
+
 const FARM_PROPOSES = ['mealsPerDay', 'deliveryDays', 'deliveryWindow', 'cycleAnchor', 'payEvery', 'graceDays'];
 
 const sameValue = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);

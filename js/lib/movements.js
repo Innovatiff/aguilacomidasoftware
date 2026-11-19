@@ -323,6 +323,12 @@ const EN_DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday
 // Longest first, so "Quitó la nota del día" is said before "Nota del día" is.
 // Every line the panel writes to `movements` is made of these.
 const PHRASES = [
+  // Whole openings first, before the words inside them are taken one by one.
+  ['Revisión de estado: se deshizo lo anotado sobre antes del', 'Status review: undid what was recorded about before'],
+  ['Revisión de estado: antes del', 'Status review: before'],
+  ['estaba activo', 'they were active'],
+  ['estaba en pausa', 'they were paused'],
+  ['Al cancelar el recibo', 'On cancelling receipt'],
   ['Borró al cliente (se había dado de alta por error)', 'Deleted the client (registered by mistake)'],
   ['Programador (regresó) · ', 'Scheduler (reverted) · '],
   ['Programador · ', 'Scheduler · '],

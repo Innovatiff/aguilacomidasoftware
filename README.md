@@ -184,6 +184,27 @@ cuaderno, y el cliente queda «pagado hasta» el último día de la quincena que
 pagó. A partir de ahí se cobra como cualquier otro: aparece en la lista con su
 adeudo y se cobra en la caja.
 
+**Lo que desmarcas también se anota.** Una quincena desmarcada queda escrita
+como «ya pagada en el cuaderno» (una factura en $0), para que el sistema no la
+vuelva a proponer después. Y si con la fecha que pusiste **no queda nada
+pendiente**, el botón dice **Guardar: no queda debiendo nada**: guarda que
+está al corriente hasta ese día, y el sistema deja de creer que debe todo lo
+anterior.
+
+Tres detalles de esa hoja:
+
+- **Sin fecha no guarda nada.** Con la caja vacía, o con el año a medio
+  escribir, el botón se apaga y pide la fecha: antes, una caja borrada se
+  guardaba como «al corriente hasta ayer».
+- **Quien viene del cuaderno ya comía aquí.** Al guardar, su «¿Desde cuándo
+  come aquí?» se mueve al inicio de la última quincena que pagó (si decía una
+  fecha posterior), para que la quincena en curso cuente como suya y se le
+  cobre cuando termine. Sin eso, a alguien dado de alta hoy a media quincena
+  se le trataba como recién llegado y esa quincena no se le pedía.
+- **Una desmarcada por error se arregla en su factura.** Si a esa factura de
+  $0 le pones su monto con «Corregir el monto», deja de decir «ya pagada en
+  el cuaderno» y es una factura como cualquier otra.
+
 Para alguien ya registrado, el mismo botón está en su ficha
 (**Historial de pagos → Traer saldo del cuaderno**), mientras no tenga facturas.
 
@@ -446,6 +467,30 @@ lo que pagó se reabre junto.
 un segundo recibo en negativo que lo referencia — como se corrige un libro de
 caja. Los dos quedan visibles para los dos lados, que es la única forma de que
 la cuenta se pueda verificar después.
+
+**Cancelar deshace todo lo que hizo el pago, no sólo el dinero.**
+
+- Si el pago fue de más y el sobrante quedó en quincenas que todavía no se
+  sirven, las facturas que se escribieron para eso **se quitan** con el pago
+  (mientras nadie más les haya puesto dinero ni las haya corregido). Antes se
+  quedaban, y cada una se volvía deuda al pasar su fecha.
+- Si el pago se cobró con **«Fijar su quincena con este pago»**, el día de
+  pago **regresa a como estaba**, y con él se van las facturas que ese pago
+  escribió sobre el ciclo que fijó. Si después de ese pago ya se cobró otro,
+  ya se facturó otra quincena sobre ese día de pago, o alguien movió el día,
+  no se toca: el aviso de cancelación lo dice para que lo revises en su ficha.
+- «Pagado hasta» vuelve **exactamente** a donde estaba antes de ese pago
+  (mientras no se haya cobrado otro después). Cobrar y cancelar deja la
+  cuenta pidiendo lo mismo que pedía.
+- Una factura que ya existía antes del pago no se quita, aunque quede vacía.
+- La pregunta antes de cancelar dice lo que va a pasar con cada parte: lo ya
+  servido que pagó **vuelve a quedar pendiente**, y lo que estaba a cuenta de
+  lo que todavía no se sirve **se quita con el pago**.
+
+Esto vale para los pagos cobrados desde la versión 86: el recibo guarda cómo
+estaba todo antes (`created`, `paidThroughWas`, `cycleWas`). De un recibo
+anterior sólo se quitan las facturas vacías de quincenas sin servir; su día de
+pago se revisa a mano.
 
 ### 10. Empacar la comida
 
@@ -1236,6 +1281,103 @@ mide esa diferencia (`--vh-short`, ver `css/base.css` y el script al inicio de
 «flotando» sobre la página: es el último renglón del marco, y el botón
 flotante ya no tapa la última fila de una lista.
 
+### Versión 86: los cobros, caso por caso
+
+Nueve casos en los que el sistema cobraba de más, de menos, o decía algo que
+no iba a pasar. Ninguno cambia el precio de nadie ni reescribe lo ya
+facturado: cambian qué se propone cobrar de aquí en adelante.
+
+1. **Cada quincena, con el plan que tenía.** Una quincena se factura después
+   de que termina. Si el plan cambiaba entre que cerró y que se facturó, se
+   cobraba con el plan nuevo: quien comió una comida al día y pasó a dos la
+   mañana siguiente pagaba esa quincena como de dos. Ahora cada cambio de plan
+   (comidas al día, días, extras) se anota con el último día que valió
+   (`planLog`), a mano o por el Programador, y cada quincena se cobra con el
+   plan que tenía **en su último día**. Un cambio temporal de una quincena
+   exacta se cobra a lo que fue.
+2. **Cambiar el día de pago, o de semanal a quincenal, sin cobrar dos veces.**
+   Al mover el ciclo, las quincenas nuevas caen encima de facturas hechas con
+   las fechas viejas. El sistema ya no pregunta «¿hay una factura que empiece
+   este día?» sino **qué días ya están facturados o pagados**:
+   - ningún día: se cobra completa (lo de siempre);
+   - todos: nada;
+   - una quincena con una de sus dos semanas ya cobrada: **la otra semana, como
+     semana** — es lo que deja un cambio entre semanal y quincenal;
+   - un día de pago movido unos días: va a la quincena entera más cercana. Se
+     cobra si más de la mitad está libre, y si no, no. El plan se vende
+     completo y no hay precio por cuatro días; lo que un cambio así deja sin
+     cobrar o cobra de más es menos de media quincena, y se arregla con una
+     deuda a mano o con «Corregir saldo».
+3. **Cancelar un pago de más** quita las facturas que escribió para quincenas
+   futuras (ver *Cancelar un pago hecho por error*). Y una factura de una
+   quincena que empezó **después del último día** de alguien ya no cuenta como
+   deuda, ni en el panel ni en su app.
+4. **Cancelar un pago que fijó el día de pago** regresa el día de pago.
+5. **Saldo del cuaderno**: lo desmarcado queda anotado como pagado, y «nada
+   pendiente» se puede guardar (ver *Traer a la gente del cuaderno*).
+6. **La última quincena de alguien que se va**, pagada desde su último día, ya
+   no se marca como «pago por adelantado» si después se le quita o se le mueve
+   el último día porque se quedó. El pago lleva la marca (`final`), y
+   «Corregir» no lo mueve.
+7. **Farmas con «Mismo día» (0 días de gracia)**: la fecha límite nunca es
+   antes del día de cobro. Antes, la quincena aparecía «Vencida · venció ayer»
+   la misma mañana en que su gente venía a pagarla. Las facturas ya escritas
+   se leen con la regla nueva sin tocarlas.
+8. **Quien empieza a media quincena** no paga esa quincena como quincena (el
+   plan se vende completo): ni la revisión de quincenas sin facturar ni la
+   caja se la piden. Su ficha, el formulario de alta y su app ahora dicen cuál
+   es **la primera que sí paga** y qué día, en vez de mostrarle la que está en
+   curso con su precio completo. Si la cocina quiere cobrar esos primeros
+   días, es una deuda a mano — o, para quien entró en los primeros tres días,
+   cobrarle con **«Fijar su quincena con este pago»**, que es una decisión de
+   quien cobra y no algo que el sistema dé por hecho.
+9. **Cambios de estado que el sistema sólo suponía.** Para saber si una
+   quincena le tocaba a alguien se leen sus pausas, y del primer cambio
+   anotado el sistema suponía que *antes* estaba al revés. Dos cosas lo hacían
+   fallar: confirmar «Sigue» en alguien ya activo se anotaba como cambio (y
+   todo lo anterior contaba como pausa, sin cobrarse), y alguien en pausa de
+   tiempo atrás marcado «Ya no pide» contaba como activo hasta ese día (y se
+   le proponían cuatro quincenas). Desde ahora cada cambio guarda **cómo
+   estaba antes** (`was`). Para los ya anotados, en **Clientes** sale el aviso
+   **Cambios de estado por revisar** sólo con las personas a las que eso les
+   está moviendo un cobro hoy: dice qué supuso el sistema y qué quincenas
+   deja de cobrar o propone, y tú contestas «Ya estaba activo» o «Estaba en
+   pausa». Sólo se anota eso; no cambia su estado ni ninguna factura. La
+   lista la arma la misma revisión de quincenas sin facturar, con las facturas
+   en la mano, así que quien pagó por adelantado no sale por error. Un caso
+   aparte: una quincena que se dejó sin cobrar y después se pagó otra queda
+   detrás de su «pagado hasta» y ya no sale sola. Ésa se muestra también, y
+   al contestar «Ya estaba activo» el panel **pregunta** si la facturas en ese
+   momento; sin un sí no escribe ninguna factura. Esa factura nace con su
+   fecha límite contada **desde hoy**, no desde una quincena que terminó hace
+   semanas. Cada respuesta se da una sola vez (una segunda, desde otra
+   computadora o con un doble toque, se rechaza y lo dice), la tarjeta se
+   queda en su lugar diciendo qué se anotó, y mientras no se haya facturado
+   nada se puede **Deshacer** ahí mismo.
+
+De paso: después de un cambio de semanal a quincenal, un pago podía caer dos
+veces en la misma factura y perder una parte, y el dinero de más ahora va
+primero a lo ya facturado de la quincena en curso; las cajas de fecha de
+Cobrar, Registrar un pago anterior y Saldo del cuaderno ya no toman un año a
+medio escribir; la revisión de quincenas sin facturar hace una sola lectura
+en vez de una por fecha; y **«Emitir las facturas» vuelve a calcular la lista
+en ese momento**: si cambió desde que se abrió Clientes (un pago, un día de
+pago movido, un saldo traído del cuaderno), no emite nada y la muestra otra
+vez. «Lo que se debe hoy» en Reportes usa la misma regla que el resto.
+
+Tres reglas más que salieron al revisar todo esto:
+
+- **Un solo «día de pago» en todas las pantallas.** La ficha, la lista de
+  Clientes, la caja y el formulario de Editar leen la misma cuenta
+  (`payingPeriod`): la quincena en curso, o —para quien empezó con ella ya
+  corriendo o todavía no empieza— la primera que sí paga.
+- **Una factura vieja sin fecha límite** se debe, pero nunca cuenta como
+  vencida: dice «Sin fecha límite», no entra en «Recordar a todos» y su app
+  no le pone cuenta regresiva. (Leída como fecha, la casilla vacía era el año
+  1900, y decía «venció hace 46 mil días».)
+- **Un doble clic en un botón que abre una hoja** ya no la cierra: el segundo
+  clic caía en el fondo oscuro y la hoja desaparecía antes de verse.
+
 ### Español · English
 
 El panel y la cocina se pueden ver **en español o en inglés**. El botón
@@ -1520,7 +1662,15 @@ clients/{clientId}               -- una persona que come
   deliveryDays [0-6]             -- SU semana; el rancho sólo da el valor inicial
   extras      { '6': 1 }         -- comidas extra por día de la semana
   status       'active' | 'paused' | 'inactive'
+  statusLog   [{ on, status, was, at, tag, by, auto, prog }]
+                                 -- cada cambio de estado con su día; `was` es
+                                    cómo estaba antes (lo lee la facturación)
+  planLog     [{ until, mealsPerDay, deliveryDays, extras, at }]
+                                 -- el plan que tuvo, y hasta qué día: con ese
+                                    se cobra una quincena que cerró antes
   paidThrough  'YYYY-MM-DD'      -- último día de la última quincena pagada; nunca uno por venir
+  finalPaid    'YYYY-MM-DD'      -- fin de la última quincena que pagó al irse
+                                    (aunque después se haya quedado)
   advanceFixedOn 'YYYY-MM-DD'    -- cuándo se revisó un pago que quedó por adelantado
   deliveryWindow, cycleAnchor, graceDays
                                  -- copiados del rancho, y se siguen heredando
@@ -1535,10 +1685,14 @@ invoices/{clientId_YYYY-MM-DD}
   extras, extraMeals, mealPrice  -- las comidas extra y a qué precio
   meals                          -- comidas que cubre la quincena
   fromNotebook                   -- true si viene del cuaderno, no de una ruta
+  notebookPaid                   -- true: en $0, sólo dice que esa quincena ya
+                                    estaba pagada en el cuaderno
   fromAdvanceFix                 -- true si la emitió la corrección de un pago adelantado
+  fromStatusReview               -- true si se facturó al contestar un cambio de estado
   paid, settled
   payments [{ amount, method, date, reference, note, byName, receiptId, at,
-              movedFrom, movedOn }] -- movedFrom: la factura donde quedó por adelantado
+              movedFrom, movedOn,   -- movedFrom: la factura donde quedó por adelantado
+              ahead, final }]       -- final: su última quincena, pagada al irse
 
 receipts/{receiptId}             -- se escribe una vez y nunca se toca
   folio        'R-260821-WPUF'
@@ -1546,9 +1700,15 @@ receipts/{receiptId}             -- se escribe una vez y nunca se toca
   amount                         -- negativo si es una cancelación
   method, reference, note, date
   applied [{ invoiceId, periodStart, periodEnd, amount,
-             ahead }]            -- ahead: quedó a cuenta de una quincena en curso
+             ahead, final }]     -- ahead: quedó a cuenta de una quincena en curso
   unapplied                      -- lo que quedó a cuenta sin quincena donde ponerlo
   balanceAfter
+  created ['id', …]              -- las facturas que este pago escribió
+  paidThroughWas                 -- «pagado hasta» antes de este pago
+  finalPaidWas                   -- lo mismo para `finalPaid`, si lo movió
+  setCycleTo, cycleWas { anchor, setOn }
+                                 -- si fijó el día de pago: a cuál, y cuál era.
+                                    Con estos tres, cancelarlo lo deshace todo
   reversalOf                     -- folio que cancela, si aplica
   takenByName, takenByUid, at
 

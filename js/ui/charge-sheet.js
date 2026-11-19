@@ -34,11 +34,13 @@ import { openAdvanceSheet } from './advance-sheet.js';
 import { postSystemMessage } from '../data/chat.js';
 import {
   periodOf, appliedTitle, cycleFromPayment, payDayAfter, periodWord,
+  payingPeriod,
 } from '../lib/billing.js';
 import { payDaysWords } from '../lib/billing-words.js';
+import { forgetPendingBills } from '../data/store.js';
 import { chargeFor } from '../lib/pricing.js';
 import { money, moneyFull, plural } from '../lib/format.js';
-import { formatDay, weekdayName, today, addDays } from '../lib/dates.js';
+import { formatDay, weekdayName, today, addDays, isWholeDay } from '../lib/dates.js';
 import { PAYMENT_METHODS } from '../lib/model.js';
 import { errorText } from '../firebase.js';
 import { t, tx, inSpanish } from '../lib/i18n.js';
@@ -71,6 +73,9 @@ export async function openChargeSheet(options) {
     // for here, so whoever asked gets its receipt — and so nobody is charged a
     // second time while the first is still on its way.
     if (!receipt && inFlight) return await inFlight.catch(() => null);
+    // It moved their pay day: every fortnight of theirs is cut differently
+    // now, and the roster's list of what is left to bill was made before.
+    if (receipt?.setCycleTo) forgetPendingBills();
     return receipt || null;
   } finally {
     charging = false;
@@ -246,7 +251,10 @@ async function chargeSheet({ client, pricing, author }) {
         mount(covers, explain(value, now, aheadOf(value)));
 
         const running = periodOf(now.payer, date);
-        const payDay = payDayAfter(running);
+        // The one they pay next: not the one in progress, for somebody who
+        // started with it already under way.
+        const paying = setCycle ? running : payingPeriod(now.payer, servingSince(now.payer), date);
+        const payDay = payDayAfter(paying);
         mount(cycleLine, setCycle
           ? t('Su {period} queda en {start}: este pago es por la que terminó el {ended}, y la que está en curso se paga el {weekday} {day}.', {
             period: t(word),
@@ -255,9 +263,13 @@ async function chargeSheet({ client, pricing, author }) {
             weekday: weekdayName(payDay),
             day: formatDay(payDay),
           })
-          : t('Su {period} no se mueve: la que está en curso se paga el {weekday} {day}.', {
-            period: t(word), weekday: weekdayName(payDay), day: formatDay(payDay),
-          }));
+          : paying.start === running.start
+            ? t('Su {period} no se mueve: la que está en curso se paga el {weekday} {day}.', {
+              period: t(word), weekday: weekdayName(payDay), day: formatDay(payDay),
+            })
+            : t('Su {period} no se mueve: la que está en curso no se le cobra, y la primera que paga es el {weekday} {day}.', {
+              period: t(word), weekday: weekdayName(payDay), day: formatDay(payDay),
+            }));
       }
 
       const form = h('form.stack.stack-4', {
@@ -336,8 +348,15 @@ async function chargeSheet({ client, pricing, author }) {
       field({
         label: t('Fecha del pago'),
         control: input({
-          type: 'date', value: date, max: today(),
-          onchange: (event) => { date = event.target.value || today(); recompute(); },
+          type: 'date', value: date, min: '2000-01-01', max: today(),
+          // Not while the year is still being typed: "2" is the year 0002,
+          // and a payment saved then was dated two thousand years ago.
+          onchange: (event) => {
+            const value = event.target.value;
+            if (value && !isWholeDay(value)) return;
+            date = value || today();
+            recompute();
+          },
         }),
       }),
 

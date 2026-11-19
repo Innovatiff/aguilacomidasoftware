@@ -31,7 +31,7 @@ import {
 import { logMovement, logClientChanges } from './movements.js';
 import { addDays, today, formatDay } from '../lib/dates.js';
 import { t, inSpanish } from '../lib/i18n.js';
-import { createClient } from './clients.js';
+import { createClient, planChanges, planEntry } from './clients.js';
 import { createFarm, addLocations, newLocationId, getFarm } from './farms.js';
 import { addCharge, takePayment, adjustBalance } from './invoices.js';
 
@@ -168,9 +168,12 @@ export const endNow = (set) => saved(updateDoc(doc(db, 'scheduled', set.id), {
 
 /* --- Carrying it out --------------------------------------------------------- */
 
-const entry = (log) => ({
+// `was`: what they were until this change, which is what every day before it
+// counts as when billing looks back (`onPlanOn`).
+const entry = (log, was = '') => ({
   on: log.on, status: log.status, at: Date.now(),
   tag: Math.random().toString(36).slice(2, 8), prog: log.prog || '', by: 'Programador',
+  ...(was ? { was } : {}),
 });
 
 /** What the Programador changed on a client, for Movimientos, once it is in. */
@@ -204,7 +207,12 @@ function applyToClient(set, { farms, by }) {
 
     tx.update(clientRef, {
       ...result.patch,
-      ...(result.log ? { statusLog: arrayUnion(entry(result.log)) } : {}),
+      ...(result.log ? { statusLog: arrayUnion(entry(result.log, client?.status)) } : {}),
+      // The plan they had until yesterday — what the periods that closed by
+      // then are billed with (see `planOn`). Yesterday rather than the eve of
+      // `on`: a set applied a day late changed nothing until it was applied.
+      ...(planChanges(client, result.patch)
+        ? { planLog: arrayUnion(planEntry(client, addDays(today(), -1))) } : {}),
       updatedAt: serverTimestamp(),
     });
     Object.assign(said, { client, patch: result.patch });
@@ -238,7 +246,12 @@ function revertOnClient(set, { farms, by }) {
     if (client && (Object.keys(patch).length || log)) {
       tx.update(clientRef, {
         ...patch,
-        ...(log ? { statusLog: arrayUnion(entry(log)) } : {}),
+        ...(log ? { statusLog: arrayUnion(entry(log, client?.status)) } : {}),
+        // The plan the set had put them on, which ended yesterday: a
+        // fortnight eaten at two meals is billed at two, even though by the
+        // time it is billed the record says one again.
+        ...(planChanges(client, patch)
+          ? { planLog: arrayUnion(planEntry(client, addDays(today(), -1))) } : {}),
         updatedAt: serverTimestamp(),
       });
       Object.assign(said, { client, patch });

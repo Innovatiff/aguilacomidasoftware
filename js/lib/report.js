@@ -29,7 +29,9 @@
  * is what both months' paper actually showed.
  */
 
-import { round2, balanceOf, invoiceStatus, isCharge, invoiceTitle } from './billing.js';
+import {
+  round2, balanceOf, invoiceStatus, isCharge, invoiceTitle, dueOf,
+} from './billing.js';
 import { PAYMENT_METHODS, paymentMethodMeta } from './model.js';
 import { today, dayOf, daysBetween } from './dates.js';
 import { t } from './i18n.js';
@@ -75,18 +77,22 @@ const inRange = (day, range) => !!day && day >= range.start && day <= range.end;
  * @param {object[]} input.invoices     every bill whose period starts inside it
  * @param {object[]} input.clients      the whole roster, for the register counts
  * @param {object[]} input.outstanding  everything unpaid right now — today's photograph
+ * @param {object[]} [input.owed]       of those, what is owed today (`isOwed`); all of them when not given
  * @param {object[]} input.buckets      how to cut the range up, from `periods.js`
  * @param {object[]} input.serving     everybody being served today
  * @param {object}   [input.pricing]    the price list, to say if it moved
  */
 export function buildReport({
-  range, receipts = [], invoices = [], clients = [], outstanding = [], buckets = [],
+  range, receipts = [], invoices = [], clients = [], outstanding = [], owed = null, buckets = [],
   serving = [], runs = null, pricing = null, day = today(),
 }) {
   const takings = receipts.filter((row) => Number(row.amount) > 0);
   const givenBack = receipts.filter((row) => Number(row.amount) < 0);
 
-  const bills = invoices.filter((row) => !isCharge(row));
+  // Not a fortnight only marked as paid in the notebook (`notebookPaid`): it
+  // is a bill of $0 that exists so nobody charges it again, not one the
+  // kitchen issued.
+  const bills = invoices.filter((row) => !isCharge(row) && !row.notebookPaid);
   const debts = invoices.filter((row) => isCharge(row));
 
   const collected = sum(receipts, (row) => row.amount);
@@ -142,7 +148,9 @@ export function buildReport({
       : null,
 
     /* --- Where the book stands, today ----------------------------------- */
-    standing: standingOf(outstanding, day),
+    // What is owed today, by the rule every other screen uses (`isOwed`): not
+    // a bill for a fortnight still running, nor one from after somebody left.
+    standing: standingOf(owed || outstanding, day),
     people: registerOf(clients, range, serving, runs, day),
   };
 }
@@ -249,7 +257,7 @@ function byFarm(receipts, invoices) {
     // Fortnights and weeks only, as "Se facturó" at the top counts them: a
     // debt written by hand is not something the kitchen billed for food, and
     // with it in, the farms added up to more than the total above them.
-    if (isCharge(row)) continue;
+    if (isCharge(row) || row.notebookPaid) continue;
     const entry = at(row.farmId, row.farmName);
     entry.billed = round2(entry.billed + (Number(row.amount) || 0));
   }
@@ -385,7 +393,7 @@ function standingOf(outstanding, day) {
     const entry = owing.get(invoice.clientId) || {
       clientId: invoice.clientId, name: invoice.clientName || '',
       farmName: invoice.farmName || '', balance: 0, bills: 0, late: 0, lateBalance: 0,
-      oldest: invoice.dueDate || '',
+      oldest: dueOf(invoice) || '',
     };
     entry.balance = round2(entry.balance + balance);
     entry.bills += 1;
@@ -395,9 +403,8 @@ function standingOf(outstanding, day) {
       entry.late += 1;
       entry.lateBalance = round2(entry.lateBalance + balance);
     }
-    if (invoice.dueDate && (!entry.oldest || invoice.dueDate < entry.oldest)) {
-      entry.oldest = invoice.dueDate;
-    }
+    const due = dueOf(invoice);
+    if (due && (!entry.oldest || due < entry.oldest)) entry.oldest = due;
     owing.set(invoice.clientId, entry);
   }
 

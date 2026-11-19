@@ -33,6 +33,7 @@ import {
 } from '../data/store.js';
 import { columnChart, shareBar } from '../ui/viz.js';
 import { payDaysWords } from '../lib/billing-words.js';
+import { dueOf } from '../lib/billing.js';
 import { greeting, formatDayLong, today, humanDelta, daysBetween } from '../lib/dates.js';
 import { money, number, plural } from '../lib/format.js';
 import { t } from '../lib/i18n.js';
@@ -304,7 +305,10 @@ function debtorList(rows) {
 
 /** "2 facturas · venció hace 4 días" — tense follows the deadline. */
 function dueLabel(invoice, count) {
-  const delta = daysBetween(today(), invoice.dueDate);
+  const due = dueOf(invoice);
+  // A bill saved long ago can carry no deadline.
+  if (!due) return `${plural(count, 'factura', 'facturas')} · ${t('sin fecha límite')}`;
+  const delta = daysBetween(today(), due);
   const when = { when: humanDelta(delta) };
   return `${plural(count, 'factura', 'facturas')} · ${delta < 0 ? t('venció {when}', when) : t('vence {when}', when)}`;
 }

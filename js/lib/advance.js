@@ -47,9 +47,15 @@ const isSettled = (bill) => (Number(bill.paid) || 0) >= (Number(bill.amount) || 
  * Not money the counter kept "a cuenta" on purpose (`entry.ahead`): that was
  * paid when the system had nothing older for it to go to, and the fortnight
  * before it was already paid. Moving it there would pay that one twice.
+ *
+ * And not the last fortnight of somebody who was leaving (`entry.final`). It
+ * was owed the day it was paid; whether it still looks owed depends on a last
+ * day that can be taken off again — they stayed — and without the mark the
+ * payment was then flagged, and «Corregir» offered to move it to a fortnight
+ * it never paid.
  */
 export const isAhead = (bill, entry, client = null) =>
-  !isCharge(bill) && !!entry?.date && !entry.ahead
+  !isCharge(bill) && !!entry?.date && !entry.ahead && !entry.final
   && !isPayable(periodOfBill(bill), client, String(entry.date));
 
 /**
@@ -245,7 +251,11 @@ export function planAdvanceFix({ client, bills = [], since = '', day = todayKey(
  */
 function paidThroughAfter(client, work, changed, day, since = '') {
   const running = periodOf(client, day);
-  const cap = isPayable(running, client, day) ? running.end : addDays(running.start, -1);
+  // The fortnight running can only be paid by somebody who is leaving — or
+  // who was, when they settled it as their last (`finalPaid`).
+  const cap = isPayable(running, client, day) || client.finalPaid === running.end
+    ? running.end
+    : addDays(running.start, -1);
 
   let kept = client.paidThrough ? (client.paidThrough < cap ? client.paidThrough : cap) : '';
   for (const id of changed) {
@@ -287,9 +297,9 @@ export function clientsWithAdvance(receipts = [], { cancelled = new Set(), clien
     if (!client) continue;
     if (client.advanceFixedOn && String(receipt.date || '') <= client.advanceFixedOn) continue;
     for (const row of receipt.applied || []) {
-      // A debt by hand, or money kept "a cuenta" on purpose: neither is the
-      // old misplacement.
-      if (row.kind === 'charge' || row.ahead || !row.periodEnd) continue;
+      // A debt by hand, money kept "a cuenta" on purpose, or the last
+      // fortnight of somebody who was leaving: none is the old misplacement.
+      if (row.kind === 'charge' || row.ahead || row.final || !row.periodEnd) continue;
       const bill = { periodStart: row.periodStart, periodEnd: row.periodEnd };
       if (isAhead(bill, { date: receipt.date }, client)) ids.add(receipt.clientId);
     }

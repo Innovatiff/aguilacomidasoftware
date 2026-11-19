@@ -39,8 +39,9 @@ export const toastBad = (m) => toast(m, 'bad');
 /* --- Bottom sheet --------------------------------------------------------- */
 
 /**
- * How long a closed sheet stays in the page, unseen, catching stray clicks:
- * as long as Windows still counts two clicks as one double click.
+ * How long a closed sheet stays in the page, unseen, catching stray clicks —
+ * and how long a sheet just opened ignores a click on its backdrop: as long
+ * as Windows still counts two clicks as one double click.
  */
 const CLOSING_MS = 500;
 
@@ -124,8 +125,15 @@ export function sheet({ title, build, foot, dismissible = true, wide = false }) 
       h('div.sheet__body', build(close)),
       foot ? h('div.sheet__foot', foot(close)) : null);
 
+    // The second half of a double click on the button that opened this lands
+    // here, on the backdrop — and used to close the sheet before anybody had
+    // seen it: to somebody who double-clicks everything, the button did
+    // nothing. A click outside dismisses once that double click is over.
+    const openedAt = performance.now();
     const scrim = h('div.scrim', {
-      onclick: (e) => { if (e.target === scrim) dismiss(); },
+      onclick: (e) => {
+        if (e.target === scrim && performance.now() - openedAt > CLOSING_MS) dismiss();
+      },
     }, panel);
 
     document.addEventListener('keydown', onKey);

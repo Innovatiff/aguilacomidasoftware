@@ -24,7 +24,7 @@ import { store, subscribe, moneyStats, debtors, farmById, forgetPendingBills } f
 import { watchSettled } from '../data/invoices.js';
 import { pendingBilling, issueAll, byFarm as billingByFarm } from '../data/cycles.js';
 import {
-  balanceOf, invoiceStatus, isCharge, invoiceTitle, STATUS_LABEL, STATUS_TONE,
+  balanceOf, invoiceStatus, isCharge, invoiceTitle, STATUS_LABEL, STATUS_TONE, dueOf,
 } from '../lib/billing.js';
 import { today, humanDelta, daysBetween } from '../lib/dates.js';
 import { money, moneyFull, number, plural } from '../lib/format.js';
@@ -205,11 +205,14 @@ export function renderBilling(context) {
   function invoiceRow(invoice) {
     const status = invoiceStatus(invoice, today());
     const balance = balanceOf(invoice);
-    const days = humanDelta(daysBetween(today(), invoice.dueDate));
+    // A bill saved long ago can carry no deadline: said, not counted from.
+    const due = dueOf(invoice);
+    const days = due ? humanDelta(daysBetween(today(), due)) : '';
 
     return itemRow({
       title: tx(invoiceTitle(invoice)),
-      meta: `${status === 'overdue' ? t('Venció {when}', { when: days }) : t('Vence {when}', { when: days })}`
+      meta: `${!due ? t('Sin fecha límite')
+        : status === 'overdue' ? t('Venció {when}', { when: days }) : t('Vence {when}', { when: days })}`
         + ` · ${moneyFull(invoice.amount)}`
         + `${isCharge(invoice) ? ` · ${t('deuda agregada')}` : ''}`,
       end: [

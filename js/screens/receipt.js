@@ -22,14 +22,14 @@ import { go } from '../lib/router.js';
 import { watchReceipt, watchReversal } from '../data/receipts.js';
 import { voidReceipt, spreadHeld, watchClientInvoices } from '../data/invoices.js';
 import { printReceipt } from '../ui/print.js';
-import { printContext, clientById, store } from '../data/store.js';
-import { toastOk, toastBad, confirm } from '../ui/overlay.js';
+import { printContext, clientById, store, forgetPendingBills } from '../data/store.js';
+import { toast, toastOk, toastBad, confirm } from '../ui/overlay.js';
 import { session } from '../data/session.js';
 import { errorText } from '../firebase.js';
 import { money } from '../lib/format.js';
-import { formatStamp, formatDayLong, formatRange } from '../lib/dates.js';
-import { appliedTitle, paidFor as paidForBills } from '../lib/billing.js';
-import { paymentMethodMeta } from '../lib/model.js';
+import { formatStamp, formatDayLong, formatRange, today } from '../lib/dates.js';
+import { appliedTitle, paidFor as paidForBills, isPayable } from '../lib/billing.js';
+import { paymentMethodMeta, cancelledWords } from '../lib/model.js';
 import { toDate } from '../firebase.js';
 import { t, tx, english } from '../lib/i18n.js';
 
@@ -94,9 +94,9 @@ export function renderReceipt(context) {
       isVoid
         ? h('div.span-all',
             alert(cancelled.takenByName
-              ? t('Se canceló el {day} por {name}. El dinero volvió a quedar pendiente y quedó registrado en {folio}.',
+              ? t('Se canceló el {day} por {name}. Ese dinero ya no cuenta en su cuenta, y quedó registrado en {folio}.',
                 { day: formatDayLong(cancelled.date), name: cancelled.takenByName, folio: cancelled.folio })
-              : t('Se canceló el {day}. El dinero volvió a quedar pendiente y quedó registrado en {folio}.',
+              : t('Se canceló el {day}. Ese dinero ya no cuenta en su cuenta, y quedó registrado en {folio}.',
                 { day: formatDayLong(cancelled.date), folio: cancelled.folio }),
             'bad'))
         : null,
@@ -123,8 +123,11 @@ export function renderReceipt(context) {
               title: rowTitle(row),
               meta: rowMeta(row),
               end: h('span.w-700', money(row.amount)),
-              chevron: !!row.invoiceId,
-              onClick: () => row.invoiceId && go(`/invoices/${row.invoiceId}`),
+              // Not to a bill that went with the payment: a cancelled
+              // payment's bills for food not served yet are removed, and the
+              // row then led to «Esta factura ya no existe».
+              chevron: linked(row),
+              onClick: () => linked(row) && go(`/invoices/${row.invoiceId}`),
             })), { card: true }))
         : null,
 
@@ -196,16 +199,31 @@ export function renderReceipt(context) {
   async function cancel() {
     // Money kept "a cuenta" had no fortnight to reopen.
     const rows = paidFor().filter((row) => row.kind !== 'credit');
-    const covered = rows.map(rowTitle).join(', ');
+    // What it paid of food already served is owed again. What was waiting on
+    // a fortnight not served yet is not a debt: it simply goes, and the bill
+    // written for it with it — the screen used to say all of it «vuelve a
+    // quedar pendiente», nine fortnights of it after a typo.
+    const person = clientById(receipt.clientId);
+    const served = rows.filter((row) => row.kind === 'charge' || !row.periodEnd
+      || isPayable({ start: row.periodStart, end: row.periodEnd }, person, today()));
+    const covered = served.map(rowTitle).join(', ');
     const said = { amount: money(receipt.amount), name: receipt.clientName, covered };
+    const kept = t('El recibo no se borra: queda registrado junto con su cancelación, y el cliente ve las dos cosas en su app.');
+    const waiting = rows.length > served.length;
 
     const ok = await confirm({
       title: t('Cancelar {folio}', { folio: receipt.folio }),
-      message: !covered
+      message: !rows.length
         ? t('Se quitan {amount} de la cuenta de {name} y su saldo vuelve a subir. El recibo no se borra: queda registrado junto con su cancelación, y el cliente ve las dos cosas en su app.', said)
-        : rows.length > 1
-          ? t('Se quitan {amount} de la cuenta de {name} y {covered} vuelven a quedar pendiente. El recibo no se borra: queda registrado junto con su cancelación, y el cliente ve las dos cosas en su app.', said)
-          : t('Se quitan {amount} de la cuenta de {name} y {covered} vuelve a quedar pendiente. El recibo no se borra: queda registrado junto con su cancelación, y el cliente ve las dos cosas en su app.', said),
+        : !served.length
+          ? `${t('Se quitan {amount} de la cuenta de {name}. Ese dinero estaba a cuenta de lo que todavía no se sirve, así que no queda debiendo nada por él.', said)} ${kept}`
+          : waiting
+            ? `${served.length > 1
+              ? t('Se quitan {amount} de la cuenta de {name}: {covered} vuelven a quedar pendiente, y lo que estaba a cuenta de lo que todavía no se sirve se quita con el pago.', said)
+              : t('Se quitan {amount} de la cuenta de {name}: {covered} vuelve a quedar pendiente, y lo que estaba a cuenta de lo que todavía no se sirve se quita con el pago.', said)} ${kept}`
+            : served.length > 1
+              ? t('Se quitan {amount} de la cuenta de {name} y {covered} vuelven a quedar pendiente. El recibo no se borra: queda registrado junto con su cancelación, y el cliente ve las dos cosas en su app.', said)
+              : t('Se quitan {amount} de la cuenta de {name} y {covered} vuelve a quedar pendiente. El recibo no se borra: queda registrado junto con su cancelación, y el cliente ve las dos cosas en su app.', said),
       confirmLabel: t('Sí, cancelar el pago'),
       cancelLabel: t('No, dejarlo así'),
       tone: 'danger',
@@ -215,7 +233,10 @@ export function renderReceipt(context) {
 
     try {
       const counter = await voidReceipt(receipt, { uid: session.uid, name: session.displayName });
-      toastOk(t('Pago cancelado · {folio}', { folio: counter.folio }));
+      // Fortnights it had paid are open again, and its pay day may have gone
+      // back: what is left to bill has to be looked at afresh.
+      forgetPendingBills();
+      toast(cancelledWords(counter), 'ok', counter.cycleRestored || counter.cycleKept ? 7000 : undefined);
     } catch (error) {
       toastBad(errorText(error));
     }
@@ -249,6 +270,17 @@ export function renderReceipt(context) {
       draw();
       toastBad(errorText(error));
     }
+  }
+
+  /**
+   * Whether a line of "Es por" leads to a bill. Always, for a payment that
+   * stands; for one that was cancelled — and for the cancellation itself —
+   * only while that bill is still among the client's.
+   */
+  function linked(row) {
+    if (!row.invoiceId) return false;
+    const undone = !!cancelled || Number(receipt.amount) < 0;
+    return !undone || (bills || []).some((bill) => bill.id === row.invoiceId);
   }
 
   /** What one line of "Es por" is: a debt, a fortnight, or money kept on account. */

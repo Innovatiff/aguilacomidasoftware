@@ -13,7 +13,7 @@
 
 import {
   watchClients, servingStatus, isServing, daysLeft, cycleIsSet,
-  pauseAfterLastDay,
+  pauseAfterLastDay, statusDoubt, servingSince,
 } from './clients.js';
 import { watchFarms } from './farms.js';
 import { watchPricing } from './pricing.js';
@@ -28,7 +28,7 @@ import { session } from './session.js';
 import { forgetPeriods } from './reports.js';
 import { today, addDays } from '../lib/dates.js';
 import {
-  summarize, periodOf, payDayAfter, isPayable, isCharge, round2,
+  summarize, periodOf, payDayAfter, isPayable, isOwed, round2, payingPeriod,
 } from '../lib/billing.js';
 import { DEFAULT_PRICING, chargeFor, tierFor } from '../lib/pricing.js';
 import { clientsWithAdvance } from '../lib/advance.js';
@@ -218,6 +218,15 @@ export function startStore() {
     watchClients((rows) => {
       state.clients = [...rows].sort(byName);
       state.loaded.clients = true;
+      // An answer about somebody's past (js/ui/status-review.js) changes which
+      // fortnights the scan bills. It is written in a transaction, which this
+      // listener hears of a moment after the sheet does — so the scan is
+      // thrown away here, when the answer has really arrived, and not only
+      // when the sheet closes. Nothing else about a client does this: a scan
+      // on every payment would spend the day's reads.
+      const answers = answersOf(state.clients);
+      if (answersSeen !== null && answers !== answersSeen) forgetPendingBills();
+      answersSeen = answers;
       pauseFinished();
       runDue();
       emit();
@@ -270,6 +279,7 @@ export function stopStore() {
   // finished scan never runs again on its own, gets them for good. The report's
   // periods are the same kind of borrowed answer.
   forgetPendingBills();
+  answersSeen = null;
   forgetPeriods();
   forgetMovements();
   Object.assign(state, {
@@ -327,11 +337,13 @@ export function farmStats(farmId) {
  * yet — it is paid the day the fortnight ends — so it is left out of every
  * "por cobrar" the same way it is left out of each person's balance.
  */
-const owedBills = () => state.outstanding.filter((invoice) => isCharge(invoice)
-  || isPayable({ start: invoice.periodStart, end: invoice.periodEnd },
-    clientById(invoice.clientId), state.day));
+const owedBills = () => state.outstanding.filter(
+  (invoice) => isOwed(invoice, clientById(invoice.clientId), state.day));
 
 export const moneyStats = () => summarizeInvoices(owedBills());
+
+/** The same bills, for whoever adds them up another way (Reportes). */
+export const owedInvoices = () => owedBills();
 
 export const debtors = () => groupByClient(owedBills());
 
@@ -362,6 +374,7 @@ export const billingFor = (client) =>
 export function clientState(client) {
   const billing = billingFor(client);
   const period = periodOf(client);
+  const paying = payingPeriod(client, servingSince(client), state.day);
   const paidThrough = client.paidThrough || null;
   const serving = servingStatus(client, state.day);
   /*
@@ -374,10 +387,13 @@ export function clientState(client) {
    * gets moved to the fortnight it was really for (`fixAdvance`). Two ways to
    * see it: "paid up to" inside the fortnight still running, or a receipt
    * taken before the fortnight it went to had ended. Somebody who has stopped
-   * coming can settle their last fortnight early; that is neither.
+   * coming can settle their last fortnight early; that is neither — and it
+   * still is not when they then stay after all and the last day comes off
+   * their file (`finalPaid`, written by the payment that settled it).
    */
   const advance = (!!paidThrough && paidThrough >= period.start
-    && !isPayable(period, client, state.day))
+    && !isPayable(period, client, state.day)
+    && client.finalPaid !== paidThrough)
     || aheadIds().has(client.id);
 
   // A gap is something that stops this person being served or billed. Not
@@ -401,8 +417,11 @@ export function clientState(client) {
     gaps,
     hasGap: gaps.noPlan || gaps.noPlace,
     // The day they pay next, which is the first day of the fortnight after
-    // this one — not the invoice's due date, which adds the grace days.
-    payDay: payDayAfter(period),
+    // the one they pay — not the invoice's due date, which adds the grace
+    // days. For somebody who started with this fortnight already under way
+    // that is the next one (`payingPeriod`): this one is not charged to them.
+    payDay: payDayAfter(paying),
+    paysRunning: paying.start === period.start,
     // Whether their fortnight is a day somebody confirmed, or still the
     // rancho's placeholder. The roster filters on it while the notebook is
     // being migrated across.
@@ -519,7 +538,14 @@ export const tillIsWindowed = () => state.receipts.length >= RECENT_RECEIPTS;
    have changed the answer — which is bills being issued, and nothing else. A
    reload asks again. */
 
-let scan = { rows: [], total: 0, periods: 0, unpriced: [], skipped: {} };
+let scan = { rows: [], total: 0, periods: 0, unpriced: [], skipped: {}, doubts: [] };
+// Who has a first change of status with no word on what they were before it
+// (`statusDoubt`), as one string to compare: it changes when somebody answers
+// for one of them, or takes an answer back — and not when a client is added,
+// renamed, paused or paid.
+let answersSeen = null;
+const answersOf = (clients) => clients.filter((client) => statusDoubt(client))
+  .map((client) => client.id).sort().join('|');
 let scanState = 'idle';     // idle | running | done
 let scanRound = 0;          // which ask an answer belongs to
 
@@ -540,7 +566,7 @@ export function ensurePendingBills() {
   pendingBilling(state.clients, state.pricing, state.day)
     .then((found) => { if (round === scanRound) scan = found; })
     .catch(() => {
-      if (round === scanRound) scan = { rows: [], total: 0, periods: 0, unpriced: [], skipped: {} };
+      if (round === scanRound) scan = { rows: [], total: 0, periods: 0, unpriced: [], skipped: {}, doubts: [] };
     })
     .finally(() => {
       // Forgotten while it ran — bills were issued meanwhile: this answer is
@@ -551,11 +577,42 @@ export function ensurePendingBills() {
     });
 }
 
+/* --- Changes of status nobody is sure about ---------------------------------
+   Billing asks whether a fortnight was somebody's by reading their record of
+   pauses, and for the first change on a record it has to assume what they
+   were before it (`onPlanOn`, `statusDoubt`). Where that assumption is moving
+   money today — fortnights left out of the bills, or offered and billed that
+   may not be theirs — it is put in front of somebody who knows, instead of
+   being acted on in silence.
+
+   Worked out by the scan itself (`doubtOf` in js/data/cycles.js), which has
+   every recent bill in hand: from what is in memory here, a fortnight paid
+   early looked like one never billed. So there is nothing to show until the
+   scan has run, and nothing more to read when it has. */
+
+/** The doubts worth asking about, each with what it is doing today. */
+export function statusDoubts() {
+  const found = pendingBills()?.doubts || [];
+  return [...found].sort((a, b) => String(a.client.name || '')
+    .localeCompare(String(b.client.name || ''), 'es'));
+}
+
+/**
+ * A scan somebody has just run for themselves — before issuing, to be sure of
+ * the list — kept as the answer, so nobody reads it all again.
+ */
+export function adoptPendingBills(found) {
+  scanRound += 1;
+  scan = found;
+  scanState = 'done';
+  emit();
+}
+
 /** Issuing bills is the one thing that makes the answer stale. */
 export function forgetPendingBills() {
   scanRound += 1;
   scanState = 'idle';
-  scan = { rows: [], total: 0, periods: 0, unpriced: [], skipped: {} };
+  scan = { rows: [], total: 0, periods: 0, unpriced: [], skipped: {}, doubts: [] };
 }
 
 /* --- What was actually collected ------------------------------------------

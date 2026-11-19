@@ -37,6 +37,26 @@ export const PAYMENT_METHODS = {
 
 export const paymentMethodMeta = (method) => PAYMENT_METHODS[method] || PAYMENT_METHODS.other;
 
+/**
+ * What to say once a payment has been cancelled — `done` is what
+ * `voidReceipt` returns.
+ *
+ * Nearly always just that it was. But a payment taken with «fijar su
+ * quincena» had moved the person's pay day, and whoever cancels it has to
+ * know what became of that: it went back, or — somebody has paid or moved it
+ * since — it was left where it is, to be looked at.
+ */
+export function cancelledWords(done) {
+  const said = { folio: done?.folio || '' };
+  if (done?.cycleRestored) {
+    return t('Pago cancelado · {folio}. Su día de pago volvió a como estaba antes de ese pago.', said);
+  }
+  if (done?.cycleKept) {
+    return t('Pago cancelado · {folio}. Ese pago había fijado su día de pago, y eso no se movió: revísalo en su ficha.', said);
+  }
+  return t('Pago cancelado · {folio}', said);
+}
+
 /* --- Roles ---------------------------------------------------------------- */
 
 export const ROLE = { admin: 'admin', client: 'client' };

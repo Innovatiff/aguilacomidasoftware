@@ -11,7 +11,7 @@ import {
   card, button, badge, defList, defRow, sectionLabel, list, itemRow,
   alert, loading, meter, chargeRows, field, input, moneyInput,
 } from '../ui/kit.js';
-import { toastOk, toastBad, confirm, sheet } from '../ui/overlay.js';
+import { toast, toastOk, toastBad, confirm, sheet } from '../ui/overlay.js';
 import { openChargeSheet } from '../ui/charge-sheet.js';
 import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
@@ -19,17 +19,17 @@ import {
   watchInvoice, reversePayment, voidReceipt, voidCharge, correctAmount,
 } from '../data/invoices.js';
 import { getReceipt } from '../data/receipts.js';
-import { store, clientById, invoicesFor } from '../data/store.js';
+import { store, clientById, invoicesFor, forgetPendingBills } from '../data/store.js';
 import { postSystemMessage } from '../data/chat.js';
 import {
   balanceOf, invoiceStatus, isCharge, invoiceTitle, periodWord, round2, paymentsOf,
-  STATUS_LABEL, STATUS_TONE,
+  STATUS_LABEL, STATUS_TONE, dueOf,
 } from '../lib/billing.js';
 import {
   formatDayLong, formatDay, today, humanDelta, daysBetween, formatStamp, dayKey, capitalize,
 } from '../lib/dates.js';
 import { money, moneyFull, number, percent } from '../lib/format.js';
-import { paymentMethodMeta } from '../lib/model.js';
+import { paymentMethodMeta, cancelledWords } from '../lib/model.js';
 import { errorText, toDate } from '../firebase.js';
 import { t, tx, inSpanish } from '../lib/i18n.js';
 
@@ -73,7 +73,9 @@ export function renderInvoice(context) {
     const balance = balanceOf(invoice);
     const paid = Number(invoice.paid) || 0;
     const amount = Number(invoice.amount) || 0;
-    const late = daysBetween(today(), invoice.dueDate);
+    // '' for a bill saved long ago with no deadline: owed, never late.
+    const due = dueOf(invoice);
+    const late = due ? daysBetween(today(), due) : 0;
 
     return h('div.page__inner.page__inner--flow.stack.stack-4',
 
@@ -95,10 +97,12 @@ export function renderInvoice(context) {
             h('span', t('de {amount}', { amount: money(amount) })))),
 
         status === 'overdue'
-          ? alert(t('Venció {when} — {day}.', { when: humanDelta(late), day: formatDayLong(invoice.dueDate) }), 'bad')
+          ? alert(t('Venció {when} — {day}.', { when: humanDelta(late), day: formatDayLong(due) }), 'bad')
           : balance > 0
-            ? alert(t('Vence {when} — {day}.', { when: humanDelta(late), day: formatDayLong(invoice.dueDate) }),
-              late <= 2 ? 'warn' : 'info')
+            ? (due
+                ? alert(t('Vence {when} — {day}.', { when: humanDelta(late), day: formatDayLong(due) }),
+                  late <= 2 ? 'warn' : 'info')
+                : alert(t('Sin fecha límite de pago.'), 'info'))
             : alert(invoice.paidAt
               ? t('Saldado el {day}.', { day: formatDay(dayOf(invoice.paidAt)) })
               : t('Saldado.'), 'ok'),
@@ -132,7 +136,7 @@ export function renderInvoice(context) {
           ? [
               defRow(t('Motivo'), invoice.reason || t('Cargo')),
               defRow(t('Fecha'), formatDayLong(invoice.periodStart)),
-              defRow(t('Fecha límite de pago'), formatDayLong(invoice.dueDate)),
+              defRow(t('Fecha límite de pago'), due ? formatDayLong(due) : '—'),
               defRow(t('Deuda'), moneyFull(amount), { total: true }),
             ]
           : [
@@ -144,7 +148,7 @@ export function renderInvoice(context) {
               ...(invoice.fromNotebook ? [] : chargeRows(invoice)),
 
               defRow(t('Comidas entregadas'), number(invoice.meals)),
-              defRow(t('Fecha límite de pago'), formatDayLong(invoice.dueDate)),
+              defRow(t('Fecha límite de pago'), due ? formatDayLong(due) : '—'),
               defRow(capitalize(t(periodWord(invoice))), moneyFull(amount), { total: true }),
             ]),
       ].filter(Boolean))),
@@ -167,10 +171,13 @@ export function renderInvoice(context) {
           ? t('Esta deuda se agregó a mano ({name}): no la generó un periodo de comida. Se cobra igual que cualquier otra.',
             { name: invoice.issuedByName })
           : t('Esta deuda se agregó a mano: no la generó un periodo de comida. Se cobra igual que cualquier otra.'), 'info')
-        : invoice.fromNotebook
-          ? alert(t('Esta {period} viene del cuaderno: se registró al pasar al cliente al sistema, no la generó una ruta.',
+        : invoice.notebookPaid
+          ? alert(t('Esta {period} ya estaba pagada en el cuaderno. Se anotó en $0 al pasar al cliente al sistema, para que no se le vuelva a cobrar.',
             { period: t(periodWord(invoice)) }), 'info')
-          : null,
+          : invoice.fromNotebook
+            ? alert(t('Esta {period} viene del cuaderno: se registró al pasar al cliente al sistema, no la generó una ruta.',
+              { period: t(periodWord(invoice)) }), 'info')
+            : null,
 
       // Only while nothing has been paid against it: after that the mistake is
       // in the payment, and cancelling that is what puts this back.
@@ -363,9 +370,9 @@ export function renderInvoice(context) {
       title: t('Cancelar pago'),
       message: receipt
         ? (spread
-            ? t('Se cancela el recibo {folio} completo, de {amount}, que cubría {count} quincenas. Todo lo que pagó vuelve a quedar pendiente. El recibo no se borra: queda junto con su cancelación, y el cliente ve las dos cosas.',
+            ? t('Se cancela el recibo {folio} completo, de {amount}, que cubría {count} quincenas. Lo ya servido que pagó vuelve a quedar pendiente; lo que estaba a cuenta de lo que todavía no se sirve se quita con el pago. El recibo no se borra: queda junto con su cancelación, y el cliente ve las dos cosas.',
               { folio: receipt.folio, amount: money(receipt.amount), count: receipt.applied.length })
-            : t('Se cancela el recibo {folio} completo, de {amount}. Todo lo que pagó vuelve a quedar pendiente. El recibo no se borra: queda junto con su cancelación, y el cliente ve las dos cosas.',
+            : t('Se cancela el recibo {folio} completo, de {amount}. Lo ya servido que pagó vuelve a quedar pendiente; lo que estaba a cuenta de lo que todavía no se sirve se quita con el pago. El recibo no se borra: queda junto con su cancelación, y el cliente ve las dos cosas.',
               { folio: receipt.folio, amount: money(receipt.amount) }))
         : t('Se restará {amount} de lo cobrado y la factura volverá a quedar pendiente.',
           { amount: money(payment.amount) }),
@@ -377,9 +384,14 @@ export function renderInvoice(context) {
     if (!ok) return;
 
     try {
-      if (receipt) await voidReceipt(receipt, author());
-      else await reversePayment(id, index, author());
-      toastOk(t('Pago cancelado'));
+      const done = receipt ? await voidReceipt(receipt, author()) : null;
+      if (!receipt) await reversePayment(id, index, author());
+      forgetPendingBills();
+      const words = done ? cancelledWords(done) : t('Pago cancelado');
+      toast(words, 'ok', done?.cycleRestored || done?.cycleKept ? 7000 : undefined);
+      // The bill went with the payment — it was for food not served yet and
+      // had nothing else on it — so there is no bill left to show here.
+      if (done?.removedBills?.includes(id)) go(`/clients/${done.clientId}`);
     } catch (error) { toastBad(errorText(error)); }
   }
 
@@ -433,12 +445,16 @@ export function renderInvoice(context) {
   /** A reminder is a message in the client's own thread, not a separate channel. */
   async function sendReminder() {
     const balance = balanceOf(invoice);
-    const late = daysBetween(today(), invoice.dueDate);
+    const due = dueOf(invoice);
+    const late = due ? daysBetween(today(), due) : 0;
     const words = () => {
       const what = isCharge(invoice)
         ? t('el cargo “{title}”', { title: invoiceTitle(invoice) })
         : t('el periodo {title}', { title: invoiceTitle(invoice) });
-      const said = { what, amount: money(balance), day: formatDay(invoice.dueDate) };
+      const said = { what, amount: money(balance), day: due ? formatDay(due) : '' };
+      if (!due) {
+        return t('Recordatorio: {what} tiene un saldo de {amount}. Cualquier duda sobre el pago, escríbannos por aquí.', said);
+      }
       return late < 0
         ? t('Recordatorio: {what} tiene un saldo de {amount} que venció el {day}. Si ya realizaron el pago, avísennos por aquí.', said)
         : t('Recordatorio: {what} suma {amount} y vence el {day}. Cualquier duda sobre el pago, escríbannos por aquí.', said);

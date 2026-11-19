@@ -24,7 +24,7 @@ import {
 } from '../data/store.js';
 import {
   watchClient, updateClient, moveClient, servingSince, setEndsOn, daysLeft,
-  cycleIsSet, setDayNote, startsLater,
+  cycleIsSet, setDayNote, startsLater, chargeOf,
 } from '../data/clients.js';
 import { openScheduleFlow } from '../ui/schedule-flow.js';
 import { plannedFor, setTitle, setWhen } from './schedule.js';
@@ -36,7 +36,7 @@ import {
   periodOf, periodOfIndex, projectPeriod, balanceOf, invoiceStatus,
   STATUS_LABEL, STATUS_TONE, invoiceId, isCharge, invoiceTitle, appliedTitle,
   payDayAfter, periodWord, cadenceWord, paidThroughOn, paidFor, isPayable, isCovered,
-  DEFAULT_GRACE_DAYS,
+  DEFAULT_GRACE_DAYS, paysPeriod, firstPaidPeriod,
 } from '../lib/billing.js';
 import { tierFor, periodCharge, mealsOn } from '../lib/pricing.js';
 import {
@@ -244,6 +244,47 @@ export function renderClientDetail(context) {
       })));
   }
 
+  /**
+   * When the fortnight in progress is paid — or, for somebody who started
+   * with it already under way, that it is not charged and which one is the
+   * first they pay (`paysPeriod`). The counter asks them for nothing on the
+   * day this one ends, and the file used to promise otherwise.
+   */
+  function payLines(model, period) {
+    const since = servingSince(model);
+    if (paysPeriod(period, since)) {
+      return [h('div.t-sm.w-600', { style: { marginTop: '2px' } },
+        t('Se paga el {weekday} {day}, cuando termine', {
+          weekday: weekdayName(payDayAfter(period)), day: formatDay(payDayAfter(period)),
+        }))];
+    }
+    const first = firstPaidPeriod(model, since);
+    const said = {
+      since: formatDay(since),
+      range: formatRange(first.start, first.end),
+      weekday: weekdayName(payDayAfter(first)),
+      day: formatDay(payDayAfter(first)),
+    };
+    // Registered ahead: nothing has "started", and the first one they pay may
+    // well be the one they start in.
+    if (since > today()) {
+      return [
+        h('div.t-sm.w-600', { style: { marginTop: '2px' } },
+          t('Su primer pago es el {weekday} {day}', said)),
+        h('div.t-xs.c-soft', first.start === periodOf(model, since).start
+          ? t('Empieza el {since}. La primera que paga es la del {range}.', said)
+          : t('Empieza el {since}, con la {period} ya corriendo: esa no se le cobra sola. La primera que paga es la del {range}.', {
+            ...said, period: t(periodWord(model)),
+          })),
+      ];
+    }
+    return [
+      h('div.t-sm.w-600', { style: { marginTop: '2px' } },
+        t('Esta {period} no se le cobra sola', { period: t(periodWord(model)) })),
+      h('div.t-xs.c-soft', t('Empezó el {since}, con ella ya corriendo. La primera que paga es la del {range}, el {weekday} {day}. Si ya comía aquí antes, corrige «¿Desde cuándo come aquí?» en Editar.', said)),
+    ];
+  }
+
   function billingCard(model, billing, rows, loaded) {
     const period = periodOf(model);
     const projection = projectPeriod(model, period, store.pricing);
@@ -266,7 +307,7 @@ export function renderClientDetail(context) {
               money(billing.balance))),
           badge(t(STATUS_LABEL[billing.status]) || t('Al corriente'), STATUS_TONE[billing.status] || 'ok')),
 
-        owes ? h('div.t-sm.c-soft',
+        owes && billing.hasDeadline ? h('div.t-sm.c-soft',
           billing.daysToDue < 0
             ? t('Venció {when} ({day}).', { when: humanDelta(billing.daysToDue), day: formatDay(billing.dueDate) })
             : t('Vence {when} ({day}).', { when: humanDelta(billing.daysToDue), day: formatDay(billing.dueDate) })) : null,
@@ -301,10 +342,7 @@ export function renderClientDetail(context) {
           // The number the counter actually quotes: not the invoice's due date
           // with its grace days, but the day this person turns up again — the
           // day after this fortnight ends, to pay for it.
-          h('div.t-sm.w-600', { style: { marginTop: '2px' } },
-            t('Se paga el {weekday} {day}, cuando termine', {
-              weekday: weekdayName(payDayAfter(period)), day: formatDay(payDayAfter(period)),
-            })),
+          ...payLines(model, period),
 
           // Whether that date is a day somebody confirmed or a placeholder
           // inherited from the rancho. While the notebook is being migrated
@@ -598,6 +636,9 @@ export function renderClientDetail(context) {
       pricing: store.pricing,
       author: { uid: session.uid, name: session.displayName },
     });
+    // What was brought over — bills, or only "paid up to" — changes which of
+    // their fortnights are left to bill: the roster's list is asked again.
+    forgetPendingBills();
   }
 
   function invoiceRow(invoice) {
@@ -607,9 +648,11 @@ export function renderClientDetail(context) {
       title: tx(invoiceTitle(invoice)),
       meta: isCharge(invoice)
         ? t('{amount} · deuda del {day}', { amount: moneyFull(invoice.amount), day: formatDay(invoice.periodStart) })
-        : invoice.fromNotebook
-          ? t('{amount} · del cuaderno', { amount: moneyFull(invoice.amount) })
-          : t('{amount} · {meals} comidas entregadas', { amount: moneyFull(invoice.amount), meals: number(invoice.meals) }),
+        : invoice.notebookPaid
+          ? t('Ya estaba pagada en el cuaderno')
+          : invoice.fromNotebook
+            ? t('{amount} · del cuaderno', { amount: moneyFull(invoice.amount) })
+            : t('{amount} · {meals} comidas entregadas', { amount: moneyFull(invoice.amount), meals: number(invoice.meals) }),
       end: [
         badge(t(STATUS_LABEL[status]), STATUS_TONE[status]),
         balance > 0 ? h('span.t-xs.c-soft', t('Saldo {amount}', { amount: money(balance) })) : null,
@@ -735,20 +778,31 @@ export function renderClientDetail(context) {
           periodOption(periodOfIndex(model, current.index - 1), t('Periodo anterior (cerrado)'), close),
           periodOption(current, runningOk
             ? t('Periodo en curso · su servicio terminó el {day}', { day: formatDay(model.endsOn) })
-            : t('Periodo en curso · se factura cuando termine, el {day}', { day: formatDay(payDayAfter(current)) }),
+            : paysPeriod(current, servingSince(model))
+              ? t('Periodo en curso · se factura cuando termine, el {day}', { day: formatDay(payDayAfter(current)) })
+              // Started with it already under way: nothing bills it by itself.
+              : t('Periodo en curso · empezó con él ya corriendo: no se factura solo'),
           close, !runningOk))),
     });
     if (!choice) return;
 
-    const price = periodPrice(model);
-    if (!price) {
+    // With the plan they had while they ate it, which is not always the one
+    // on their file today (see `chargeOf`).
+    const { as, charge } = chargeOf(model, choice, store.pricing);
+    if (!charge.priced) {
       toastBad(t('Su plan no tiene precio. Ponlo en Ajustes → Precios.'));
       return;
     }
 
-    // Two ways of charging somebody for a fortnight that is not theirs to pay:
-    // one already paid in the notebook, or one before they started eating.
+    // Three ways of charging somebody for a fortnight that is not theirs to
+    // pay: one already paid in the notebook, one before they started eating,
+    // and one whose days are already on another bill — which is what a pay
+    // day that was moved leaves behind.
     const since = servingSince(model);
+    const over = invoices.find((bill) => !isCharge(bill)
+      && bill.id !== invoiceId(model.id, choice.start)
+      && bill.periodStart && bill.periodEnd
+      && bill.periodStart <= choice.end && bill.periodEnd >= choice.start);
     const doubt = isCovered(choice, model.paidThrough)
       ? t('Según su cuenta ya pagó hasta el {day}, y esta {period} entra ahí.', {
         day: formatDay(model.paidThrough), period: t(periodWord(model)),
@@ -757,7 +811,11 @@ export function renderClientDetail(context) {
         ? t('Empezó a comer el {day}, después de que empezó esta {period}.', {
           day: formatDay(since), period: t(periodWord(model)),
         })
-        : '');
+        : (over
+          ? t('Ya tiene una factura del {range}, que cubre parte de estos mismos días.', {
+            range: formatRange(over.periodStart, over.periodEnd),
+          })
+          : ''));
     if (doubt && !await confirm({
       title: t('¿Facturarla de todos modos?'),
       message: t('{doubt} Si la facturas, la va a deber.', { doubt }),
@@ -765,8 +823,7 @@ export function renderClientDetail(context) {
     })) return;
 
     try {
-      const charge = periodCharge(model, store.pricing);
-      const bill = await issueInvoice(model, choice, charge, charge.meals,
+      const bill = await issueInvoice(as, choice, charge, charge.meals,
         { uid: session.uid, name: session.displayName });
       toastOk(bill.existed ? t('Esa factura ya estaba hecha') : t('Factura generada'));
       go(`/invoices/${invoiceId(model.id, choice.start)}`);

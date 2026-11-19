@@ -23,18 +23,19 @@ import {
   searchInput, chips, list, avatar, badge, emptyState, button, card, select,
   sectionLabel, statGrid, stat, skeletonRows, alert, dataErrorCard, tagList, noticeCard,
 } from '../ui/kit.js';
-import { toastOk, toastBad, confirm, sheet } from '../ui/overlay.js';
+import { toast, toastOk, toastBad, confirm, sheet } from '../ui/overlay.js';
 import { openChargeSheet } from '../ui/charge-sheet.js';
 import { openDebtSheet } from '../ui/debt-sheet.js';
 import { openAdvanceSheet, openAdvanceReview } from '../ui/advance-sheet.js';
+import { openStatusReview } from '../ui/status-review.js';
 import { go } from '../lib/router.js';
 import { session } from '../data/session.js';
 import {
   store, subscribe, roster, invoicesFor, firstError, startStore,
-  pendingBills, ensurePendingBills, forgetPendingBills,
+  pendingBills, ensurePendingBills, forgetPendingBills, adoptPendingBills, statusDoubts,
 } from '../data/store.js';
 import { matchesSearch, setClientStatus, setEndsOn } from '../data/clients.js';
-import { issueAll, byFarm } from '../data/cycles.js';
+import { issueAll, byFarm, pendingBilling } from '../data/cycles.js';
 import { postSystemMessage } from '../data/chat.js';
 import { owedWords } from '../lib/billing-words.js';
 import { money, moneyFull, number, plural } from '../lib/format.js';
@@ -181,6 +182,7 @@ export function renderClients(context) {
 
     return h('div.page__inner.stack.stack-4',
       ahead.length ? advanceBanner(ahead) : null,
+      statusBanner(),
       billingBanner(),
       overdue.length ? remindBanner(overdue) : null,
 
@@ -308,6 +310,9 @@ export function renderClients(context) {
     }
     if (row.owed > 0) {
       const due = row.billing?.dueDate;
+      // A bill saved long ago with no deadline: what they owe, and no date
+      // that is not its own.
+      if (row.billing?.hasDeadline === false) return owedWords(row.billing?.outstanding);
       return `${owedWords(row.billing?.outstanding)} · ${row.state === 'overdue'
         ? t('venció {when}', { when: humanDelta(daysBetween(today(), due)) })
         : t('vence {day}', { day: formatDay(due) })}`;
@@ -357,6 +362,28 @@ export function renderClients(context) {
       }),
       cta: t('Revisar y emitir'),
       onClick: reviewPending,
+    });
+  }
+
+  /**
+   * Changes of status the system is only guessing about, where the guess is
+   * moving somebody's bills today (js/ui/status-review.js). Above the bills
+   * waiting to be issued, because the answer changes which ones those are.
+   */
+  function statusBanner() {
+    if (!store.loaded.clients) return null;
+    const doubts = statusDoubts();
+    if (!doubts.length) return null;
+    return noticeCard({
+      tone: 'warn', icon: 'alert',
+      title: plural(doubts.length, 'cambio de estado por revisar', 'cambios de estado por revisar'),
+      text: t('El sistema no sabe cómo estaban antes, y de eso depende qué quincenas se les cobran.'),
+      cta: t('Revisar'),
+      onClick: async () => {
+        const answered = await openStatusReview({ author: author() });
+        // Which fortnights are theirs has changed: the scan looks again.
+        if (answered) { forgetPendingBills(); if (life.alive()) draw(); }
+      },
     });
   }
 
@@ -454,7 +481,20 @@ export function renderClients(context) {
     if (!ok) return;
 
     try {
-      const issued = await issueAll(rows, author());
+      // The list she reviewed was worked out when this computer opened
+      // Clientes, which can be hours ago. A payment, a pay day that moved, a
+      // balance brought over from the notebook since then all change what is
+      // left to bill — and bills written from the old list were charged on
+      // top of them. So it is worked out again now, and only issued if it is
+      // still the list she said yes to.
+      const fresh = await pendingBilling(store.clients, store.pricing);
+      if (fresh.rows.length !== rows.length || Math.abs(fresh.total - total) > 0.005) {
+        adoptPendingBills(fresh);
+        toast(t('La lista cambió desde que se calculó. Revísala otra vez antes de emitir.'), '', 7000);
+        if (life.alive()) draw();
+        return;
+      }
+      const issued = await issueAll(fresh.rows, author());
       // Issuing is the one thing that makes the scan's answer stale, so it is
       // the one thing that asks for it again.
       forgetPendingBills();
@@ -532,7 +572,10 @@ export function renderClients(context) {
               row.state === 'overdue' ? 'bad' : 'warn')
           : row.advance
             ? alert(t('Tiene un pago puesto en una quincena antes de que se sirviera. Aquí no se paga por adelantado: va a la quincena anterior, que es la que pagó.'), 'warn')
-            : alert(t('Al corriente. Su quincena en curso se paga el {day}, cuando termine.', { day: formatDay(row.payDay) }), 'ok'),
+            : alert(row.paysRunning
+              ? t('Al corriente. Su quincena en curso se paga el {day}, cuando termine.', { day: formatDay(row.payDay) })
+              // Started with it already under way: it is not charged to them.
+              : t('Al corriente. La que está en curso no se le cobra: su primer pago es el {day}.', { day: formatDay(row.payDay) }), 'ok'),
 
         row.advance
           ? button(t('Revisar y corregir'), {
